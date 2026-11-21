@@ -1,0 +1,70 @@
+name: Unit and source guardrails
+on:
+  pull_request:
+  push:
+    branches: [main, 'feat/**']
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Run tests (no dependencies required)
+        run: npm test
+      - name: Verify source artefacts do not contain development secrets
+        run: |
+          if git ls-files | grep -E '(^|/)(\.env(\..*)?|.*\.pem|.*\.key)$' | grep -vE '\.env\.example$'; then
+            echo "Tracked potential secret file"; exit 1
+          fi
+  web-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install from committed lockfile
+        working-directory: apps/web
+        run: npm ci --no-audit --no-fund
+      - name: Build Next.js app without production credentials
+        working-directory: apps/web
+        run: npm run build
+
+  database-contract:
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: ci_ephemeral_only
+          POSTGRES_DB: campus_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d campus_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 15
+    env:
+      PGPASSWORD: ci_ephemeral_only
+      PGHOST: localhost
+      PGUSER: postgres
+      PGDATABASE: campus_ci
+      PGPORT: 5432
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install PostgreSQL client if missing
+        run: |
+          if ! command -v psql >/dev/null; then
+            sudo apt-get update
+            sudo apt-get install -y postgresql-client
+          fi
+      - name: Apply disposable Auth bootstrap, migration and SQL contract
+        run: |
+          psql -v ON_ERROR_STOP=1 -f db/tests/bootstrap.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0001_proposed_core.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/smoke.sql
