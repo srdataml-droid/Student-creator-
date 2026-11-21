@@ -1,0 +1,27 @@
+node_modules/
+.next/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.log
+.DS_Store
+*.sqlite
+*.db
+# Persistent local development data (never commit real student identities)
+.local-data/
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.db
+*.db-shm
+*.db-wal
+apps/web/.next/
+apps/web/node_modules/
+
+# Local binary uploads must not enter Git history
+*.sqlite.media/
+*.db.media/
