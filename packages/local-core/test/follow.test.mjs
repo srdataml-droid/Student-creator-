@@ -22,8 +22,7 @@ async function setup(){
  const creator=await create('creator@example.test',school);
  const viewer=await create('viewer@example.test',another);
  const hidden=await create('hidden@example.test',school);
- const draft=(await send('lessons/drafts','POST',{courseId:course,title:'My original course example',description:'Own work for learning',previewText:'Concepts and demonstration',lessonText:explanation,rightsAttested:true,creationKey:'creator-follow-test-0001'},creator.token)).data;
- return {dir,path,send,close:()=>{store.close();rmSync(dir,{recursive:true,force:true});},reopen:()=>{store.close();store=openLocalStore(path);},admin,creator,viewer,hidden,course,draft};
+ return {dir,path,send,close:()=>{store.close();rmSync(dir,{recursive:true,force:true});},reopen:()=>{store.close();store=openLocalStore(path);},admin,creator,viewer,hidden,course};
 }
 test('follow requires a verified account, a public creator and a different user',async()=>{
  const x=await setup();try{
@@ -41,7 +40,9 @@ test('verified learner can follow a published creator across campuses, replay, u
  const x=await setup();try{
   await x.send('admin/verify','POST',{userId:x.creator.id},x.admin);
   await x.send('admin/verify','POST',{userId:x.viewer.id},x.admin);
-  const id=x.draft.lesson.id;
+  const draft=await x.send('lessons/drafts','POST',{courseId:x.course,title:'My original course example',description:'Own work for learning',previewText:'Concepts and demonstration',lessonText:explanation,rightsAttested:true,creationKey:'creator-follow-test-0001'},x.creator.token);
+  assert.equal(draft.status,201);
+  const id=draft.data.lesson.id;
   await x.send('lessons/'+id+'/submit','POST',{},x.creator.token);
   await x.send('lessons/'+id+'/review','POST',{decision:'approve',reason:'Original material is suitable'},x.admin);
   assert.deepEqual((await x.send('following','GET',undefined,x.viewer.token)).data.creators,[]);
