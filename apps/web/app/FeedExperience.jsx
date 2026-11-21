@@ -14,17 +14,25 @@ function Post({post,onSave,saved,pending}){
   </article>;
 }
 export default function FeedExperience({posts=[],courses=[],ready=true}){
- const [tab,setTab]=useState('all'),[query,setQuery]=useState(''),[saved,setSaved]=useState([]),[pending,setPending]=useState(null),[error,setError]=useState('');
+ const [tab,setTab]=useState('all'),[query,setQuery]=useState(''),[saved,setSaved]=useState([]),[pending,setPending]=useState(null),[error,setError]=useState(''),[following,setFollowing]=useState([]);
  const shown=useMemo(()=>posts.filter(post=>{
+   if(tab==='following'&&!following.includes(post.creatorId))return false;
    if(tab==='video'&&!post.hasVideo)return false;
    if(tab==='text'&&post.hasVideo)return false;
    if(tab==='assignment'&&!/assignment|project|exercise|practical|lab/i.test([post.title,post.description,post.previewText].join(' ')))return false;
    return [post.title,post.description,post.courseCode,post.courseTitle,post.previewText,post.institutionName].join(' ').toLowerCase().includes(query.trim().toLowerCase());
- }),[tab,query,posts]);
+ }),[tab,query,posts,following]);
+ async function selectTab(key){
+   setTab(key);setError('');
+   if(key==='following'){
+     try{const response=await api('following');setFollowing(response.creators||[]);}
+     catch(err){setFollowing([]);setError(friendlyError(err));}
+   }
+ }
  async function save(id){setError('');setPending(id);try{await api(`lessons/${id}/bookmark`,{method:'POST',body:{}});setSaved(list=>list.includes(id)?list:[...list,id]);}catch(e){setError(friendlyError(e));}finally{setPending(null);}}
  return <section aria-labelledby="feed-title" className="feed-area">
    <div className="feed-heading"><div><div className="feed-kicker">EXPLORE THE COMMUNITY</div><h2 id="feed-title">The student feed<span className="heading-spark">✳</span></h2></div><Link href="/studio" className="post-create">＋ Create post</Link></div>
-   <div className="feed-toolbar"><div role="group" aria-label="Filter posts" className="feed-tabs">{[['all','For you'],['video','Videos'],['text','Notes & posts'],['assignment','Assignments']].map(([key,label])=><button type="button" key={key} onClick={()=>setTab(key)} className={tab===key?'active':''} aria-pressed={tab===key}>{label}</button>)}</div><label className="feed-search"><span aria-hidden="true">⌕</span><span className="visually-hidden">Search posts</span><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Find posts, courses..." maxLength={80}/></label></div>
+   <div className="feed-toolbar"><div role="group" aria-label="Filter posts" className="feed-tabs">{[['all','For you'],['following','Following'],['video','Videos'],['text','Notes'],['assignment','Assignments']].map(([key,label])=><button type="button" key={key} onClick={()=>selectTab(key)} className={tab===key?'active':''} aria-pressed={tab===key}>{label}</button>)}</div><label className="feed-search"><span aria-hidden="true">⌕</span><span className="visually-hidden">Search posts</span><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Find posts, courses..." maxLength={80}/></label></div>
    {error&&<p className="feed-notice" role="alert">{error} <Link href="/sign-in">Sign in</Link></p>}
    {!ready?<div className="feed-empty"><div className="empty-symbol">⚙</div><h3>Creator feed not connected</h3><p>This environment does not have its local content server. Configure local SQLite before publishing content.</p></div>:shown.length? <div className="post-stack">{shown.map(post=><Post post={post} key={post.id} onSave={save} pending={pending===post.id} saved={saved.includes(post.id)}/>)}</div>:<div className="feed-empty"><div className="empty-symbol">{posts.length?'⌕':'✦'}</div><h3>{posts.length?'No posts match yet':'This is where the first creators shine.'}</h3><p>{posts.length?'Try another filter or search.':'Your community starts with its first original post. Create work, submit it for review and it will appear in the feed.'}</p><div className="empty-buttons"><Link href="/studio" className="creator-btn filled">Share your work ↗</Link><Link href="/search" className="creator-btn outlined">Explore lessons</Link></div></div>}
    <div className="feed-bottom">A better campus starts with what we share. <span>✺</span></div>

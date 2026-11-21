@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import {notFound} from 'next/navigation';
+import FollowButton from './FollowButton.jsx';
 import {getLocalPublicCreator,getLocalPublicCourses,getLocalCourseLessons,isLocalMode} from '../../../lib/local-public.mjs';
 export const dynamic='force-dynamic';
 export async function generateMetadata({params}){
@@ -18,7 +19,7 @@ export default async function CreatorProfile({params}){
  return <main id="main" className="main creator-profile-shell">
    <Link className="back" href="/">← Discover creators</Link>
    <section className="public-creator-header"><div className="public-creator-cover"/><div className="public-creator-details"><div className="public-creator-avatar" aria-hidden="true">✳</div><div><p className="eyebrow">VERIFIED STUDENT CREATOR</p><h1>Student creator <span>{creatorId.slice(0,6).toUpperCase()}</span></h1><p>Original work and lessons shared with the student community.</p></div></div>
-   <div className="creator-profile-actions"><span className="creator-profile-count">{posts.length} published {posts.length===1?'post':'posts'}</span>{creator.allowMessages&&<Link href={`/messages/${creatorId}`} className="creator-btn filled">Message creator ↗</Link>}</div></section>
+   <div className="creator-profile-actions"><span className="creator-profile-count">{posts.length} published {posts.length===1?'post':'posts'} · {creator.followerCount||0} followers</span><FollowButton creatorId={creatorId} initialFollowers={creator.followerCount||0}/>{creator.allowMessages&&<Link href={`/messages/${creatorId}`} className="creator-btn filled">Message creator ↗</Link>}</div></section>
    <section className="creator-profile-posts"><p className="feed-kicker">THEIR WORK</p><h2>Published posts</h2>{posts.length?<div className="profile-post-grid">{posts.map(post=><Link className="profile-post" href={`/lessons/${post.id}`} key={post.id}><div className="profile-post-visual"><span>{post.hasVideo?'▶':'✎'}</span><small>{post.courseCode}</small></div><div className="profile-post-copy"><span>{post.hasVideo?'VIDEO':'STUDY WORK'}</span><h3>{post.title}</h3><p>{post.previewText?.slice(0,125)||post.description}</p></div></Link>)}</div>:<p className="status">No published posts yet.</p>}</section>
  </main>;
 }
