@@ -64,6 +64,11 @@ export function createLocalHandler(store){
       if(method==='GET'){
         if(path==='health')return responses({state:'local',database:'sqlite',providerPayments:false});
         if(path==='me')return actor?responses({user:actor}):fail('AUTH_REQUIRED',401);
+        if(path==='following'){if(!actor)return unauthorized();return responses({creators:store.followingCreators(actor)});}
+        if(segments.length===3&&segments[0]==='creators'&&segments[2]==='follow'){
+          if(!actor)return unauthorized();
+          return responses({following:store.isFollowing(actor,segments[1])});
+        }
         if(path==='institutions')return responses({institutions:store.listInstitutions()});
         if(path==='search'){
           const query=new URL(request.url).searchParams;
@@ -127,6 +132,11 @@ export function createLocalHandler(store){
         return responses({user:result.user},200,{'set-cookie':`${SESSION_COOKIE}=${result.token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800${secure}`});
       }
       if(!actor)return unauthorized();
+      if(segments.length===3&&segments[0]==='creators'&&['follow','unfollow'].includes(segments[2])){
+        if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
+        const result=segments[2]==='follow'?store.followCreator(actor,segments[1]):store.unfollowCreator(actor,segments[1]);
+        return responses({follow:result});
+      }
       if(path==='admin/institutions')return responses({institution:store.createInstitution(actor,body.name)},201);
       if(path==='admin/courses')return responses({course:store.createCourse(actor,body)},201);
       if(path==='admin/topics')return responses({topic:store.createTopic(actor,body)},201);

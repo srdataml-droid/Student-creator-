@@ -61,6 +61,14 @@ export function openLocalStore(path){
       file_id TEXT NOT NULL UNIQUE,content_hash TEXT NOT NULL,
       bytes INTEGER NOT NULL CHECK(bytes BETWEEN 32 AND 26214400),created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS creator_follows(
+      follower_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      creator_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL,
+      PRIMARY KEY(follower_id,creator_id),
+      CHECK(follower_id <> creator_id)
+    );
+    CREATE INDEX IF NOT EXISTS creator_follows_by_creator ON creator_follows(creator_id,created_at DESC);
     CREATE TABLE IF NOT EXISTS lesson_bookmarks(user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,created_at TEXT NOT NULL,PRIMARY KEY(user_id,lesson_id));
     CREATE INDEX IF NOT EXISTS bookmark_recent ON lesson_bookmarks(user_id,created_at DESC);
     CREATE INDEX IF NOT EXISTS lessons_discovery ON lessons(course_id,status,published_at);
@@ -365,7 +373,34 @@ export function openLocalStore(path){
     publicLesson(id){const row=db.prepare("SELECT * FROM lessons WHERE id=? AND status='published'").get(id);return withVideo(row);},
     publicCreator(id){
       const x=db.prepare("SELECT id,allow_messages FROM users WHERE id=? AND role='student' AND verified_at IS NOT NULL AND suspended=0 AND EXISTS (SELECT 1 FROM lessons WHERE creator_id=users.id AND status='published')").get(id);
-      return x?{id:x.id,allowMessages:Boolean(x.allow_messages)}:null;
+      return x?{id:x.id,allowMessages:Boolean(x.allow_messages),followerCount:db.prepare('SELECT COUNT(*) AS n FROM creator_follows WHERE creator_id=?').get(x.id).n}:null;
+    },
+    followCreator(actor,creatorId){
+      requireVerified(actor);
+      if(typeof creatorId!=='string'||creatorId===actor.id)throw error('CANNOT_FOLLOW_SELF',422);
+      if(!store.publicCreator(creatorId))throw error('CREATOR_UNAVAILABLE',404);
+      return transaction(()=>{
+        const result=db.prepare('INSERT OR IGNORE INTO creator_follows(follower_id,creator_id,created_at) VALUES(?,?,?)').run(actor.id,creatorId,stamp());
+        if(result.changes)audit(actor.id,'creator.followed',creatorId);
+        return {creatorId,following:true,replayed:result.changes===0};
+      });
+    },
+    unfollowCreator(actor,creatorId){
+      requireVerified(actor);
+      if(typeof creatorId!=='string'||creatorId===actor.id)throw error('CANNOT_FOLLOW_SELF',422);
+      return transaction(()=>{
+        const result=db.prepare('DELETE FROM creator_follows WHERE follower_id=? AND creator_id=?').run(actor.id,creatorId);
+        if(result.changes)audit(actor.id,'creator.unfollowed',creatorId);
+        return {creatorId,following:false,replayed:result.changes===0};
+      });
+    },
+    isFollowing(actor,creatorId){
+      requireVerified(actor);
+      return Boolean(db.prepare('SELECT 1 FROM creator_follows WHERE follower_id=? AND creator_id=?').get(actor.id,creatorId));
+    },
+    followingCreators(actor){
+      requireVerified(actor);
+      return db.prepare("SELECT f.creator_id AS id FROM creator_follows f JOIN users u ON u.id=f.creator_id WHERE f.follower_id=? AND u.verified_at IS NOT NULL AND u.suspended=0 AND EXISTS(SELECT 1 FROM lessons l WHERE l.creator_id=u.id AND l.status='published') ORDER BY f.created_at DESC LIMIT 250").all(actor.id).map(x=>x.id);
     },
     setMessagePreference(actor,allowed){
       requireVerified(actor);
