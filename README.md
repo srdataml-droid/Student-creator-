@@ -1,14 +1,61 @@
 # Student Creators Platform
 
-A **student creator social network and marketplace**: publish short/long videos, completed original assignment examples, notes and projects; follow creators; join university/course communities; exchange direct messages; and eventually purchase premium posts, subscriptions and tutoring.
+**A campus-first social network and creator marketplace, by Worthkind.** Students can become creators and viewers, share original short/long videos, work they personally completed and may lawfully publish, study notes and projects; follow creators, join course communities, save posts and privately message other students.
 
-**Status: active development.** The main app will run locally with server-side SQLite and no Supabase or payment keys. No production payment/earnings claim is made; payouts are disabled pending PSP onboarding, secure database integration, and owner-approved terms.
+**This is the actual application repository:** https://github.com/srdataml-droid/Student-creator-
 
-This is the correct repository for development. The prior `school-learning-platform` repository was a separate engineering foundation.
+## What already runs in development
+- **Creator-first homepage** at `/`: responsive feed of published creator posts, video playback, filtering, local search, and save-post actions.
+- **Creator profiles** at `/creators/[creatorId]`: published content, private-message CTA, follow/unfollow and follower count.
+- **Following feed:** account-scoped followed creators, stored persistently in the SQLite development database.
+- **Studio:** students submit original text lessons and MP4 videos; a distinct administrator approves or rejects submissions before public discovery.
+- **Campus/course discovery**, searchable lessons, bookmarked posts, course communities, one-to-one messages (with opt-in/block/report), and scheduled group study sessions.
+- **Local SQLite** persistence and video files, backup/restore, and HTTP tests. An admin must create the first campus/courses and verify learners; there are **no fictitious students, posts, payments, view counts or payouts**.
 
-## Upcoming source
-- Next.js creator feed and mobile-first responsive UI
-- Local SQLite auth, lessons, video and communities carried over from our reviewed implementation
-- Domain and HTTP tests; documentation of release gaps
+This is a real local Node/Next.js application, **not yet a public multi-user production deployment**. Its file-based SQLite backend is deliberately disabled on stateless serverless hosts. Use dedicated Postgres/Supabase and media infrastructure before public launch.
 
-No production credentials belong in this repository. Original student material only, subject to academic and copyright permissions.
+## Run it locally
+
+Requirements: Node.js **22.16+**, npm, and a local filesystem where the server can persist SQLite and media. On Node 22, `node:sqlite` is experimental.
+
+```bash
+git clone https://github.com/srdataml-droid/Student-creator-.git
+cd Student-creator-
+npm ci --prefix apps/web
+npm test
+```
+
+Create the first administrator **without putting the password in a checked-in file or shell history**:
+
+```bash
+export LOCAL_ADMIN_EMAIL='admin@your-school.example'
+read -r -s LOCAL_ADMIN_PASSWORD
+export LOCAL_ADMIN_PASSWORD
+npm run local:admin
+unset LOCAL_ADMIN_PASSWORD LOCAL_ADMIN_EMAIL
+```
+
+Start the web app:
+
+```bash
+APP_DATA_MODE=local npm run dev --prefix apps/web
+```
+
+Open **http://localhost:3000**. Use `/manage` to create a university and courses, `/join` to register a student, then approve the student using the admin panel. Students can publish from `/studio`; approved posts appear in the public creator feed. Video development uploads are limited to 25 MiB and must pass format restrictions. This is not malware scanning or professional media transcoding.
+
+**Important:** No sample content is seeded. The first feed is an intentional, designed invitation to create—not an empty crash. The site will contain actual posts only after creators publish and moderators approve them.
+
+## Verification
+GitHub Actions runs unit/SQLite integration tests, a disposable PostgreSQL schema contract, and the pinned Next.js production build. Example successful end-to-end CI for the feed: https://github.com/srdataml-droid/Student-creator-/actions/runs/44884987176 . Each new commit gets its own check; do not assume later commits passed until their own run finishes.
+
+## What is not live
+- Supabase authentication, hosted Postgres, storage and production access policies.
+- Paystack checkout, creator bank verification/subaccounts, payment splitting, paid content unlocks, recurring subscriptions, refunds or settlements.
+- Creator-set paid price display, verified bank payout setup, real earnings balances.
+- Mobile-native app, adaptive video transcoding, production moderation and platform deployment.
+
+The intended **core business model is paid creator content, subscriptions and permissible private tutoring/feedback**, with transparent creator/platform revenue sharing. Ads are **not** required. Payment-domain code exists, but no successful test transaction or production settlement is claimed.
+
+Content must be original or permission-cleared. Buying an example does not transfer its copyright. Do not facilitate submitting another student's work as one's own.
+
+See [project progress](docs/PROJECT_PROGRESS.md) and [product scope](docs/PRODUCT_SCOPE.md). Never commit keys or real student ID documents.
