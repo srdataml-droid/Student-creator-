@@ -1,0 +1,9 @@
+{
+  "name": "@student-learning/payment-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "engines": {"node": ">=20"},
+  "scripts": {"test": "node --test"},
+  "description": "Dependency-free validation primitives for future server-side Nigerian lesson checkout integration. No payout or fulfillment side effects."
+}
