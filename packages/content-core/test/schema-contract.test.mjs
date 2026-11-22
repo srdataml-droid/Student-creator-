@@ -27,14 +27,14 @@ test('privileged tables have RLS but no broad client write grants', () => {
   }
   // Only nonfinancial owner-scoped social reactions may have narrow client writes.
   // This continues to reject any client writes on profiles, finance, moderation or media.
-  const clientWrites=[...sql.matchAll(/create policy (\\w+) on public\\.(\\w+) for (all|insert|update|delete) to (anon|authenticated)\\b/gi)]
+  const clientWrites=[...sql.matchAll(/create policy (\w+) on public\.(\w+) for (all|insert|update|delete) to (anon|authenticated)\b/gi)]
     .map(m=>[m[1],m[2],m[3].toLowerCase(),m[4].toLowerCase()]);
   assert.deepEqual(clientWrites,[
     ['own_content_likes_delete','content_likes','delete','authenticated'],
     ['verified_public_content_like','content_likes','insert','authenticated']
   ]);
-  assert.match(sql,/create policy verified_public_content_like[\\s\\S]*?with check\\(user_id=\\(select auth\\.uid\\(\\)\\)[\\s\\S]*?p\\.verified_at is not null and not p\\.suspended[\\s\\S]*?c\\.status='published' and cs\\.active\\)/);
-  assert.match(sql,/alter table public\\.content_likes enable row level security/);
+  assert.match(sql,/create policy verified_public_content_like[\s\S]*?with check\(user_id=\(select auth\.uid\(\)\)[\s\S]*?p\.verified_at is not null and not p\.suspended[\s\S]*?c\.status='published' and cs\.active\)/);
+  assert.match(sql,/alter table public\.content_likes enable row level security/);
 });
 
 test('draft creation is idempotent at the database boundary', () => {
