@@ -94,7 +94,7 @@ set role authenticated;
 set request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
 insert into public.content_likes(user_id,content_id)
   values('11111111-1111-4111-8111-111111111111','aaaaaaaa-2222-4222-8222-aaaaaaaaaaaa');
-do $ declare n integer;
+do $$ declare n integer;
 begin
   select count(*) into n from public.content_likes;
   if n<>1 then raise exception 'Own like not readable: %',n;end if;
@@ -116,25 +116,25 @@ begin
     raise exception 'Unapproved content like accepted';
   exception when insufficient_privilege then null;
   end;
-end $;
+end $$;
 set request.jwt.claim.sub = '22222222-2222-4222-8222-222222222222';
-do $ declare n integer;
+do $$ declare n integer;
 begin
   select count(*) into n from public.content_likes;
   if n<>0 then raise exception 'Other student can read likes: %',n;end if;
   delete from public.content_likes where user_id='11111111-1111-4111-8111-111111111111';
-end $;
+end $$;
 reset role;
 set request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
 set role authenticated;
-do $ declare n integer;
+do $$ declare n integer;
 begin
   select count(*) into n from public.content_likes;
   if n<>1 then raise exception 'Other student removed own like: %',n;end if;
   delete from public.content_likes where user_id='11111111-1111-4111-8111-111111111111';
   select count(*) into n from public.content_likes;
   if n<>0 then raise exception 'Own unlike did not delete';end if;
-end $;
+end $$;
 reset role;
 
 \echo 'Anonymous RLS shows only published public metadata, even if subject claim present'
