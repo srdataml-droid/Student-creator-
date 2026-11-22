@@ -10,6 +10,7 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { validateMp4 } from './video.mjs';
+import { creatorProfileInput } from './creator-profile.mjs';
 
 export const SESSION_COOKIE='campus_local_session';
 const SESSION_TTL=7*24*60*60;
@@ -69,6 +70,13 @@ export function openLocalStore(path){
       CHECK(follower_id <> creator_id)
     );
     CREATE INDEX IF NOT EXISTS creator_follows_by_creator ON creator_follows(creator_id,created_at DESC);
+    CREATE TABLE IF NOT EXISTS creator_public_profiles(
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      handle TEXT NOT NULL COLLATE NOCASE UNIQUE,
+      display_name TEXT NOT NULL CHECK(length(display_name) BETWEEN 3 AND 60),
+      bio TEXT NOT NULL DEFAULT '' CHECK(length(bio)<=280),
+      updated_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS lesson_bookmarks(user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,created_at TEXT NOT NULL,PRIMARY KEY(user_id,lesson_id));
     CREATE INDEX IF NOT EXISTS bookmark_recent ON lesson_bookmarks(user_id,created_at DESC);
     CREATE TABLE IF NOT EXISTS lesson_likes(user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,created_at TEXT NOT NULL,PRIMARY KEY(user_id,lesson_id));
@@ -496,9 +504,44 @@ export function openLocalStore(path){
     },
     publicLessons(courseId,topicId=null){if(!store.getCourse(courseId))return [];return (topicId?db.prepare("SELECT * FROM lessons WHERE course_id=? AND topic_id=? AND status='published' ORDER BY published_at DESC LIMIT 100").all(courseId,topicId):db.prepare("SELECT * FROM lessons WHERE course_id=? AND status='published' ORDER BY published_at DESC LIMIT 100").all(courseId)).map(withVideo);},
     publicLesson(id){const row=db.prepare("SELECT l.* FROM lessons l JOIN courses c ON c.id=l.course_id WHERE l.id=? AND l.status='published' AND c.active=1").get(id);return withVideo(row);},
+    getOwnPublicProfile(actor){
+      requireVerified(actor);
+      const row=db.prepare('SELECT handle,display_name AS displayName,bio,updated_at AS updatedAt FROM creator_public_profiles WHERE user_id=?').get(actor.id);
+      return row||null;
+    },
+    updatePublicProfile(actor,input){
+      requireVerified(actor);
+      const value=creatorProfileInput(input),current=store.getOwnPublicProfile(actor);
+      if(current&&current.handle===value.handle&&current.displayName===value.displayName&&current.bio===value.bio)
+        return {profile:current,replayed:true};
+      return transaction(()=>{
+        const recent=db.prepare("SELECT count(*) AS n FROM audit_events WHERE actor_id=? AND action='creator.profile.updated' AND created_at>=?")
+          .get(actor.id,new Date(Date.now()-3600000).toISOString()).n;
+        if(recent>=5)throw error('PROFILE_RATE_LIMIT',429);
+        const updatedAt=stamp();
+        try{
+          db.prepare(`INSERT INTO creator_public_profiles(user_id,handle,display_name,bio,updated_at)
+            VALUES(?,?,?,?,?) ON CONFLICT(user_id) DO UPDATE SET handle=excluded.handle,
+            display_name=excluded.display_name,bio=excluded.bio,updated_at=excluded.updated_at`)
+            .run(actor.id,value.handle,value.displayName,value.bio,updatedAt);
+        }catch(cause){
+          if(cause?.code==='ERR_SQLITE_ERROR'&&String(cause.message).includes('UNIQUE constraint failed: creator_public_profiles.handle'))
+            throw error('HANDLE_TAKEN',409);
+          throw cause;
+        }
+        audit(actor.id,'creator.profile.updated',actor.id,{previousHandle:current?.handle||null,newHandle:value.handle});
+        return {profile:{...value,updatedAt},replayed:false};
+      });
+    },
     publicCreator(id){
-      const x=db.prepare("SELECT id,allow_messages FROM users WHERE id=? AND role='student' AND verified_at IS NOT NULL AND suspended=0 AND EXISTS (SELECT 1 FROM lessons l JOIN courses c ON c.id=l.course_id WHERE l.creator_id=users.id AND l.status='published' AND c.active=1)").get(id);
-      return x?{id:x.id,allowMessages:Boolean(x.allow_messages),followerCount:db.prepare('SELECT COUNT(*) AS n FROM creator_follows WHERE creator_id=?').get(x.id).n}:null;
+      const x=db.prepare(`SELECT u.id,u.allow_messages,p.handle,p.display_name,p.bio
+         FROM users u LEFT JOIN creator_public_profiles p ON p.user_id=u.id
+         WHERE u.id=? AND u.role='student' AND u.verified_at IS NOT NULL AND u.suspended=0
+         AND EXISTS (SELECT 1 FROM lessons l JOIN courses c ON c.id=l.course_id
+           WHERE l.creator_id=u.id AND l.status='published' AND c.active=1)`).get(id);
+      return x?{id:x.id,allowMessages:Boolean(x.allow_messages),
+        handle:x.handle??null,displayName:x.display_name??null,bio:x.bio??'',
+        followerCount:db.prepare('SELECT COUNT(*) AS n FROM creator_follows WHERE creator_id=?').get(x.id).n}:null;
     },
     followCreator(actor,creatorId){
       requireVerified(actor);
