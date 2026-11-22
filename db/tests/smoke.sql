@@ -89,7 +89,57 @@ begin
 end $$;
 reset role;
 
-\echo 'Anonymous RLS shows only published public metadata, even if subject claim present'
+\\echo 'Like RLS: actor ownership, published-only, deduplication and cross-campus public content'
+set role authenticated;
+set request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
+insert into public.content_likes(user_id,content_id)
+  values('11111111-1111-4111-8111-111111111111','aaaaaaaa-2222-4222-8222-aaaaaaaaaaaa');
+do $ declare n integer;
+begin
+  select count(*) into n from public.content_likes;
+  if n<>1 then raise exception 'Own like not readable: %',n;end if;
+  begin
+    insert into public.content_likes(user_id,content_id)
+      values('11111111-1111-4111-8111-111111111111','aaaaaaaa-2222-4222-8222-aaaaaaaaaaaa');
+    raise exception 'Duplicate like accepted';
+  exception when unique_violation then null;
+  end;
+  begin
+    insert into public.content_likes(user_id,content_id)
+      values('22222222-2222-4222-8222-222222222222','aaaaaaaa-2222-4222-8222-aaaaaaaaaaaa');
+    raise exception 'Like impersonation accepted';
+  exception when insufficient_privilege then null;
+  end;
+  begin
+    insert into public.content_likes(user_id,content_id)
+      values('11111111-1111-4111-8111-111111111111','bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb');
+    raise exception 'Unapproved content like accepted';
+  exception when insufficient_privilege then null;
+  end;
+end $;
+set request.jwt.claim.sub = '22222222-2222-4222-8222-222222222222';
+do $ declare n integer;
+begin
+  select count(*) into n from public.content_likes;
+  if n<>0 then raise exception 'Other student can read likes: %',n;end if;
+  delete from public.content_likes where user_id='11111111-1111-4111-8111-111111111111';
+  if not exists(select 1 from public.content_likes where user_id='22222222-2222-4222-8222-222222222222')
+    then null; end if;
+end $;
+reset role;
+set request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
+set role authenticated;
+do $ declare n integer;
+begin
+  select count(*) into n from public.content_likes;
+  if n<>1 then raise exception 'Other student removed own like: %',n;end if;
+  delete from public.content_likes where user_id='11111111-1111-4111-8111-111111111111';
+  select count(*) into n from public.content_likes;
+  if n<>0 then raise exception 'Own unlike did not delete';end if;
+end $;
+reset role;
+
+\\echo 'Anonymous RLS shows only published public metadata, even if subject claim present'
 set request.jwt.claim.sub = '22222222-2222-4222-8222-222222222222';
 set role anon;
 do $$ declare n integer;
