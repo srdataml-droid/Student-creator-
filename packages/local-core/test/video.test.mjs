@@ -5,6 +5,7 @@ import {join} from 'node:path';
 import {tmpdir} from 'node:os';
 import {fileURLToPath} from 'node:url';
 import {openLocalStore} from '../src/store.mjs';
+import {DatabaseSync} from 'node:sqlite';
 import {createLocalHandler} from '../src/http.mjs';
 import {MAX_VIDEO_BYTES,parseVideoRange,validateMp4} from '../src/video.mjs';
 
@@ -151,5 +152,42 @@ test('streamed upload size enforcement works without a declared content length',
     assert.equal(response.status,413);
     assert.equal((await response.json()).error,'VIDEO_TOO_LARGE');
     assert.equal((await x.request(`lessons/${lessonId}/video`,'GET',undefined,student)).status,404);
+  }finally{x.close();}
+});
+
+test('deactivated courses hide published lessons, notes, creator discovery and video from the public',async()=>{
+  const x=setup();try{
+    const {admin,student,outsider,lessonId,course}=await x.seed();
+    const creatorId=x.store.getSession(student).id;
+    await x.request(`lessons/${lessonId}/video`,'POST',fixture,student);
+    await x.request(`lessons/${lessonId}/submit`,'POST',{},student);
+    await x.request(`lessons/${lessonId}/review`,'POST',{decision:'approve',reason:'Original teaching material'},admin);
+    assert.equal((await x.request(`lessons/${lessonId}`)).status,200);
+    assert.equal((await x.request(`lessons/${lessonId}/video`,'HEAD')).status,200);
+    assert.equal((await x.request(`creators/${creatorId}`)).status,200);
+    assert.equal((await x.request(`creators/${creatorId}/follow`,'POST',{},outsider)).status,200);
+    assert.deepEqual((await x.request('following','GET',undefined,outsider)).body.creators,[creatorId]);
+
+    // Synthetic administrative deactivation, because there is no public course-disable endpoint.
+    const db=new DatabaseSync(x.path);
+    try{db.prepare('UPDATE courses SET active=0 WHERE id=?').run(course);}
+    finally{db.close();}
+    assert.equal((await x.request(`courses/${course}`)).status,404);
+    assert.equal((await x.request(`lessons/${lessonId}`)).status,404);
+    assert.equal((await x.request(`lessons/${lessonId}/notes`)).status,404);
+    assert.equal((await x.request(`lessons/${lessonId}/video`)).status,404);
+    assert.equal((await x.request(`lessons/${lessonId}/video`,'HEAD')).status,404);
+    assert.equal((await x.request(`creators/${creatorId}`)).status,404);
+    assert.deepEqual((await x.request('following','GET',undefined,outsider)).body.creators,[]);
+    assert.deepEqual(x.store.publicLessons(course),[]);
+    assert.equal(x.store.publicLesson(lessonId),null);
+    // Authors may still review their own existing media privately.
+    assert.equal((await x.request(`lessons/${lessonId}/video`,'HEAD',undefined,student)).status,200);
+
+    const restore=new DatabaseSync(x.path);
+    try{restore.prepare('UPDATE courses SET active=1 WHERE id=?').run(course);}
+    finally{restore.close();}
+    assert.equal((await x.request(`lessons/${lessonId}`)).status,200);
+    assert.equal((await x.request(`lessons/${lessonId}/video`,'HEAD')).status,200);
   }finally{x.close();}
 });
