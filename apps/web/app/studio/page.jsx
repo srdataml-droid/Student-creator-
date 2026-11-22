@@ -4,8 +4,8 @@ import {useEffect,useState} from 'react';
 import {api,friendlyError} from '../../lib/local-client.js';
 const fresh=()=>({courseId:'',topicId:'',title:'',description:'',previewText:'',lessonText:'',rightsAttested:false,creationKey:globalThis.crypto?.randomUUID?.()||'local-unique-creation-12345'});
 export default function Studio(){
- const [user,setUser]=useState(null),[courses,setCourses]=useState([]),[topics,setTopics]=useState([]),[items,setItems]=useState([]),[inbox,setInbox]=useState([]),[state,setState]=useState('loading'),[form,setForm]=useState(fresh),[error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false),[editingId,setEditingId]=useState(null),[videoFiles,setVideoFiles]=useState({});
- async function load(){try{const m=await api('me');setUser(m.user);const c=await api('courses');setCourses(c.courses);if(m.user.role==='student'&&m.user.verifiedAt){const x=await api('my/lessons');setItems(x.lessons);const d=await api('messages/inbox');setInbox(d.inbox);}setState('ready');}catch(e){setState(e.status===401?'signed-out':'unavailable');}}
+ const [user,setUser]=useState(null),[courses,setCourses]=useState([]),[topics,setTopics]=useState([]),[items,setItems]=useState([]),[inbox,setInbox]=useState([]),[state,setState]=useState('loading'),[form,setForm]=useState(fresh),[error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false),[editingId,setEditingId]=useState(null),[videoFiles,setVideoFiles]=useState({}),[profile,setProfile]=useState({handle:'',displayName:'',bio:''}),[profileBusy,setProfileBusy]=useState(false),[profileError,setProfileError]=useState(''),[profileSaved,setProfileSaved]=useState('');
+ async function load(){try{const m=await api('me');setUser(m.user);const c=await api('courses');setCourses(c.courses);if(m.user.role==='student'&&m.user.verifiedAt){const x=await api('my/lessons');setItems(x.lessons);const d=await api('messages/inbox');setInbox(d.inbox);const p=await api('my/creator-profile');setProfile(p.profile||{handle:'',displayName:'',bio:''});}setState('ready');}catch(e){setState(e.status===401?'signed-out':'unavailable');}}
  useEffect(()=>{load();},[]);
  useEffect(()=>{if(!form.courseId){setTopics([]);return;}api(`courses/${form.courseId}/topics`).then(d=>setTopics(d.topics)).catch(()=>setTopics([]));},[form.courseId]);
  async function submit(e){e.preventDefault();setBusy(true);setError('');setMessage('');try{const result=editingId?await api(`lessons/${editingId}/edit`,{method:'POST',body:{...form,topicId:form.topicId||null}}):await api('lessons/drafts',{method:'POST',body:{...form,topicId:form.topicId||null}});setMessage(editingId?'Lesson saved. Submit the updated version for review.':result.replayed?'Previous draft found. No duplicate was created.':'Your draft has been saved privately. Submit it for review below.');setEditingId(null);setForm(fresh());await load();}catch(e){setError(friendlyError(e));}finally{setBusy(false);}}
@@ -21,11 +21,35 @@ export default function Studio(){
     setVideoFiles(v=>({...v,[id]:null}));await load();
   }catch(e){setError(friendlyError(e));}finally{setBusy(false);}
  }
+ async function savePublicProfile(e){
+  e.preventDefault();setProfileBusy(true);setProfileError('');setProfileSaved('');
+  try{
+   const result=await api('my/creator-profile',{method:'POST',body:profile});
+   setProfile(result.profile);setProfileSaved(result.replayed?'Your public profile is already current.':'Your public profile was saved.');
+  }catch(error){setProfileError(friendlyError(error));}
+  finally{setProfileBusy(false);}
+ }
  async function toggleMessages(){setBusy(true);setError('');try{await api('messages/preference',{method:'POST',body:{allowMessages:!user.allowMessages}});setMessage('Your direct message preference was saved.');await load();}catch(e){setError(friendlyError(e));}finally{setBusy(false);}}
  async function logout(){await api('auth/logout',{method:'POST',body:{}});window.location.assign('/');}
  return <main className="main" id="main"><section className="hero compact"><p className="eyebrow">Creator studio</p><h1>Share what you understand.</h1><p className="intro">Build original explanations in your own words. Save text and optional original MP4 videos on the local development server without external APIs.</p></section>
  {state==='loading'?<p role="status">Opening your studio…</p>:state==='signed-out'?<div className="status"><p>Sign in to create lessons.</p><Link className="primary-link" href="/sign-in">Sign in</Link></div>:state==='unavailable'?<p role="alert" className="status">Local storage is unavailable. Check your terminal.</p>:<>
  <div className="studio-meta"><p>Signed in as <strong>{user.email}</strong> · {user.verifiedAt?'Verified student':'Verification pending'}</p><button className="quiet-button" onClick={logout}>Sign out</button></div>
+ {user.role==='student'&&user.verifiedAt&&<section className="panel creator-profile-edit"><h2>Your public creator identity</h2>
+ <p className="hint">Use a public alias, never your private school ID or account email. Handles identify individuals but do not mean a school or Worthkind endorses them. Names claiming official staff or university authority are reserved.</p>
+ <form className="form-stack" onSubmit={savePublicProfile}>
+  <label htmlFor="creator-handle">Unique public handle</label>
+  <input id="creator-handle" autoComplete="username" required pattern="[A-Za-z][A-Za-z0-9_]{2,23}" minLength={3} maxLength={24}
+   value={profile.handle} onChange={e=>setProfile({...profile,handle:e.target.value})} placeholder="e.g. samuel_builds" />
+  <label htmlFor="creator-display-name">Display name</label>
+  <input id="creator-display-name" autoComplete="nickname" required minLength={3} maxLength={60}
+   value={profile.displayName} onChange={e=>setProfile({...profile,displayName:e.target.value})} placeholder="e.g. Samuel Builds" />
+  <label htmlFor="creator-bio">Short public introduction (optional)</label>
+  <textarea id="creator-bio" rows={2} maxLength={280} value={profile.bio}
+   onChange={e=>setProfile({...profile,bio:e.target.value})} placeholder="What original material do you teach?" />
+  {profileError&&<p role="alert" className="form-error">{profileError}</p>}
+  {profileSaved&&<p role="status" className="form-success">{profileSaved}</p>}
+  <button type="submit" className="primary-link" disabled={profileBusy||busy}>{profileBusy?'Saving profile…':'Save public profile'}</button>
+ </form><p className="hint">Your public profile becomes discoverable only once a separate reviewer approves one of your lessons. <Link href={`/creators/${user.id}`}>Preview your creator page</Link> once published.</p></section>}
  {user.verifiedAt&&<section className="message-settings"><div><h2>Peer questions & messages</h2><p className="hint">You control whether new students may contact you about approved lessons. Existing conversations stay available unless you block a contact.</p><p className="hint">{inbox.length} conversations <Link href="/messages">Open inbox</Link></p></div><button className="secondary-link" type="button" disabled={busy} onClick={toggleMessages}>{user.allowMessages?'Disable new inquiries':'Allow new inquiries'}</button></section>}
  {!user.verifiedAt?<p className="status" role="status">Your campus membership is waiting for an administrator to verify it. Publishing is disabled until approval.</p>:<div className="studio-grid"><section className="panel"><h2>{editingId?'Edit lesson draft':'New lesson draft'}</h2><p className="hint">Write an original accessible text explanation first, then attach an optional original MP4 video (up to 25 MiB) to the saved draft. Approved lessons remain free; paid access is not connected.</p>
  <form className="form-stack" onSubmit={submit}><label htmlFor="course">Course</label><select id="course" required value={form.courseId} onChange={e=>setForm({...form,courseId:e.target.value,topicId:''})}><option value="">Choose a course</option>{courses.filter(c=>c.institutionId===user.institutionId).map(c=><option key={c.id} value={c.id}>{c.code} — {c.title}</option>)}</select>
