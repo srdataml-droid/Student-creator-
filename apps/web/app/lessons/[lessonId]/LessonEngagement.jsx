@@ -44,8 +44,13 @@ export default function LessonEngagement({lessonId}){
  }
  async function report(event){
   event.preventDefault();if(!reportFor||reportReason.trim().length<10)return;
-  await run('report',()=>api(`lesson-comments/${reportFor}/report`,{method:'POST',body:{reason:reportReason}}),'Your report has been sent for review.');
-  setReportFor(null);setReportReason('');
+  setBusy('report');setNotice('');
+  try{
+   await api(`lesson-comments/${reportFor}/report`,{method:'POST',body:{reason:reportReason}});
+   await refresh();setNotice('Your report has been sent for review.');
+   setReportFor(null);setReportReason('');
+  }catch(error){setNotice(friendlyError(error));}
+  finally{setBusy('');}
  }
  return <section className="lesson-engagement panel" aria-label="Post reactions and comments">
   <h2>Join the conversation</h2>
