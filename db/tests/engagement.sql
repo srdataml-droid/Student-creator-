@@ -1,6 +1,9 @@
 -- Disposable PostgreSQL 17 engagement RLS tests; run only after smoke.sql.
 \set ON_ERROR_STOP on
 \echo 'Seed synthetic published and draft engagement using trusted database owner'
+INSERT INTO auth.users(id) VALUES ('33333333-3333-4333-8333-333333333333');
+INSERT INTO public.student_profiles(user_id,institution_id,display_name,verified_at)
+ VALUES('33333333-3333-4333-8333-333333333333','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','Carol',now());
 INSERT INTO public.content_comments(id,content_id,author_id,body,creation_key,creation_hash) VALUES
  ('aaaaaaaa-3333-4333-8333-aaaaaaaaaaaa','aaaaaaaa-2222-4222-8222-aaaaaaaaaaaa','11111111-1111-4111-8111-111111111111',
  'An original public study comment','alice_comment_key_0001',repeat('a',64)),
@@ -49,11 +52,9 @@ BEGIN
  IF n<>1 THEN RAISE EXCEPTION 'Student could not view their own like'; END IF;
  BEGIN
   INSERT INTO public.content_likes(user_id,content_id) VALUES
-   ('22222222-2222-4222-8222-222222222222','aaaaaaaa-2222-4222-8222-aaaaaaaaaaaa');
+   ('33333333-3333-4333-8333-333333333333','aaaaaaaa-2222-4222-8222-aaaaaaaaaaaa');
   RAISE EXCEPTION 'Student impersonated another liker';
- EXCEPTION WHEN insufficient_privilege OR unique_violation THEN
-  -- Re-run with a distinct target below to ensure RLS, not uniqueness, is the gate.
-  NULL;
+ EXCEPTION WHEN insufficient_privilege THEN NULL;
  END;
  BEGIN
   UPDATE public.content_comments SET body='Changed content' WHERE id='aaaaaaaa-3333-4333-8333-aaaaaaaaaaaa';
