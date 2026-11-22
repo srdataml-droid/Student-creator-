@@ -15,8 +15,8 @@
 | 7 | DMs, blocks/reports, course communities | SQLite implemented, tested | Private APIs and tests; live realtime absent |
 | 8 | Search, saved posts, study sessions | SQLite implemented, tested | Local integration tests |
 | 9 | Creator follows and Following feed | Implemented, current CI check pending | `creator_follows`, follow API, profile button, new tests |
-| 10 | Post likes, comments, follow notifications | **Comments in review** | Likes are merged in PR #2. This PR adds verified-student comments, owner soft-removal, private reports, independent moderation, HTTP integration tests and a separate PostgreSQL RLS contract. Follow notifications remain planned. No hosted database migration applied. |
-| 11 | Creator profile names, photos, original-work type and pricing controls | Planned | Creator identity vs school verification, privacy |
+| 10 | Post likes, comments, follow notifications | **Likes + moderated comments merged/tested locally** | [PR #2](https://github.com/srdataml-droid/Student-creator-/pull/2) + [PR #4](https://github.com/srdataml-droid/Student-creator-/pull/4), main `338b1457`; authenticated replay-safe likes, comment removal/report review, synthetic HTTP + disposable PG CI success. Follow notifications remain planned; nothing deployed. |
+| 11 | Creator profile names, photos, original-work type and pricing controls | **Public name/handle in review; media and pricing planned** | Local verified student alias edit with reserved-identity checks, handle uniqueness, public-only-after-approval, PostgreSQL RLS migration and tests on this branch. Never expose legal ID/email. Photos, original-work classification and prices remain unimplemented. |
 | 12 | Premium posts/subscriptions and entitlement access | Planned/blocked | Dedicated managed DB and PSP sandbox required |
 | 13 | Creator bank setup and PSP settlement split | Blocked | Provider eligibility, user approval, finance/legal review |
 | 14 | Creator sales dashboard, refunds/reconciliation | Planned | Transactional ledger + actual provider evidence |
@@ -27,8 +27,8 @@
 ## Exact continuation
 1. Inspect latest `main` commit and its GitHub Actions test, web-build and disposable DB job conclusions.
 2. If any CI failed, inspect first failed step and fix before feature work.
-3. Verify the exact head SHA and test, web-build and database-contract checks on the likes PR. Likes are local-only until a dedicated Student Creators Supabase project is confirmed; PostgreSQL RLS schema is a CI-tested draft, not deployed. This comments PR must pass exact-head local HTTP and disposable PostgreSQL checks before merge. Follow notifications and hosted persistence remain next work after identifying the correct app-specific database.
-4. Add creator profile custom display names with anti-impersonation controls; keep legal student identifiers private.
+3. Likes and comments already merged with exact-main CI. Verify this public-alias branch's fresh test, web-build, database-contract and post-merge main before marking it done. Follow notifications and hosted persistence remain next work after identifying the app-specific database.
+4. Complete and verify creator alias privacy and cross-school public rules; photos, original-work classification and pricing/entitlements remain separately gated.
 5. Separate accepted data model for paid posts and subscriptions from free content, then integrate with dedicated Supabase and PSP sandbox only when available.
 
 **Security:** The app is not deployed. SQLite is only a development store. Do not unlock paid media on browser return; only trusted verified server-side payment and atomic entitlement updates may grant access. Provider secrets stay server-side. No school IDs, fake creator earnings or seed-user credentials in Git.
@@ -40,3 +40,10 @@
 - Local development server now has POST/GET comments, persistent idempotency, 20-comments/hour cap, author-owned soft removal and report/independent administrator hide/dismiss actions. Public replies display a pseudonym, never personal email.
 - PostgreSQL `db/migrations/0002_creator_comments.sql` keeps browser mutation of comment and moderation tables denied; all access-control tests run on disposable PostgreSQL CI only. This is not yet a hosted authenticated implementation.
 - Still blocked: approved Student Creators Supabase project and media storage, production authentication, actual moderation operations and audits, real-device/browser accessibility testing, paid content entitlements and settlement.
+
+## Public creator aliases — implementation checkpoint (22 November 2026)
+
+- **Code:** new `creator_public_profiles` SQLite development table with account-owned updates, case-insensitive unique ASCII handles, Latin-script display names, platform/campus authority reservations, short text-only bio, 5-changes/hour audit throttle and no account-email publication. Existing bookmarks, likes, comments, followers and messages remain unchanged.
+- **UI:** `/studio` self-editable public profile and `/creators/[creatorId]` display self-chosen aliases only after independently reviewed publication. Student verification is not permission to impersonate school administration.
+- **Tests:** pure alias-validation tests, synthetic HTTP integration tests for failed auth, unauthorised claims, duplicate handles, persistence and public visibility; disposable PostgreSQL 17 migration/contract `0003_creator_public_profiles.sql` + `creator_public_profiles.sql` with RLS, revoked/suspended/denied-published access and no browser mutation privileges. Test results must be bound to final head SHA; writing test files does not prove success.
+- **Still blocked externally:** dedicated hosted Supabase project and verified Auth/write service, real public browser/mobile checks, production security operations and any paid content/PSP settlement. SQLite is temporary development/rollback only.
