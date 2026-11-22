@@ -187,10 +187,10 @@ export function openLocalStore(path){
       return {hasVideo:true,replayed:false,sizeBytes:bytes.length};
     },
     getVideoFile(actor,id){
-      const row=db.prepare(`SELECT v.file_id,v.bytes,l.creator_id,l.status FROM lesson_videos v
-        JOIN lessons l ON l.id=v.lesson_id WHERE l.id=?`).get(id);
+      const row=db.prepare(`SELECT v.file_id,v.bytes,l.creator_id,l.status,c.active AS course_active FROM lesson_videos v
+        JOIN lessons l ON l.id=v.lesson_id JOIN courses c ON c.id=l.course_id WHERE l.id=?`).get(id);
       if(!row)throw error('VIDEO_NOT_FOUND',404);
-      if(row.status!=='published'&&!(actor&&!actor.suspended&&(actor.role==='admin'||actor.id===row.creator_id)))throw error('VIDEO_NOT_FOUND',404);
+      if((row.status!=='published'||!row.course_active)&&!(actor&&!actor.suspended&&(actor.role==='admin'||actor.id===row.creator_id)))throw error('VIDEO_NOT_FOUND',404);
       if(!mediaDir)throw error('MEDIA_UNAVAILABLE',503);
       const file=join(mediaDir,`${row.file_id}.mp4`);
       let size;try{size=statSync(file).size;}catch{throw error('MEDIA_UNAVAILABLE',503);}
@@ -369,10 +369,10 @@ export function openLocalStore(path){
         return {bookmarked:false,replayed:changed.changes===0};
       });
     },
-    publicLessons(courseId,topicId=null){return (topicId?db.prepare("SELECT * FROM lessons WHERE course_id=? AND topic_id=? AND status='published' ORDER BY published_at DESC LIMIT 100").all(courseId,topicId):db.prepare("SELECT * FROM lessons WHERE course_id=? AND status='published' ORDER BY published_at DESC LIMIT 100").all(courseId)).map(withVideo);},
-    publicLesson(id){const row=db.prepare("SELECT * FROM lessons WHERE id=? AND status='published'").get(id);return withVideo(row);},
+    publicLessons(courseId,topicId=null){if(!store.getCourse(courseId))return [];return (topicId?db.prepare("SELECT * FROM lessons WHERE course_id=? AND topic_id=? AND status='published' ORDER BY published_at DESC LIMIT 100").all(courseId,topicId):db.prepare("SELECT * FROM lessons WHERE course_id=? AND status='published' ORDER BY published_at DESC LIMIT 100").all(courseId)).map(withVideo);},
+    publicLesson(id){const row=db.prepare("SELECT l.* FROM lessons l JOIN courses c ON c.id=l.course_id WHERE l.id=? AND l.status='published' AND c.active=1").get(id);return withVideo(row);},
     publicCreator(id){
-      const x=db.prepare("SELECT id,allow_messages FROM users WHERE id=? AND role='student' AND verified_at IS NOT NULL AND suspended=0 AND EXISTS (SELECT 1 FROM lessons WHERE creator_id=users.id AND status='published')").get(id);
+      const x=db.prepare("SELECT id,allow_messages FROM users WHERE id=? AND role='student' AND verified_at IS NOT NULL AND suspended=0 AND EXISTS (SELECT 1 FROM lessons l JOIN courses c ON c.id=l.course_id WHERE l.creator_id=users.id AND l.status='published' AND c.active=1)").get(id);
       return x?{id:x.id,allowMessages:Boolean(x.allow_messages),followerCount:db.prepare('SELECT COUNT(*) AS n FROM creator_follows WHERE creator_id=?').get(x.id).n}:null;
     },
     followCreator(actor,creatorId){
@@ -400,7 +400,7 @@ export function openLocalStore(path){
     },
     followingCreators(actor){
       requireVerified(actor);
-      return db.prepare("SELECT f.creator_id AS id FROM creator_follows f JOIN users u ON u.id=f.creator_id WHERE f.follower_id=? AND u.verified_at IS NOT NULL AND u.suspended=0 AND EXISTS(SELECT 1 FROM lessons l WHERE l.creator_id=u.id AND l.status='published') ORDER BY f.created_at DESC LIMIT 250").all(actor.id).map(x=>x.id);
+      return db.prepare("SELECT f.creator_id AS id FROM creator_follows f JOIN users u ON u.id=f.creator_id WHERE f.follower_id=? AND u.verified_at IS NOT NULL AND u.suspended=0 AND EXISTS(SELECT 1 FROM lessons l JOIN courses c ON c.id=l.course_id WHERE l.creator_id=u.id AND l.status='published' AND c.active=1) ORDER BY f.created_at DESC LIMIT 250").all(actor.id).map(x=>x.id);
     },
     setMessagePreference(actor,allowed){
       requireVerified(actor);
