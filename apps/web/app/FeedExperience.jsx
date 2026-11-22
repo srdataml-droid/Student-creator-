@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import {useEffect,useMemo,useState} from 'react';
 import {api,friendlyError} from '../lib/local-client.js';
+import {savedIdsFromLessons,afterBookmarkRequest} from '../lib/bookmark-state.mjs';
 const relative=(date)=>{if(!date)return 'Recently';const d=new Date(date);return Number.isNaN(d.valueOf())?'Recently':d.toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'});};
 const alias=(id)=>'Student creator · '+String(id||'').slice(0,5).toUpperCase();
 function Post({post,onSave,saved,pending}){
@@ -18,7 +19,7 @@ export default function FeedExperience({posts=[],courses=[],ready=true}){
  useEffect(()=>{
    let active=true;
    api('my/bookmarks').then(({lessons})=>{
-     if(active)setSaved(Array.isArray(lessons)?lessons.map(item=>item.id):[]);
+     if(active)setSaved(savedIdsFromLessons(lessons));
    }).catch(()=>{/* Signed-out visitors can still browse public posts. */});
    return ()=>{active=false;};
  },[]);
@@ -41,7 +42,7 @@ export default function FeedExperience({posts=[],courses=[],ready=true}){
    setError('');setPending(id);
    try{
      await api(`lessons/${id}/${alreadySaved?'unbookmark':'bookmark'}`,{method:'POST',body:{}});
-     setSaved(list=>alreadySaved?list.filter(savedId=>savedId!==id):list.includes(id)?list:[...list,id]);
+     setSaved(list=>afterBookmarkRequest(list,id,alreadySaved));
    }catch(e){setError(friendlyError(e));}
    finally{setPending(null);}
  }
