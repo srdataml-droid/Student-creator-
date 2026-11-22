@@ -106,6 +106,16 @@ create table public.content_assets (
   constraint ready_assets_must_be_clean check(processing_status <> 'ready' or scan_verdict = 'clean'),
   created_at timestamptz not null default now()
 );
+-- Authenticated students can like public approved content; likes remain private per actor.
+-- A future aggregate/read API must use an audited server-side count, never expose liker identities.
+create table public.content_likes (
+  user_id uuid not null references auth.users(id) on delete cascade,
+  content_id uuid not null references public.content_items(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key(user_id,content_id)
+);
+create index content_likes_by_content on public.content_likes(content_id);
+
 create table public.listings (
   id uuid primary key default gen_random_uuid(),
   content_id uuid not null,
@@ -206,6 +216,7 @@ alter table public.platform_staff enable row level security;
 alter table public.verification_requests enable row level security;
 alter table public.content_items enable row level security;
 alter table public.content_assets enable row level security;
+alter table public.content_likes enable row level security;
 alter table public.listings enable row level security;
 alter table public.orders enable row level security;
 alter table public.payment_attempts enable row level security;
@@ -225,6 +236,21 @@ create policy published_metadata_anon on public.content_items for select to anon
   using(status='published');
 create policy published_or_own_metadata_authenticated on public.content_items for select to authenticated
   using(status='published' or creator_id=(select auth.uid()));
+-- Likes never reveal who else reacted. Owner-only reads and deletes; verified students
+-- can create a like only for published content in an active course.
+create policy own_content_likes_read on public.content_likes for select to authenticated
+  using(user_id=(select auth.uid()));
+create policy own_content_likes_delete on public.content_likes for delete to authenticated
+  using(user_id=(select auth.uid()));
+create policy verified_public_content_like on public.content_likes for insert to authenticated
+  with check(user_id=(select auth.uid())
+    and exists (select 1 from public.student_profiles p
+      where p.user_id=(select auth.uid()) and p.verified_at is not null and not p.suspended)
+    and exists (select 1 from public.content_items c
+      join public.courses cs on cs.id=c.course_id
+      where c.id=content_id and c.status='published' and cs.active));
+grant select,insert,delete on public.content_likes to authenticated;
+
 create policy active_listing_read on public.listings for select to anon,authenticated
   using(state='active' and exists (
     select 1 from public.content_items c where c.id=content_id and c.status='published'
