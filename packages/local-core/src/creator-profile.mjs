@@ -1,8 +1,8 @@
 /** Public aliases only. Never treat this text as a verified legal or campus identity. */
 const HANDLE=/^[a-z][a-z0-9_]{2,23}$/;
-const NAME=/^[\p{L}][\p{L}\p{M}\p{N} .'-]{2,59}$/u;
+const NAME=/^[\p{Script=Latin}][\p{Script=Latin}\p{M}\p{N} .'-]{2,59}$/u;
 const RESERVED=/^(?:admin|administrator|staff|official|verified|support|moderator|system|platform|worthkind|registrar|school_admin)(?:_|$)/;
-const RESERVED_NAME=/(?:^|[^\p{L}\p{N}])(?:admin|administrator|staff|official|verified|support|moderator|system|platform|worthkind|registrar|school admin)(?:$|[^\p{L}\p{N}])/iu;
+const RESERVED_NAME=/(?:^|[^\p{L}\p{N}])(?:admin|administrator|staff|official|verified|support|moderator|system|platform|worthkind|registrar|school admin|university|faculty|college)(?:$|[^\p{L}\p{N}])/iu;
 export function creatorProfileInput(value){
  if(!value||typeof value!=='object'||Array.isArray(value)||
     Object.keys(value).some(key=>!['handle','displayName','bio'].includes(key)))
