@@ -85,6 +85,14 @@ export function createLocalHandler(store){
           if(topicId&&!topics.some(t=>t.id===topicId))return fail('INVALID_TOPIC',422);
           return responses({course:item,topics,lessons:store.publicLessons(item.id,topicId).map(l=>({id:l.id,title:l.title,topicId:l.topicId,description:l.description,previewText:l.previewText,publishedAt:l.publishedAt,hasVideo:l.hasVideo}))});
         }
+        if(segments.length===3&&segments[0]==='lessons'&&segments[2]==='engagement')
+          return responses({engagement:store.lessonEngagement(actor,segments[1])});
+        if(segments.length===3&&segments[0]==='lessons'&&segments[2]==='comments')
+          return responses({comments:store.lessonComments(segments[1])});
+        if(path==='admin/comment-reports'){
+          if(!actor)return unauthorized();
+          return responses({reports:store.lessonCommentReportQueue(actor)});
+        }
         if(segments.length===3&&segments[0]==='lessons'&&segments[2]==='notes'){
           // Public/free notes only; do not use this route for future paid assets.
           const lesson=store.publicLesson(segments[1]);
@@ -137,6 +145,24 @@ export function createLocalHandler(store){
         const result=segments[2]==='follow'?store.followCreator(actor,segments[1]):store.unfollowCreator(actor,segments[1]);
         return responses({follow:result});
       }
+      if(segments.length===3&&segments[0]==='lessons'&&['like','unlike'].includes(segments[2])){
+        if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
+        const item=segments[2]==='like'?store.likeLesson(actor,segments[1]):store.unlikeLesson(actor,segments[1]);
+        return responses({like:item},item.replayed?200:201);
+      }
+      if(segments.length===3&&segments[0]==='lessons'&&segments[2]==='comments'){
+        const result=store.createLessonComment(actor,segments[1],body);
+        return responses(result,result.replayed?200:201);
+      }
+      if(segments.length===3&&segments[0]==='lesson-comments'&&segments[2]==='report')
+        return responses({report:store.reportLessonComment(actor,segments[1],body.reason)},201);
+      if(segments.length===3&&segments[0]==='lesson-comments'&&segments[2]==='remove'){
+        if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
+        const result=store.removeLessonComment(actor,segments[1]);
+        return responses({result},result.replayed?200:201);
+      }
+      if(segments.length===3&&segments[0]==='admin'&&segments[1]==='comment-reports')
+        return responses({result:store.resolveLessonCommentReport(actor,segments[2],body)});
       if(path==='admin/institutions')return responses({institution:store.createInstitution(actor,body.name)},201);
       if(path==='admin/courses')return responses({course:store.createCourse(actor,body)},201);
       if(path==='admin/topics')return responses({topic:store.createTopic(actor,body)},201);
