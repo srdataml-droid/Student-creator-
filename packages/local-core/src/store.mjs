@@ -390,6 +390,76 @@ export function openLocalStore(path){
         return {bookmarked:false,replayed:changed.changes===0};
       });
     },
+    lessonEngagement(actor,id){
+      if(!store.publicLesson(id))throw error('LESSON_NOT_FOUND',404);
+      const likes=db.prepare('SELECT count(*) AS n FROM lesson_likes WHERE lesson_id=?').get(id).n;
+      const comments=db.prepare(`SELECT count(*) AS n FROM lesson_comments c JOIN users u ON u.id=c.author_id
+        WHERE c.lesson_id=? AND c.hidden_at IS NULL AND u.verified_at IS NOT NULL AND u.suspended=0`).get(id).n;
+      const liked=Boolean(actor&&actor.role==='student'&&actor.verifiedAt&&!actor.suspended&&db.prepare('SELECT 1 FROM lesson_likes WHERE user_id=? AND lesson_id=?').get(actor.id,id));
+      return {likes,comments,liked};
+    },
+    lessonComments(id){
+      if(!store.publicLesson(id))throw error('LESSON_NOT_FOUND',404);
+      return db.prepare(`SELECT c.id,c.lesson_id AS lessonId,c.author_id AS authorId,c.body,c.created_at AS createdAt
+        FROM lesson_comments c JOIN users u ON u.id=c.author_id
+        WHERE c.lesson_id=? AND c.hidden_at IS NULL AND u.verified_at IS NOT NULL AND u.suspended=0
+        ORDER BY c.created_at DESC,c.id DESC LIMIT 50`).all(id).reverse();
+    },
+    likeLesson(actor,id){
+      requireVerified(actor);
+      if(!store.publicLesson(id))throw error('LESSON_NOT_FOUND',404);
+      return transaction(()=>{
+        if(db.prepare('SELECT 1 FROM lesson_likes WHERE user_id=? AND lesson_id=?').get(actor.id,id))return {liked:true,replayed:true};
+        const hour=new Date(Date.now()-3600000).toISOString();
+        const recent=db.prepare("SELECT count(*) AS n FROM audit_events WHERE actor_id=? AND action IN ('lesson.liked','lesson.unliked') AND created_at>=?").get(actor.id,hour).n;
+        if(recent>=60)throw error('LIKE_RATE_LIMIT',429);
+        db.prepare('INSERT INTO lesson_likes(user_id,lesson_id,created_at) VALUES(?,?,?)').run(actor.id,id,stamp());
+        audit(actor.id,'lesson.liked',id);
+        return {liked:true,replayed:false};
+      });
+    },
+    unlikeLesson(actor,id){
+      requireVerified(actor);
+      return transaction(()=>{
+        const changed=db.prepare('DELETE FROM lesson_likes WHERE user_id=? AND lesson_id=?').run(actor.id,id).changes;
+        if(changed)audit(actor.id,'lesson.unliked',id);
+        return {liked:false,replayed:changed===0};
+      });
+    },
+    createLessonComment(actor,id,{text,creationKey}={}){
+      requireVerified(actor);
+      if(!store.publicLesson(id))throw error('LESSON_NOT_FOUND',404);
+      if(typeof text!=='string'||text.trim().length<3||text.trim().length>800||/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(text))
+        throw error('INVALID_COMMENT',422);
+      if(typeof creationKey!=='string'||!/^[A-Za-z0-9_-]{16,128}$/.test(creationKey))throw error('INVALID_IDEMPOTENCY_KEY',422);
+      const body=text.trim(),hash=sha(body);
+      return transaction(()=>{
+        const old=db.prepare('SELECT * FROM lesson_comments WHERE author_id=? AND lesson_id=? AND creation_key=?').get(actor.id,id,creationKey);
+        if(old){
+          if(old.creation_hash!==hash)throw error('IDEMPOTENCY_CONFLICT',409);
+          if(old.hidden_at)throw error('COMMENT_UNAVAILABLE',409);
+          return {comment:{id:old.id,lessonId:id,authorId:actor.id,body:old.body,createdAt:old.created_at},replayed:true};
+        }
+        const recent=db.prepare('SELECT count(*) AS n FROM lesson_comments WHERE author_id=? AND created_at>=?').get(actor.id,new Date(Date.now()-3600000).toISOString()).n;
+        if(recent>=20)throw error('COMMENT_RATE_LIMIT',429);
+        const commentId=randomUUID(),createdAt=stamp();
+        db.prepare('INSERT INTO lesson_comments(id,lesson_id,author_id,body,creation_key,creation_hash,created_at) VALUES(?,?,?,?,?,?,?)')
+          .run(commentId,id,actor.id,body,creationKey,hash,createdAt);
+        audit(actor.id,'lesson.comment.created',commentId,{lessonId:id});
+        return {comment:{id:commentId,lessonId:id,authorId:actor.id,body,createdAt},replayed:false};
+      });
+    },
+    removeLessonComment(actor,id){
+      requireVerified(actor);
+      return transaction(()=>{
+        const row=db.prepare('SELECT id,author_id,hidden_at FROM lesson_comments WHERE id=?').get(id);
+        if(!row||row.author_id!==actor.id)throw error('COMMENT_NOT_FOUND',404);
+        if(row.hidden_at)return {removed:true,replayed:true};
+        const changed=db.prepare('UPDATE lesson_comments SET hidden_at=? WHERE id=? AND author_id=? AND hidden_at IS NULL').run(stamp(),id,actor.id).changes;
+        if(changed)audit(actor.id,'lesson.comment.removed',id);
+        return {removed:true,replayed:changed===0};
+      });
+    },
     publicLessons(courseId,topicId=null){if(!store.getCourse(courseId))return [];return (topicId?db.prepare("SELECT * FROM lessons WHERE course_id=? AND topic_id=? AND status='published' ORDER BY published_at DESC LIMIT 100").all(courseId,topicId):db.prepare("SELECT * FROM lessons WHERE course_id=? AND status='published' ORDER BY published_at DESC LIMIT 100").all(courseId)).map(withVideo);},
     publicLesson(id){const row=db.prepare("SELECT l.* FROM lessons l JOIN courses c ON c.id=l.course_id WHERE l.id=? AND l.status='published' AND c.active=1").get(id);return withVideo(row);},
     publicCreator(id){
