@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import {useEffect,useState} from 'react';
 import {api,friendlyError} from '../../../lib/local-client.js';
+import {isLessonSaved} from '../../../lib/bookmark-state.mjs';
 
 export default function BookmarkButton({lessonId}){
  const [state,setState]=useState('loading'),[notice,setNotice]=useState('');
@@ -9,7 +10,7 @@ export default function BookmarkButton({lessonId}){
    let active=true;
    setState('loading');
    api('my/bookmarks').then(({lessons})=>{
-     if(active)setState(Array.isArray(lessons)&&lessons.some(item=>item.id===lessonId)?'saved':'idle');
+     if(active)setState(isLessonSaved(lessons,lessonId)?'saved':'idle');
    }).catch(()=>{if(active)setState('idle');});
    return ()=>{active=false;};
  },[lessonId]);
