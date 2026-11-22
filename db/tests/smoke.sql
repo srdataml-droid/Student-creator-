@@ -123,8 +123,6 @@ begin
   select count(*) into n from public.content_likes;
   if n<>0 then raise exception 'Other student can read likes: %',n;end if;
   delete from public.content_likes where user_id='11111111-1111-4111-8111-111111111111';
-  if not exists(select 1 from public.content_likes where user_id='22222222-2222-4222-8222-222222222222')
-    then null; end if;
 end $;
 reset role;
 set request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
