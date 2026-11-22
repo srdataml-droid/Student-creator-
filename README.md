@@ -8,6 +8,7 @@
 - **Creator-first homepage** at `/`: responsive feed of published creator posts, video playback, filtering, local search, and save-post actions.
 - **Creator profiles** at `/creators/[creatorId]`: published content, private-message CTA, follow/unfollow and follower count.
 - **Following feed:** account-scoped followed creators, stored persistently in the SQLite development database.
+- **Approved-post likes:** verified student accounts can like or unlike public lessons with owner-scoped state, duplicate-safe persistence, and rate controls. The local adapter and a proposed PostgreSQL/RLS schema are separate; this is not a hosted social feature yet.
 - **Studio:** students submit original text lessons and MP4 videos; a distinct administrator approves or rejects submissions before public discovery.
 - **Campus/course discovery**, searchable lessons, bookmarked posts, course communities, one-to-one messages (with opt-in/block/report), and scheduled group study sessions.
 - **Local SQLite** persistence and video files, backup/restore, and HTTP tests. An admin must create the first campus/courses and verify learners; there are **no fictitious students, posts, payments, view counts or payouts**.
