@@ -44,7 +44,7 @@ async function withCampus(fn){
  }finally{store.close();rmSync(directory,{recursive:true,force:true});}
 }
 
-test('comments allow idempotent creation and owner removal while excluding unpublished notes',()=>withCampus(async({req,lesson,reader,other,pending,reopen})=>{
+test('comments allow idempotent creation and owner removal while excluding unpublished notes',()=>withCampus(async({req,lesson,draft,reader,other,pending,reopen})=>{
  const key='engagement-comment-001',path='lessons/'+lesson+'/comments';
  assert.equal((await req(path)).data.comments.length,0);
  assert.equal((await req('lessons/'+lesson+'/comments','GET',undefined,pending.token)).status,200);
