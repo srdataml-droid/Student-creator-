@@ -71,6 +71,8 @@ export function openLocalStore(path){
     CREATE INDEX IF NOT EXISTS creator_follows_by_creator ON creator_follows(creator_id,created_at DESC);
     CREATE TABLE IF NOT EXISTS lesson_bookmarks(user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,created_at TEXT NOT NULL,PRIMARY KEY(user_id,lesson_id));
     CREATE INDEX IF NOT EXISTS bookmark_recent ON lesson_bookmarks(user_id,created_at DESC);
+    CREATE TABLE IF NOT EXISTS lesson_likes(user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,created_at TEXT NOT NULL,PRIMARY KEY(user_id,lesson_id));
+    CREATE INDEX IF NOT EXISTS lesson_likes_by_lesson ON lesson_likes(lesson_id);
     CREATE INDEX IF NOT EXISTS lessons_discovery ON lessons(course_id,status,published_at);
     CREATE TABLE IF NOT EXISTS messages(id TEXT PRIMARY KEY,sender_id TEXT NOT NULL REFERENCES users(id),recipient_id TEXT NOT NULL REFERENCES users(id),body TEXT NOT NULL CHECK(length(body) BETWEEN 1 AND 2000),created_at TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS messages_pair ON messages(sender_id,recipient_id,created_at);
@@ -145,7 +147,7 @@ export function openLocalStore(path){
     if(requireMembership&&!joined)throw error('MEMBERSHIP_REQUIRED',403);
     return {target,joined};
   }
-  const withVideo=(row)=>row?{...lesson(row),hasVideo:Boolean(db.prepare('SELECT 1 FROM lesson_videos WHERE lesson_id=?').get(row.id))}:null;
+  const withVideo=(row)=>row?{...lesson(row),hasVideo:Boolean(db.prepare('SELECT 1 FROM lesson_videos WHERE lesson_id=?').get(row.id)),likeCount:db.prepare('SELECT COUNT(*) AS n FROM lesson_likes WHERE lesson_id=?').get(row.id).n}:null;
   function editableVideoLesson(actor,id){
     requireVerified(actor);
     const row=db.prepare('SELECT id,creator_id,institution_id,status FROM lessons WHERE id=?').get(id);
@@ -367,6 +369,32 @@ export function openLocalStore(path){
         const changed=db.prepare('DELETE FROM lesson_bookmarks WHERE user_id=? AND lesson_id=?').run(actor.id,lessonId);
         if(changed.changes)audit(actor.id,'lesson.unbookmarked',lessonId);
         return {bookmarked:false,replayed:changed.changes===0};
+      });
+    },
+    myLikes(actor){
+      requireVerified(actor);
+      return db.prepare("SELECT x.lesson_id AS id FROM lesson_likes x JOIN lessons l ON l.id=x.lesson_id JOIN courses c ON c.id=l.course_id WHERE x.user_id=? AND l.status='published' AND c.active=1 ORDER BY x.created_at DESC LIMIT 1000").all(actor.id).map(row=>row.id);
+    },
+    likeLesson(actor,lessonId){
+      requireVerified(actor);
+      return transaction(()=>{
+        const target=db.prepare("SELECT l.id FROM lessons l JOIN courses c ON c.id=l.course_id WHERE l.id=? AND l.status='published' AND c.active=1").get(lessonId);
+        if(!target)throw error('LESSON_NOT_FOUND',404);
+        const exists=db.prepare('SELECT 1 FROM lesson_likes WHERE user_id=? AND lesson_id=?').get(actor.id,lessonId);
+        if(exists)return {liked:true,replayed:true};
+        const recent=db.prepare("SELECT COUNT(*) AS n FROM audit_events WHERE actor_id=? AND action='lesson.liked' AND created_at>?").get(actor.id,new Date(Date.now()-3600000).toISOString()).n;
+        if(recent>=60)throw error('LIKE_RATE_LIMIT',429);
+        db.prepare('INSERT INTO lesson_likes(user_id,lesson_id,created_at) VALUES(?,?,?)').run(actor.id,lessonId,stamp());
+        audit(actor.id,'lesson.liked',lessonId);
+        return {liked:true,replayed:false};
+      });
+    },
+    unlikeLesson(actor,lessonId){
+      requireVerified(actor);
+      return transaction(()=>{
+        const changed=db.prepare('DELETE FROM lesson_likes WHERE user_id=? AND lesson_id=?').run(actor.id,lessonId).changes;
+        if(changed)audit(actor.id,'lesson.unliked',lessonId);
+        return {liked:false,replayed:changed===0};
       });
     },
     publicLessons(courseId,topicId=null){if(!store.getCourse(courseId))return [];return (topicId?db.prepare("SELECT * FROM lessons WHERE course_id=? AND topic_id=? AND status='published' ORDER BY published_at DESC LIMIT 100").all(courseId,topicId):db.prepare("SELECT * FROM lessons WHERE course_id=? AND status='published' ORDER BY published_at DESC LIMIT 100").all(courseId)).map(withVideo);},
