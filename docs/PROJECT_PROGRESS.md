@@ -15,7 +15,7 @@
 | 7 | DMs, blocks/reports, course communities | SQLite implemented, tested | Private APIs and tests; live realtime absent |
 | 8 | Search, saved posts, study sessions | SQLite implemented, tested | Local integration tests |
 | 9 | Creator follows and Following feed | Implemented, current CI check pending | `creator_follows`, follow API, profile button, new tests |
-| 10 | Post likes, comments, follow notifications | IN PROGRESS | Authenticated approved-post likes/unlikes implemented locally with PostgreSQL RLS draft and new unit/SQL checks; comments and notifications pending |
+| 10 | Post likes, comments, follow notifications | **Comments in review** | Likes are merged in PR #2. This PR adds verified-student comments, owner soft-removal, private reports, independent moderation, HTTP integration tests and a separate PostgreSQL RLS contract. Follow notifications remain planned. No hosted database migration applied. |
 | 11 | Creator profile names, photos, original-work type and pricing controls | Planned | Creator identity vs school verification, privacy |
 | 12 | Premium posts/subscriptions and entitlement access | Planned/blocked | Dedicated managed DB and PSP sandbox required |
 | 13 | Creator bank setup and PSP settlement split | Blocked | Provider eligibility, user approval, finance/legal review |
@@ -27,10 +27,16 @@
 ## Exact continuation
 1. Inspect latest `main` commit and its GitHub Actions test, web-build and disposable DB job conclusions.
 2. If any CI failed, inspect first failed step and fix before feature work.
-3. Verify the exact head SHA and test, web-build and database-contract checks on the likes PR. Likes are local-only until a dedicated Student Creators Supabase project is confirmed; PostgreSQL RLS schema is a CI-tested draft, not deployed. Next implement reportable comments and notifications with hosted persistence once the target database is known.
+3. Verify the exact head SHA and test, web-build and database-contract checks on the likes PR. Likes are local-only until a dedicated Student Creators Supabase project is confirmed; PostgreSQL RLS schema is a CI-tested draft, not deployed. This comments PR must pass exact-head local HTTP and disposable PostgreSQL checks before merge. Follow notifications and hosted persistence remain next work after identifying the correct app-specific database.
 4. Add creator profile custom display names with anti-impersonation controls; keep legal student identifiers private.
 5. Separate accepted data model for paid posts and subscriptions from free content, then integrate with dedicated Supabase and PSP sandbox only when available.
 
 **Security:** The app is not deployed. SQLite is only a development store. Do not unlock paid media on browser return; only trusted verified server-side payment and atomic entitlement updates may grant access. Provider secrets stay server-side. No school IDs, fake creator earnings or seed-user credentials in Git.
 
 **Review boundary:** changes are committed directly to the previously empty `main` branch at the owner's explicit request to populate it. Future significant changes should use team-reviewed PRs.
+
+## New comment workflow — 22 November 2026
+- Existing PR #2 on main already implements likes: this branch deliberately **does not** replace, duplicate or reset that code.
+- Local development server now has POST/GET comments, persistent idempotency, 20-comments/hour cap, author-owned soft removal and report/independent administrator hide/dismiss actions. Public replies display a pseudonym, never personal email.
+- PostgreSQL `db/migrations/0002_creator_comments.sql` keeps browser mutation of comment and moderation tables denied; all access-control tests run on disposable PostgreSQL CI only. This is not yet a hosted authenticated implementation.
+- Still blocked: approved Student Creators Supabase project and media storage, production authentication, actual moderation operations and audits, real-device/browser accessibility testing, paid content entitlements and settlement.

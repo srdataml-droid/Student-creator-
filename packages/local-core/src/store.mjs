@@ -73,6 +73,20 @@ export function openLocalStore(path){
     CREATE INDEX IF NOT EXISTS bookmark_recent ON lesson_bookmarks(user_id,created_at DESC);
     CREATE TABLE IF NOT EXISTS lesson_likes(user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,created_at TEXT NOT NULL,PRIMARY KEY(user_id,lesson_id));
     CREATE INDEX IF NOT EXISTS lesson_likes_by_lesson ON lesson_likes(lesson_id);
+    CREATE TABLE IF NOT EXISTS lesson_comments(
+      id TEXT PRIMARY KEY,lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+      author_id TEXT NOT NULL REFERENCES users(id),body TEXT NOT NULL CHECK(length(body) BETWEEN 3 AND 800),
+      creation_key TEXT NOT NULL,creation_hash TEXT NOT NULL,created_at TEXT NOT NULL,hidden_at TEXT,
+      UNIQUE(author_id,lesson_id,creation_key)
+    );
+    CREATE INDEX IF NOT EXISTS lesson_comments_recent ON lesson_comments(lesson_id,created_at DESC);
+    CREATE TABLE IF NOT EXISTS lesson_comment_reports(
+      id TEXT PRIMARY KEY,comment_id TEXT NOT NULL REFERENCES lesson_comments(id),
+      reporter_id TEXT NOT NULL REFERENCES users(id),reason TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','dismissed','hidden')),
+      created_at TEXT NOT NULL,reviewed_by TEXT REFERENCES users(id),review_note TEXT,
+      UNIQUE(comment_id,reporter_id)
+    );
     CREATE INDEX IF NOT EXISTS lessons_discovery ON lessons(course_id,status,published_at);
     CREATE TABLE IF NOT EXISTS messages(id TEXT PRIMARY KEY,sender_id TEXT NOT NULL REFERENCES users(id),recipient_id TEXT NOT NULL REFERENCES users(id),body TEXT NOT NULL CHECK(length(body) BETWEEN 1 AND 2000),created_at TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS messages_pair ON messages(sender_id,recipient_id,created_at);
@@ -395,6 +409,89 @@ export function openLocalStore(path){
         const changed=db.prepare('DELETE FROM lesson_likes WHERE user_id=? AND lesson_id=?').run(actor.id,lessonId).changes;
         if(changed)audit(actor.id,'lesson.unliked',lessonId);
         return {liked:false,replayed:changed===0};
+      });
+    },
+    lessonComments(id){
+      if(!store.publicLesson(id))throw error('LESSON_NOT_FOUND',404);
+      return db.prepare(`SELECT c.id,c.lesson_id AS lessonId,c.author_id AS authorId,c.body,c.created_at AS createdAt
+        FROM lesson_comments c JOIN users u ON u.id=c.author_id
+        WHERE c.lesson_id=? AND c.hidden_at IS NULL AND u.verified_at IS NOT NULL AND u.suspended=0
+        ORDER BY c.created_at DESC,c.id DESC LIMIT 50`).all(id).reverse();
+    },
+    createLessonComment(actor,id,{text,creationKey}={}){
+      requireVerified(actor);
+      if(!store.publicLesson(id))throw error('LESSON_NOT_FOUND',404);
+      if(typeof text!=='string'||text.trim().length<3||text.trim().length>800||/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(text))
+        throw error('INVALID_COMMENT',422);
+      if(typeof creationKey!=='string'||!/^[A-Za-z0-9_-]{16,128}$/.test(creationKey))throw error('INVALID_IDEMPOTENCY_KEY',422);
+      const body=text.trim(),hash=sha(body);
+      return transaction(()=>{
+        const old=db.prepare('SELECT * FROM lesson_comments WHERE author_id=? AND lesson_id=? AND creation_key=?').get(actor.id,id,creationKey);
+        if(old){
+          if(old.creation_hash!==hash)throw error('IDEMPOTENCY_CONFLICT',409);
+          if(old.hidden_at)throw error('COMMENT_UNAVAILABLE',409);
+          return {comment:{id:old.id,lessonId:id,authorId:actor.id,body:old.body,createdAt:old.created_at},replayed:true};
+        }
+        const recent=db.prepare('SELECT count(*) AS n FROM lesson_comments WHERE author_id=? AND created_at>=?').get(actor.id,new Date(Date.now()-3600000).toISOString()).n;
+        if(recent>=20)throw error('COMMENT_RATE_LIMIT',429);
+        const commentId=randomUUID(),createdAt=stamp();
+        db.prepare('INSERT INTO lesson_comments(id,lesson_id,author_id,body,creation_key,creation_hash,created_at) VALUES(?,?,?,?,?,?,?)')
+          .run(commentId,id,actor.id,body,creationKey,hash,createdAt);
+        audit(actor.id,'lesson.comment.created',commentId,{lessonId:id});
+        return {comment:{id:commentId,lessonId:id,authorId:actor.id,body,createdAt},replayed:false};
+      });
+    },
+    removeLessonComment(actor,id){
+      requireVerified(actor);
+      return transaction(()=>{
+        const row=db.prepare('SELECT id,author_id,hidden_at FROM lesson_comments WHERE id=?').get(id);
+        if(!row||row.author_id!==actor.id)throw error('COMMENT_NOT_FOUND',404);
+        if(row.hidden_at)return {removed:true,replayed:true};
+        const changed=db.prepare('UPDATE lesson_comments SET hidden_at=? WHERE id=? AND author_id=? AND hidden_at IS NULL').run(stamp(),id,actor.id).changes;
+        if(changed)audit(actor.id,'lesson.comment.removed',id);
+        return {removed:true,replayed:changed===0};
+      });
+    },
+    reportLessonComment(actor,id,reason){
+      requireVerified(actor);
+      if(typeof reason!=='string'||reason.trim().length<10||reason.trim().length>1000)throw error('INVALID_REPORT',422);
+      return transaction(()=>{
+        const row=db.prepare(`SELECT lc.id,lc.author_id FROM lesson_comments lc
+          JOIN lessons l ON l.id=lc.lesson_id JOIN courses c ON c.id=l.course_id
+          WHERE lc.id=? AND lc.hidden_at IS NULL AND l.status='published' AND c.active=1`).get(id);
+        if(!row)throw error('COMMENT_NOT_FOUND',404);
+        if(row.author_id===actor.id)throw error('CANNOT_REPORT_SELF',403);
+        const reportId=randomUUID();
+        const created=db.prepare('INSERT OR IGNORE INTO lesson_comment_reports(id,comment_id,reporter_id,reason,created_at) VALUES(?,?,?,?,?)')
+          .run(reportId,id,actor.id,reason.trim(),stamp()).changes;
+        if(!created)throw error('ALREADY_REPORTED',409);
+        audit(actor.id,'lesson.comment.reported',id);
+        return {reportId};
+      });
+    },
+    lessonCommentReportQueue(actor){
+      requireAdmin(actor);
+      return db.prepare(`SELECT r.id,r.comment_id AS commentId,r.reason,r.created_at AS createdAt,
+          c.lesson_id AS lessonId,c.author_id AS authorId,c.body
+        FROM lesson_comment_reports r JOIN lesson_comments c ON c.id=r.comment_id
+        WHERE r.status='open' AND c.hidden_at IS NULL ORDER BY r.created_at,r.id LIMIT 100`).all();
+    },
+    resolveLessonCommentReport(actor,id,{decision,reason}={}){
+      requireAdmin(actor);
+      if(!['hide','dismiss'].includes(decision)||typeof reason!=='string'||reason.trim().length<5||reason.trim().length>1000)
+        throw error('INVALID_DECISION',422);
+      return transaction(()=>{
+        const row=db.prepare("SELECT comment_id FROM lesson_comment_reports WHERE id=? AND status='open'").get(id);
+        if(!row)throw error('REPORT_CONFLICT',409);
+        const now=stamp();
+        if(decision==='hide'){
+          db.prepare('UPDATE lesson_comments SET hidden_at=? WHERE id=? AND hidden_at IS NULL').run(now,row.comment_id);
+          db.prepare("UPDATE lesson_comment_reports SET status='hidden',reviewed_by=?,review_note=? WHERE comment_id=? AND status='open'").run(actor.id,reason.trim(),row.comment_id);
+        }else{
+          db.prepare("UPDATE lesson_comment_reports SET status='dismissed',reviewed_by=?,review_note=? WHERE id=? AND status='open'").run(actor.id,reason.trim(),id);
+        }
+        audit(actor.id,'lesson.comment.report.resolved',id,{decision,commentId:row.comment_id});
+        return {id,status:decision==='hide'?'hidden':'dismissed'};
       });
     },
     publicLessons(courseId,topicId=null){if(!store.getCourse(courseId))return [];return (topicId?db.prepare("SELECT * FROM lessons WHERE course_id=? AND topic_id=? AND status='published' ORDER BY published_at DESC LIMIT 100").all(courseId,topicId):db.prepare("SELECT * FROM lessons WHERE course_id=? AND status='published' ORDER BY published_at DESC LIMIT 100").all(courseId)).map(withVideo);},
