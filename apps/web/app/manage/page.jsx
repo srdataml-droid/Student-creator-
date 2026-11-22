@@ -3,10 +3,10 @@ import Link from 'next/link';
 import {useEffect,useState} from 'react';
 import {api,friendlyError} from '../../lib/local-client.js';
 export default function Manage(){
- const [user,setUser]=useState(null),[state,setState]=useState('loading'),[schools,setSchools]=useState([]),[courses,setCourses]=useState([]),[people,setPeople]=useState([]),[queue,setQueue]=useState([]),[reports,setReports]=useState([]),[communityReports,setCommunityReports]=useState([]);
+ const [user,setUser]=useState(null),[state,setState]=useState('loading'),[schools,setSchools]=useState([]),[courses,setCourses]=useState([]),[people,setPeople]=useState([]),[queue,setQueue]=useState([]),[reports,setReports]=useState([]),[communityReports,setCommunityReports]=useState([]),[commentReports,setCommentReports]=useState([]);
  const [schoolName,setSchoolName]=useState(''),[course,setCourse]=useState({institutionId:'',code:'',title:''}),[topic,setTopic]=useState({courseId:'',name:''}),[reasons,setReasons]=useState({});
  const [error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
- async function refresh(){try{const me=await api('me');setUser(me.user);if(me.user.role!=='admin'){setState('forbidden');return;}const [a,b,c,d,r,cr]=await Promise.all([api('institutions'),api('courses'),api('admin/pending-users'),api('admin/review-queue'),api('admin/reports'),api('admin/community-reports')]);setSchools(a.institutions);setCourses(b.courses);setPeople(c.users);setQueue(d.lessons);setReports(r.reports);setCommunityReports(cr.reports);setState('ready');}catch(e){setState(e.status===401?'signed-out':'unavailable');}}
+ async function refresh(){try{const me=await api('me');setUser(me.user);if(me.user.role!=='admin'){setState('forbidden');return;}const [a,b,c,d,r,cr,comments]=await Promise.all([api('institutions'),api('courses'),api('admin/pending-users'),api('admin/review-queue'),api('admin/reports'),api('admin/community-reports'),api('admin/comment-reports')]);setSchools(a.institutions);setCourses(b.courses);setPeople(c.users);setQueue(d.lessons);setReports(r.reports);setCommunityReports(cr.reports);setCommentReports(comments.reports);setState('ready');}catch(e){setState(e.status===401?'signed-out':'unavailable');}}
  useEffect(()=>{refresh();},[]);
  async function doAction(job,success){setBusy(true);setError('');setMessage('');try{await job();setMessage(success);await refresh();}catch(e){setError(friendlyError(e));}finally{setBusy(false);}}
  async function signOut(){await api('auth/logout',{method:'POST',body:{}});window.location.assign('/');}
@@ -31,6 +31,20 @@ export default function Manage(){
  </section>
  <section className="panel"><p className="eyebrow">Community support</p><h2>Reported messages</h2><p className="hint">Only messages explicitly reported by recipients appear here. Document review actions; no automatic punishment is applied.</p>
  {reports.length===0?<p role="status">No open message reports.</p>:<ul className="review-list">{reports.map(r=><li key={r.id}><h3>Report {r.id.slice(0,8)}…</h3><p className="hint">Reason: {r.reason}</p><div className="review-text">{r.body}</div><label htmlFor={`resolve-${r.id}`}>Review notes</label><textarea id={`resolve-${r.id}`} rows="2" value={reasons[r.id]??''} onChange={e=>setReasons({...reasons,[r.id]:e.target.value})}/><button disabled={busy||(reasons[r.id]??'').trim().length<5} className="secondary-link" onClick={()=>doAction(()=>api(`admin/reports/${r.id}`,{method:'POST',body:{resolution:reasons[r.id]}}),'Report reviewed and recorded.')}>Mark reviewed</button></li>)}</ul>}
+ </section>
+ <section className="panel"><p className="eyebrow">Creator posts</p><h2>Reported lesson comments</h2>
+ <p className="hint">Separate student reports from verified editorial actions. A hidden comment is no longer shown publicly; its report remains for audit.</p>
+ {commentReports.length===0?<p role="status">No open lesson comment reports.</p>:<ul className="review-list">{commentReports.map(r=><li key={r.id}>
+  <h3>Comment report {r.id.slice(0,8)}…</h3><p className="hint">Reason: {r.reason}</p><div className="review-text">{r.body}</div>
+  <label htmlFor={`lesson-comment-${r.id}`}>Decision notes (minimum 5 characters)</label>
+  <textarea id={`lesson-comment-${r.id}`} rows={2} value={reasons[r.id]??''} onChange={e=>setReasons({...reasons,[r.id]:e.target.value})} />
+  <div className="button-row">
+   <button className="secondary-link" disabled={busy||(reasons[r.id]??'').trim().length<5}
+    onClick={()=>doAction(()=>api(`admin/comment-reports/${r.id}`,{method:'POST',body:{decision:'dismiss',reason:reasons[r.id]}}),'Report dismissed; comment remains visible.')}>Dismiss report</button>
+   <button className="quiet-button" disabled={busy||(reasons[r.id]??'').trim().length<5}
+    onClick={()=>doAction(()=>api(`admin/comment-reports/${r.id}`,{method:'POST',body:{decision:'hide',reason:reasons[r.id]}}),'Reported comment hidden.')}>Hide comment</button>
+  </div>
+ </li>)}</ul>}
  </section>
  <section className="panel"><p className="eyebrow">Course communities</p><h2>Reported discussion posts</h2><p className="hint">Review flagged class discussion content. Hiding a post also hides its replies from the local feed; original evidence is retained for audit.</p>
  {communityReports.length===0?<p role="status">No open course discussion reports.</p>:<ul className="review-list">{communityReports.map(r=><li key={r.id}><h3>Discussion report {r.id.slice(0,8)}…</h3><p className="hint">Reason: {r.reason}</p><div className="review-text">{r.body}</div><label htmlFor={`community-${r.id}`}>Decision notes</label><textarea id={`community-${r.id}`} rows="2" value={reasons[r.id]??''} onChange={e=>setReasons({...reasons,[r.id]:e.target.value})}/><div className="button-row"><button disabled={busy||(reasons[r.id]??'').trim().length<5} className="secondary-link" onClick={()=>doAction(()=>api(`admin/community-reports/${r.id}`,{method:'POST',body:{decision:'dismiss',reason:reasons[r.id]}}),'Report reviewed; discussion remains visible.')}>Dismiss report</button><button disabled={busy||(reasons[r.id]??'').trim().length<5} className="quiet-button" onClick={()=>doAction(()=>api(`admin/community-reports/${r.id}`,{method:'POST',body:{decision:'hide',reason:reasons[r.id]}}),'Discussion hidden and report resolved.')}>Hide discussion</button></div></li>)}</ul>}
