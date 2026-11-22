@@ -460,6 +460,48 @@ export function openLocalStore(path){
         return {removed:true,replayed:changed===0};
       });
     },
+    reportLessonComment(actor,id,reason){
+      requireVerified(actor);
+      if(typeof reason!=='string'||reason.trim().length<10||reason.trim().length>1000)throw error('INVALID_REPORT',422);
+      return transaction(()=>{
+        const row=db.prepare(`SELECT lc.id,lc.author_id FROM lesson_comments lc
+          JOIN lessons l ON l.id=lc.lesson_id JOIN courses c ON c.id=l.course_id
+          WHERE lc.id=? AND lc.hidden_at IS NULL AND l.status='published' AND c.active=1`).get(id);
+        if(!row)throw error('COMMENT_NOT_FOUND',404);
+        if(row.author_id===actor.id)throw error('CANNOT_REPORT_SELF',403);
+        const reportId=randomUUID();
+        const created=db.prepare('INSERT OR IGNORE INTO lesson_comment_reports(id,comment_id,reporter_id,reason,created_at) VALUES(?,?,?,?,?)')
+          .run(reportId,id,actor.id,reason.trim(),stamp()).changes;
+        if(!created)throw error('ALREADY_REPORTED',409);
+        audit(actor.id,'lesson.comment.reported',id);
+        return {reportId};
+      });
+    },
+    lessonCommentReportQueue(actor){
+      requireAdmin(actor);
+      return db.prepare(`SELECT r.id,r.comment_id AS commentId,r.reason,r.created_at AS createdAt,
+          c.lesson_id AS lessonId,c.author_id AS authorId,c.body
+        FROM lesson_comment_reports r JOIN lesson_comments c ON c.id=r.comment_id
+        WHERE r.status='open' AND c.hidden_at IS NULL ORDER BY r.created_at,r.id LIMIT 100`).all();
+    },
+    resolveLessonCommentReport(actor,id,{decision,reason}={}){
+      requireAdmin(actor);
+      if(!['hide','dismiss'].includes(decision)||typeof reason!=='string'||reason.trim().length<5||reason.trim().length>1000)
+        throw error('INVALID_DECISION',422);
+      return transaction(()=>{
+        const row=db.prepare("SELECT comment_id FROM lesson_comment_reports WHERE id=? AND status='open'").get(id);
+        if(!row)throw error('REPORT_CONFLICT',409);
+        const now=stamp();
+        if(decision==='hide'){
+          db.prepare('UPDATE lesson_comments SET hidden_at=? WHERE id=? AND hidden_at IS NULL').run(now,row.comment_id);
+          db.prepare("UPDATE lesson_comment_reports SET status='hidden',reviewed_by=?,review_note=? WHERE comment_id=? AND status='open'").run(actor.id,reason.trim(),row.comment_id);
+        }else{
+          db.prepare("UPDATE lesson_comment_reports SET status='dismissed',reviewed_by=?,review_note=? WHERE id=? AND status='open'").run(actor.id,reason.trim(),id);
+        }
+        audit(actor.id,'lesson.comment.report.resolved',id,{decision,commentId:row.comment_id});
+        return {id,status:decision==='hide'?'hidden':'dismissed'};
+      });
+    },
     publicLessons(courseId,topicId=null){if(!store.getCourse(courseId))return [];return (topicId?db.prepare("SELECT * FROM lessons WHERE course_id=? AND topic_id=? AND status='published' ORDER BY published_at DESC LIMIT 100").all(courseId,topicId):db.prepare("SELECT * FROM lessons WHERE course_id=? AND status='published' ORDER BY published_at DESC LIMIT 100").all(courseId)).map(withVideo);},
     publicLesson(id){const row=db.prepare("SELECT l.* FROM lessons l JOIN courses c ON c.id=l.course_id WHERE l.id=? AND l.status='published' AND c.active=1").get(id);return withVideo(row);},
     publicCreator(id){
