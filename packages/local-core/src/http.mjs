@@ -100,6 +100,7 @@ export function createLocalHandler(store){
         if(segments.length===2&&segments[0]==='lessons'){
           const item=store.publicLesson(segments[1]);return item?responses({lesson:item}):fail('LESSON_NOT_FOUND',404);
         }
+        if(path==='my/creator-profile'){if(!actor)return unauthorized();return responses({profile:store.getOwnPublicProfile(actor)});}
         if(path==='my/lessons'){if(!actor)return unauthorized();return responses({lessons:store.myLessons(actor)});}
         if(path==='my/bookmarks'){if(!actor)return unauthorized();return responses({lessons:store.myBookmarks(actor)});}
         if(path==='my/likes'){if(!actor)return unauthorized();return responses({likes:store.myLikes(actor)});}
@@ -146,6 +147,7 @@ export function createLocalHandler(store){
         return responses({user:result.user},200,{'set-cookie':`${SESSION_COOKIE}=${result.token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800${secure}`});
       }
       if(!actor)return unauthorized();
+      if(path==='my/creator-profile'){const result=store.updatePublicProfile(actor,body);return responses(result,result.replayed?200:201);}
       if(segments.length===3&&segments[0]==='creators'&&['follow','unfollow'].includes(segments[2])){
         if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
         const result=segments[2]==='follow'?store.followCreator(actor,segments[1]):store.unfollowCreator(actor,segments[1]);
