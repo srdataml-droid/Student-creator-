@@ -96,6 +96,7 @@ export function createLocalHandler(store){
         }
         if(path==='my/lessons'){if(!actor)return unauthorized();return responses({lessons:store.myLessons(actor)});}
         if(path==='my/bookmarks'){if(!actor)return unauthorized();return responses({lessons:store.myBookmarks(actor)});}
+        if(path==='my/likes'){if(!actor)return unauthorized();return responses({likes:store.myLikes(actor)});}
         if(path==='admin/pending-users'){if(!actor)return unauthorized();return responses({users:store.listPendingUsers(actor)});}
         if(path==='admin/review-queue'){if(!actor)return unauthorized();return responses({lessons:store.reviewQueue(actor)});}
         if(path==='admin/reports'){if(!actor)return unauthorized();return responses({reports:store.reportQueue(actor)});}
@@ -119,6 +120,13 @@ export function createLocalHandler(store){
         if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
         const item=segments[2]==='bookmark'?store.saveBookmark(actor,segments[1]):store.removeBookmark(actor,segments[1]);
         return responses({bookmark:item},item.replayed?200:201);
+      }
+      if(segments.length===3&&segments[0]==='lessons'&&['like','unlike'].includes(segments[2])){
+        if(!actor)return unauthorized();
+        const body=await jsonBody(request);
+        if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
+        const item=segments[2]==='like'?store.likeLesson(actor,segments[1]):store.unlikeLesson(actor,segments[1]);
+        return responses({like:item},item.replayed?200:201);
       }
       if(path==='auth/logout'){
         store.logout(cookie);return responses({ok:true},200,{'set-cookie':`${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${new URL(request.url).protocol==='https:'?'; Secure':''}`});
