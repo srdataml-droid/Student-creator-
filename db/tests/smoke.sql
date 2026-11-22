@@ -89,7 +89,7 @@ begin
 end $$;
 reset role;
 
-\\echo 'Like RLS: actor ownership, published-only, deduplication and cross-campus public content'
+\echo 'Like RLS: actor ownership, published-only, deduplication and cross-campus public content'
 set role authenticated;
 set request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
 insert into public.content_likes(user_id,content_id)
@@ -137,7 +137,7 @@ begin
 end $;
 reset role;
 
-\\echo 'Anonymous RLS shows only published public metadata, even if subject claim present'
+\echo 'Anonymous RLS shows only published public metadata, even if subject claim present'
 set request.jwt.claim.sub = '22222222-2222-4222-8222-222222222222';
 set role anon;
 do $$ declare n integer;
