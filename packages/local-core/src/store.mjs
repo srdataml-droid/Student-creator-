@@ -71,6 +71,27 @@ export function openLocalStore(path){
     CREATE INDEX IF NOT EXISTS creator_follows_by_creator ON creator_follows(creator_id,created_at DESC);
     CREATE TABLE IF NOT EXISTS lesson_bookmarks(user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,created_at TEXT NOT NULL,PRIMARY KEY(user_id,lesson_id));
     CREATE INDEX IF NOT EXISTS bookmark_recent ON lesson_bookmarks(user_id,created_at DESC);
+    -- Additive development-only schema. Hosted PostgreSQL counterpart is 0002_creator_engagement.sql.
+    CREATE TABLE IF NOT EXISTS lesson_likes(
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+      created_at TEXT NOT NULL,PRIMARY KEY(user_id,lesson_id)
+    );
+    CREATE INDEX IF NOT EXISTS lesson_likes_by_lesson ON lesson_likes(lesson_id);
+    CREATE TABLE IF NOT EXISTS lesson_comments(
+      id TEXT PRIMARY KEY,lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+      author_id TEXT NOT NULL REFERENCES users(id),body TEXT NOT NULL CHECK(length(body) BETWEEN 3 AND 800),
+      creation_key TEXT NOT NULL,creation_hash TEXT NOT NULL,created_at TEXT NOT NULL,hidden_at TEXT,
+      UNIQUE(author_id,lesson_id,creation_key)
+    );
+    CREATE INDEX IF NOT EXISTS lesson_comments_recent ON lesson_comments(lesson_id,created_at DESC);
+    CREATE TABLE IF NOT EXISTS lesson_comment_reports(
+      id TEXT PRIMARY KEY,comment_id TEXT NOT NULL REFERENCES lesson_comments(id),
+      reporter_id TEXT NOT NULL REFERENCES users(id),reason TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','dismissed','hidden')),
+      created_at TEXT NOT NULL,reviewed_by TEXT REFERENCES users(id),review_note TEXT,
+      UNIQUE(comment_id,reporter_id)
+    );
     CREATE INDEX IF NOT EXISTS lessons_discovery ON lessons(course_id,status,published_at);
     CREATE TABLE IF NOT EXISTS messages(id TEXT PRIMARY KEY,sender_id TEXT NOT NULL REFERENCES users(id),recipient_id TEXT NOT NULL REFERENCES users(id),body TEXT NOT NULL CHECK(length(body) BETWEEN 1 AND 2000),created_at TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS messages_pair ON messages(sender_id,recipient_id,created_at);
