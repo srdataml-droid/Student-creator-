@@ -15,7 +15,7 @@
 | 7 | DMs, blocks/reports, course communities | SQLite implemented, tested | Private APIs and tests; live realtime absent |
 | 8 | Search, saved posts, study sessions | SQLite implemented, tested | Local integration tests |
 | 9 | Creator follows and Following feed | Implemented, current CI check pending | `creator_follows`, follow API, profile button, new tests |
-| 10 | Post likes, comments, follow notifications | Planned | Real logged-in scoped state; prevent abuse |
+| 10 | Post likes and comments; follow notifications | **Engagement implemented in local adapter; PG draft/CI contract added.** Follow notifications remain planned | Verified-user like/unlike, persisted idempotent comments, own-comment removal, independent admin report/hide/dismiss, tests in `packages/local-core/test/engagement.test.mjs`; schema in `db/migrations/0002_creator_engagement.sql` **not applied live** |
 | 11 | Creator profile names, photos, original-work type and pricing controls | Planned | Creator identity vs school verification, privacy |
 | 12 | Premium posts/subscriptions and entitlement access | Planned/blocked | Dedicated managed DB and PSP sandbox required |
 | 13 | Creator bank setup and PSP settlement split | Blocked | Provider eligibility, user approval, finance/legal review |
@@ -27,10 +27,18 @@
 ## Exact continuation
 1. Inspect latest `main` commit and its GitHub Actions test, web-build and disposable DB job conclusions.
 2. If any CI failed, inspect first failed step and fix before feature work.
-3. Next unblocked feature: reactions + reportable comments on published posts, with owner-only access rules and SQLite tests.
-4. Add creator profile custom display names with anti-impersonation controls; keep legal student identifiers private.
+3. Next unblocked feature after the engagement PR is verified: creator profile display names and anti-impersonation controls; follow notifications, then hosted Auth/data/media integration. Avoid treating the local SQLite feature as hosted production.
+4. Confirm the engagement PR passes exact-head SQLite HTTP and PostgreSQL RLS tests and the Next.js build before merging; then test the merged `main` revision.
 5. Separate accepted data model for paid posts and subscriptions from free content, then integrate with dedicated Supabase and PSP sandbox only when available.
 
 **Security:** The app is not deployed. SQLite is only a development store. Do not unlock paid media on browser return; only trusted verified server-side payment and atomic entitlement updates may grant access. Provider secrets stay server-side. No school IDs, fake creator earnings or seed-user credentials in Git.
 
 **Review boundary:** changes are committed directly to the previously empty `main` branch at the owner's explicit request to populate it. Future significant changes should use team-reviewed PRs.
+
+## Engagement implementation checkpoint — 22 Nov 2026
+
+- **Code, not just documentation:** `packages/local-core/src/store.mjs`, `http.mjs`, LessonEngagement UI and administrator moderation screen implement account-scoped likes, comments, owner soft removal, reporting, audit and independent hide/dismiss.
+- **Safe defaults:** only published lessons from active courses expose comments; unverified or suspended students cannot write; comments do not expose email addresses; writes have server-side rate limits and replay keys.
+- **PostgreSQL future target:** `db/migrations/0002_creator_engagement.sql` and `db/tests/engagement.sql` add restrictive RLS and denial tests to disposable CI, **not** a Supabase production deployment. SQLite remains temporary development/rollback only.
+- **Still not implemented:** a hosted service-role-backed comment API with verified Supabase Auth, live user data, production moderation safety, provider entitlements, paid media, creator payout verification, physical mobile/browser QA and a full pilot.
+- **Verification provenance:** use the final PR and post-merge main GitHub Actions links; earlier passing runs do not verify later edits.
