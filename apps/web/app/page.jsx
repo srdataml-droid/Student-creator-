@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import FeedExperience from './FeedExperience.jsx';
+import {toFeedPreview} from '../lib/feed-preview.mjs';
 import {getLocalPublicCourses,getLocalCourseLessons,getLocalPublicInstitutions,isLocalMode} from '../lib/local-public.mjs';
 export const dynamic='force-dynamic';
 export const metadata={title:'Student Creators | The campus creator community'};
@@ -10,7 +11,7 @@ export default function Home(){
       courses=getLocalPublicCourses().slice(0,80);
       institutions=getLocalPublicInstitutions();
       const bySchool=new Map(institutions.map(item=>[item.id,item.name]));
-      posts=courses.flatMap(course=>getLocalCourseLessons(course.id).map(item=>({...item,courseCode:course.code,courseTitle:course.title,institutionName:bySchool.get(course.institutionId)||'Campus creator'}))).sort((a,b)=>String(b.publishedAt||b.createdAt).localeCompare(String(a.publishedAt||a.createdAt))).slice(0,60);
+      posts=courses.flatMap(course=>getLocalCourseLessons(course.id).map(item=>toFeedPreview(item,course,bySchool.get(course.institutionId)||'Campus creator'))).sort((a,b)=>String(b.publishedAt||b.createdAt).localeCompare(String(a.publishedAt||a.createdAt))).slice(0,60);
     }else{ready=false;}
   }catch{ready=false;}
   return <main id="main" className="creator-main">
