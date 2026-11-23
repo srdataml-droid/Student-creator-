@@ -99,6 +99,16 @@ export function openLocalStore(path){
     CREATE TABLE IF NOT EXISTS messages(id TEXT PRIMARY KEY,sender_id TEXT NOT NULL REFERENCES users(id),recipient_id TEXT NOT NULL REFERENCES users(id),body TEXT NOT NULL CHECK(length(body) BETWEEN 1 AND 2000),created_at TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS messages_pair ON messages(sender_id,recipient_id,created_at);
     CREATE TABLE IF NOT EXISTS user_blocks(blocker_id TEXT NOT NULL REFERENCES users(id),blocked_id TEXT NOT NULL REFERENCES users(id),created_at TEXT NOT NULL,PRIMARY KEY(blocker_id,blocked_id));
+    -- Distinct per-creator permissions; unlike a DM block, these scopes are independent.
+    CREATE TABLE IF NOT EXISTS creator_restrictions(
+      creator_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      viewer_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      deny_view INTEGER NOT NULL DEFAULT 0 CHECK(deny_view IN (0,1)),
+      deny_comment INTEGER NOT NULL DEFAULT 0 CHECK(deny_comment IN (0,1)),
+      deny_message INTEGER NOT NULL DEFAULT 0 CHECK(deny_message IN (0,1)),
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY(creator_id,viewer_id), CHECK(creator_id<>viewer_id)
+    );
     CREATE TABLE IF NOT EXISTS message_reports(id TEXT PRIMARY KEY,reporter_id TEXT NOT NULL REFERENCES users(id),message_id TEXT NOT NULL REFERENCES messages(id),reason TEXT NOT NULL,created_at TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'open',resolved_by TEXT REFERENCES users(id),resolution TEXT,UNIQUE(reporter_id,message_id));
     -- Local course communities are restricted to manually verified students at their own campus.
     CREATE TABLE IF NOT EXISTS community_members(
@@ -168,6 +178,16 @@ export function openLocalStore(path){
     const joined=Boolean(db.prepare('SELECT 1 FROM community_members WHERE course_id=? AND user_id=?').get(courseId,actor.id));
     if(requireMembership&&!joined)throw error('MEMBERSHIP_REQUIRED',403);
     return {target,joined};
+  }
+  function requireCreatorAction(actor,creatorId,kind){
+    requireVerified(actor);
+    if(!['view','comment','message'].includes(kind))throw error('INVALID_RESTRICTIONS',422);
+    const creator=db.prepare("SELECT id FROM users WHERE id=? AND role='student' AND verified_at IS NOT NULL AND suspended=0").get(creatorId);
+    if(!creator)throw error('CREATOR_UNAVAILABLE',404);
+    if(actor.id!==creatorId){
+      const restriction=db.prepare('SELECT deny_view,deny_comment,deny_message FROM creator_restrictions WHERE creator_id=? AND viewer_id=?').get(creatorId,actor.id);
+      if(restriction?.['deny_'+kind])throw error('CREATOR_ACCESS_RESTRICTED',403);
+    }
   }
   const withVideo=(row)=>row?{...lesson(row),hasVideo:Boolean(db.prepare('SELECT 1 FROM lesson_videos WHERE lesson_id=?').get(row.id)),likeCount:db.prepare('SELECT COUNT(*) AS n FROM lesson_likes WHERE lesson_id=?').get(row.id).n}:null;
   function editableVideoLesson(actor,id){
@@ -428,7 +448,10 @@ export function openLocalStore(path){
     },
     createLessonComment(actor,id,{text,creationKey}={}){
       requireVerified(actor);
-      if(!store.publicLesson(id))throw error('LESSON_NOT_FOUND',404);
+      const target=store.publicLesson(id);
+      if(!target)throw error('LESSON_NOT_FOUND',404);
+      requireCreatorAction(actor,target.creatorId,'view');
+      requireCreatorAction(actor,target.creatorId,'comment');
       if(typeof text!=='string'||text.trim().length<3||text.trim().length>800||/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(text))
         throw error('INVALID_COMMENT',422);
       if(typeof creationKey!=='string'||!/^[A-Za-z0-9_-]{16,128}$/.test(creationKey))throw error('INVALID_IDEMPOTENCY_KEY',422);
@@ -576,11 +599,52 @@ export function openLocalStore(path){
       transaction(()=>{db.prepare('UPDATE users SET allow_messages=? WHERE id=?').run(allowed?1:0,actor.id);audit(actor.id,'messages.preference.updated',actor.id,{allowed});});
       return {allowMessages:allowed};
     },
+    creatorRestrictions(actor,creatorId){
+      requireVerified(actor);
+      if(actor.id!==creatorId)throw error('FORBIDDEN',403);
+      return db.prepare(`SELECT viewer_id AS viewerId,deny_view AS view,deny_comment AS comment,
+        deny_message AS message,updated_at AS updatedAt FROM creator_restrictions
+        WHERE creator_id=? ORDER BY updated_at DESC LIMIT 250`).all(creatorId)
+        .map(x=>({...x,view:Boolean(x.view),comment:Boolean(x.comment),message:Boolean(x.message)}));
+    },
+    setCreatorRestrictions(actor,creatorId,viewerId,input){
+      requireVerified(actor);
+      if(actor.id!==creatorId)throw error('FORBIDDEN',403);
+      if(typeof viewerId!=='string'||viewerId===actor.id||
+          !db.prepare("SELECT 1 FROM users WHERE id=? AND role='student'").get(viewerId))throw error('INVALID_VIEWER',422);
+      const keys=['view','comment','message'];
+      if(!input||typeof input!=='object'||Array.isArray(input)||
+          Object.keys(input).length!==3||!keys.every(k=>typeof input[k]==='boolean'))
+        throw error('INVALID_RESTRICTIONS',422);
+      return transaction(()=>{
+        const existing=db.prepare('SELECT deny_view,deny_comment,deny_message FROM creator_restrictions WHERE creator_id=? AND viewer_id=?')
+          .get(creatorId,viewerId);
+        const old=existing?{view:Boolean(existing.deny_view),comment:Boolean(existing.deny_comment),message:Boolean(existing.deny_message)}:{view:false,comment:false,message:false};
+        const unchanged=keys.every(k=>old[k]===input[k]);
+        if(!unchanged){
+          const since=new Date(Date.now()-3600000).toISOString();
+          if(db.prepare("SELECT count(*) AS n FROM audit_events WHERE actor_id=? AND action='creator.restriction.changed' AND created_at>=?").get(actor.id,since).n>=60)
+            throw error('RESTRICTION_RATE_LIMIT',429);
+          if(keys.every(k=>!input[k])){
+            db.prepare('DELETE FROM creator_restrictions WHERE creator_id=? AND viewer_id=?').run(creatorId,viewerId);
+          }else{
+            db.prepare(`INSERT INTO creator_restrictions(creator_id,viewer_id,deny_view,deny_comment,deny_message,updated_at)
+              VALUES(?,?,?,?,?,?) ON CONFLICT(creator_id,viewer_id) DO UPDATE SET
+              deny_view=excluded.deny_view,deny_comment=excluded.deny_comment,
+              deny_message=excluded.deny_message,updated_at=excluded.updated_at`)
+              .run(creatorId,viewerId,Number(input.view),Number(input.comment),Number(input.message),stamp());
+          }
+          audit(actor.id,'creator.restriction.changed',viewerId,{previous:old,current:input});
+        }
+        return {viewerId,...input,replayed:unchanged};
+      });
+    },
     sendMessage(actor,recipientId,body){
       requireVerified(actor);
       if(actor.id===recipientId)throw error('CANNOT_MESSAGE_SELF',422);
       if(typeof body!=='string'||body.trim().length<1||body.trim().length>2000)throw error('INVALID_MESSAGE',422);
       return transaction(()=>{
+        requireCreatorAction(actor,recipientId,'message');
         const recipient=db.prepare("SELECT id,allow_messages FROM users WHERE id=? AND role='student' AND verified_at IS NOT NULL AND suspended=0").get(recipientId);
         const existingReply=Boolean(db.prepare('SELECT 1 FROM messages WHERE sender_id=? AND recipient_id=? LIMIT 1').get(recipientId,actor.id));
         if(!recipient||!(existingReply||(recipient.allow_messages&&store.publicCreator(recipientId))))throw error('RECIPIENT_UNAVAILABLE',403);

@@ -69,6 +69,10 @@ export function createLocalHandler(store){
           if(!actor)return unauthorized();
           return responses({following:store.isFollowing(actor,segments[1])});
         }
+        if(segments.length===3&&segments[0]==='creators'&&segments[2]==='restrictions'){
+          if(!actor)return unauthorized();
+          return responses({restrictions:store.creatorRestrictions(actor,segments[1])});
+        }
         if(path==='institutions')return responses({institutions:store.listInstitutions()});
         if(path==='search'){
           const query=new URL(request.url).searchParams;
@@ -148,6 +152,10 @@ export function createLocalHandler(store){
       }
       if(!actor)return unauthorized();
       if(path==='my/creator-profile'){const result=store.updatePublicProfile(actor,body);return responses(result,result.replayed?200:201);}
+      if(segments.length===4&&segments[0]==='creators'&&segments[2]==='restrictions'){
+        const result=store.setCreatorRestrictions(actor,segments[1],segments[3],body);
+        return responses({restriction:result});
+      }
       if(segments.length===3&&segments[0]==='creators'&&['follow','unfollow'].includes(segments[2])){
         if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
         const result=segments[2]==='follow'?store.followCreator(actor,segments[1]):store.unfollowCreator(actor,segments[1]);
