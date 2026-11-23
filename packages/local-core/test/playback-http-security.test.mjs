@@ -83,7 +83,12 @@ test('MP4 HTTP GET/HEAD/Range require scoped grant bound to current session and 
     assert.equal((await req(path,'GET',undefined,authCookie)).status,403);
     assert.equal((await req(path,'HEAD',undefined,authCookie)).status,403);
     store.setCreatorRestrictions(creator.user,creator.user.id,viewer.user.id,{view:false,comment:false,message:false});
-    assert.equal((await req(path,'GET',undefined,authCookie,{range:'bytes=0-6'})).status,206);
+    // Unblocking must not silently reactivate a revoked grant cookie.
+    assert.equal((await req(path,'GET',undefined,authCookie,{range:'bytes=0-6'})).status,403);
+    const reissued=await req('lessons/'+d+'/playback-grant','POST',{},sessionCookie);
+    assert.equal(reissued.status,200);
+    const newCookie=sessionCookie+'; '+(reissued.headers.get('set-cookie')??'').split(';')[0];
+    assert.equal((await req(path,'GET',undefined,newCookie,{range:'bytes=0-6'})).status,206);
     store.logout(viewer.token);
     assert.equal((await req(path,'GET',undefined,authCookie)).status,401);
   }finally{store.close();rmSync(dir,{recursive:true,force:true});}
