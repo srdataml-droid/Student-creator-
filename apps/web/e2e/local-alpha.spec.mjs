@@ -148,7 +148,14 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     expect(await range.body()).toEqual(syntheticVideo.subarray(0,5));
 
     // Paid browser journey, using one synthetic creator and viewer. No Paystack key.
-    console.log('browser-alpha: free protected-video journey passed');
+    // Media-first viewer must use the exact same authenticated playback gate.
+    await viewerPage.goto('/watch/'+lessonId);
+    await expect(viewerPage.getByRole('heading',{name:title}).first()).toBeVisible();
+    await expect(viewerPage.getByRole('button',{name:'Enable playback'})).toBeVisible();
+    await viewerPage.getByRole('button',{name:'Enable playback'}).click();
+    await expect(viewerPage.locator('.watch-stage video')).toBeVisible();
+    expect((await request.get(BASE+'/api/local/lessons/'+lessonId+'/video')).status()).toBe(401);
+    console.log('browser-alpha: free protected-video and immersive viewer passed');
     const paidTitle='Original paid content example '+suffix;
     await creatorPage.goto('/studio');
     await creatorPage.locator('#course').selectOption(courseId);
@@ -181,6 +188,83 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     await expect(adminPage.getByText('Lesson approved and published.')).toBeVisible();
 
     console.log('browser-alpha: paid lesson independently reviewed');
+    // Direct watch requests never render paid content without buyer entitlement.
+    await viewerPage.goto('/watch/'+paidId);
+    await expect(viewerPage).toHaveURL(new RegExp('/lessons/'+paidId+'
+    expect((await viewer.request.get('/api/local/lessons/'+paidId)).status()).toBe(402);
+    expect((await viewer.request.get('/api/local/lessons/'+paidId+'/notes')).status()).toBe(402);
+    expect((await viewer.request.get('/api/local/lessons/'+paidId+'/comments')).status()).toBe(402);
+    expect((await viewer.request.get('/api/local/lessons/'+paidId+'/video')).status()).toBe(402);
+    expect((await viewer.request.post('/api/local/lessons/'+paidId+'/playback-grant',{data:{}})).status()).toBe(402);
+    expect((await creator.request.get('/api/local/lessons/'+paidId)).status()).toBe(200);
+    await viewerPage.setViewportSize({width:390,height:844});
+    await viewerPage.goto('/lessons/'+paidId);
+    await expect(viewerPage.getByRole('heading',{name:paidTitle})).toBeVisible();
+    await expect(viewerPage.getByRole('heading',{name:'Unlock access for ₦200'})).toBeVisible();
+    await expect(viewerPage.getByText('Sandbox checkout is not configured.',{exact:false})).toBeVisible();
+    const viewport=await viewerPage.evaluate(()=>({body:document.documentElement.scrollWidth,width:window.innerWidth}));
+    expect(viewport.body,'Mobile paywall horizontal overflow').toBeLessThanOrEqual(viewport.width+1);
+    console.log('browser-alpha: paid lesson paywall and mobile viewport passed');
+    const buyerOrder=await viewer.request.post('/api/local/lessons/'+paidId+'/orders',{
+      data:{requestKey:'browser-payment-'+suffix+'-0001'},
+    });
+    expect(buyerOrder.status()).toBe(201);
+    const orderData=await buyerOrder.json();
+    expect(orderData.order.status).toBe('pending');
+    expect(orderData.order.amountKobo).toBe(20000);
+    expect((await viewer.request.get('/api/local/lessons/'+paidId)).status()).toBe(402);
+    expect((await viewer.request.post('/api/local/orders/'+orderData.order.reference+'/confirm',{data:{}})).status()).toBe(503);
+    await viewerPage.goto('/purchases');
+    await expect(viewerPage.getByText('Awaiting sandbox verification')).toBeVisible();
+    expect((await request.get(BASE+'/api/local/my/purchases')).status()).toBe(401);
+    await viewerPage.setViewportSize({width:1280,height:800});
+
+    console.log('browser-alpha: pending buyer order and history passed');
+    // Restore the free lesson context before testing comments and creator blocking.
+    await viewerPage.goto('/lessons/'+lessonId);
+    const comment=`Helpful original question ${suffix}`;
+    await viewerPage.locator('#lesson-comment-text').fill(comment);
+    await viewerPage.getByRole('button',{name:'Post comment'}).click();
+    await expect(viewerPage.getByText(comment)).toBeVisible();
+    await viewerPage.goto(`/creators/${creatorId}`);
+    await viewerPage.getByRole('button',{name:'+ Follow creator'}).click();
+    await expect(viewerPage.getByRole('button',{name:/Following/})).toBeVisible();
+
+    // Independent permission flags: comment-only denial must not block authorized viewing.
+    const commentOnly=await creator.request.post(`/api/local/creators/${creatorId}/restrictions/${viewerId}`,{
+      data:{view:false,comment:true,message:false},
+    });
+    await readJson(commentOnly);
+    expect((await viewer.request.get(`/api/local/lessons/${lessonId}/video`,{
+      headers:{range:'bytes=0-4'},
+    })).status()).toBe(206);
+    const deniedComment=await viewer.request.post(`/api/local/lessons/${lessonId}/comments`,{
+      data:{text:'This comment must be blocked',creationKey:`denied-browser-${suffix}-comment`},
+    });
+    expect(deniedComment.status()).toBe(403);
+
+    // Viewing restriction must prevent direct media and full-post retrieval, not just hide UI.
+    const rule=await creator.request.post(`/api/local/creators/${creatorId}/restrictions/${viewerId}`,{
+      data:{view:true,comment:false,message:false},
+    });
+    await readJson(rule);
+    expect((await viewer.request.get(`/api/local/lessons/${lessonId}/video`)).status()).toBe(403);
+    expect((await viewer.request.head(`/api/local/lessons/${lessonId}/video`)).status()).toBe(403);
+    expect((await viewer.request.get(`/api/local/lessons/${lessonId}/video`,{
+      headers:{range:'bytes=0-4'},
+    })).status()).toBe(403);
+    expect((await viewer.request.get(`/api/local/lessons/${lessonId}/notes`)).status()).toBe(403);
+    expect((await viewer.request.get(`/api/local/lessons/${lessonId}`)).status()).toBe(403);
+    expect((await viewer.request.get(`/api/local/lessons/${lessonId}/comments`)).status()).toBe(403);
+    await viewerPage.goto(`/lessons/${lessonId}`);
+    await expect(viewerPage.getByText('Full posts require verified student membership',{exact:false})).toBeVisible();
+    console.log('browser-alpha: creator moderation and revocation passed');
+  }finally{
+    await Promise.all([admin.close(),creator.close(),viewer.close()]);
+  }
+});
+));
+    await expect(viewerPage.getByRole('heading',{name:'Unlock access for ₦200'})).toBeVisible();
     expect((await viewer.request.get('/api/local/lessons/'+paidId)).status()).toBe(402);
     expect((await viewer.request.get('/api/local/lessons/'+paidId+'/notes')).status()).toBe(402);
     expect((await viewer.request.get('/api/local/lessons/'+paidId+'/comments')).status()).toBe(402);
