@@ -2,6 +2,7 @@
 import {getLocalStore,SESSION_COOKIE} from './store.mjs';
 import {readMp4Body,parseVideoRange} from './video.mjs';
 import {publicLessonNotesResponse} from './notes.mjs';
+import {MAX_CAPTION_BYTES} from './captions.mjs';
 import {createReadStream} from 'node:fs';
 import {Readable} from 'node:stream';
 import {createPaystackClient,PaystackGatewayError} from '../../payment-core/src/paystack-client.mjs';
@@ -21,6 +22,24 @@ async function jsonBody(request){
   let x;try{x=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));}catch{throw Object.assign(Error('INVALID_JSON'),{status:400});}
   if(!x||typeof x!=='object'||Array.isArray(x))throw Object.assign(Error('INVALID_JSON'),{status:400});return x;
 }
+
+async function readCaptionBody(request){
+  if(!/^text\/vtt(?:\s*;|\s*$)/i.test(request.headers.get('content-type')??''))throw Object.assign(Error('CAPTIONS_VTT_REQUIRED'),{code:'CAPTIONS_VTT_REQUIRED',status:415});
+  if(Number(request.headers.get('content-length')||0)>MAX_CAPTION_BYTES)throw Object.assign(Error('CAPTIONS_TOO_LARGE'),{code:'CAPTIONS_TOO_LARGE',status:413});
+  const reader=request.body?.getReader();if(!reader)throw Object.assign(Error('INVALID_CAPTIONS'),{code:'INVALID_CAPTIONS',status:422});
+  let size=0;const chunks=[];
+  try{
+    while(true){
+      const {done,value}=await reader.read();if(done)break;
+      size+=value.byteLength;
+      if(size>MAX_CAPTION_BYTES){await reader.cancel();throw Object.assign(Error('CAPTIONS_TOO_LARGE'),{code:'CAPTIONS_TOO_LARGE',status:413});}
+      chunks.push(Buffer.from(value));
+    }
+  }finally{reader.releaseLock();}
+  try{return new TextDecoder('utf-8',{fatal:true}).decode(Buffer.concat(chunks));}
+  catch{throw Object.assign(Error('INVALID_CAPTIONS'),{code:'INVALID_CAPTIONS',status:422});}
+}
+
 function checkOrigin(request){
   const origin=request.headers.get('origin');
   const url=new URL(request.url);
@@ -57,6 +76,21 @@ export function createLocalHandler(store,{sandboxGateway,payments=null}={}){
       const cookies=parseCookies(request.headers.get('cookie'));
       const cookie=cookies[SESSION_COOKIE];
       const actor=store.getSession(cookie);
+      if(segments.length===4&&segments[0]==='lessons'&&segments[2]==='video'&&segments[3]==='captions'){
+        const id=segments[1];
+        if(method==='POST'){
+          if(!actor)return unauthorized();
+          const vtt=await readCaptionBody(request);
+          const result=store.saveCaptions(actor,id,vtt);
+          return responses({captions:result},result.replayed?200:201);
+        }
+        // WebVTT fetches reuse the same video-path-scoped HttpOnly grant.
+        const vtt=store.getCaptions(actor,id,cookies['campus_playback_'+id],cookie);
+        const headers={'content-type':'text/vtt; charset=utf-8','content-length':String(Buffer.byteLength(vtt)),
+          'cache-control':'private, no-store','cross-origin-resource-policy':'same-origin',
+          'x-content-type-options':'nosniff','referrer-policy':'no-referrer'};
+        return new Response(method==='HEAD'?null:vtt,{status:200,headers});
+      }
       if(segments.length===3&&segments[0]==='lessons'&&segments[2]==='video'){
         const id=segments[1];
         if(method==='POST'){
