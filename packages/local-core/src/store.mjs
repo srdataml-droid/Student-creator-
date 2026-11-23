@@ -54,6 +54,8 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       created_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,expires_at INTEGER NOT NULL);
+    -- A pre-existing same-email account cannot bypass the new one-student code gate.
+    CREATE TABLE IF NOT EXISTS pilot_invitation_claims(user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,redeemed_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS courses(
       id TEXT PRIMARY KEY,institution_id TEXT NOT NULL REFERENCES institutions(id),code TEXT NOT NULL,title TEXT NOT NULL,
       active INTEGER NOT NULL DEFAULT 1,UNIQUE(institution_id,code)
@@ -396,6 +398,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
             db.prepare("SELECT COUNT(*) AS n FROM users WHERE role='student'").get().n>=pilotStudentCap)
           throw error('PILOT_CAP_REACHED',403);
         db.prepare('INSERT INTO users(id,email,password_hash,salt,institution_id,created_at) VALUES(?,?,?,?,?,?)').run(id,normalized,hash,salt,institutionId,stamp());
+        if(pilotInvite!==null)db.prepare('INSERT INTO pilot_invitation_claims(user_id,redeemed_at) VALUES(?,?)').run(id,stamp());
         audit(id,'account.created',id);
       });
       return {id,email:normalized};
@@ -408,6 +411,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       const salt=row?.salt??'f'.repeat(32),check=scryptSync(password,salt,64);
       const valid=timingSafeEqual(check,Buffer.from(row?.password_hash??'0'.repeat(128),'hex'));
       if(!valid||!row||row.suspended||(pilotEmail!==null&&row.role==='student'&&row.email!==pilotEmail))return null;
+      if(pilotInvite!==null&&row.role==='student'&&!db.prepare('SELECT 1 FROM pilot_invitation_claims WHERE user_id=?').get(row.id))return null;
       const token=randomBytes(32).toString('base64url');
       transaction(()=>{db.prepare('INSERT INTO sessions VALUES(?,?,?)').run(sha(token),row.id,Math.floor(Date.now()/1000)+SESSION_TTL);audit(row.id,'session.created',row.id);});
       return {token,user:human(row)};
@@ -416,6 +420,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       if(!token||!/^[A-Za-z0-9_-]{43}$/.test(token))return null;
       const row=db.prepare('SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.suspended=0').get(sha(token),Math.floor(Date.now()/1000));
       if(pilotEmail!==null&&row?.role==='student'&&row.email!==pilotEmail)return null;
+      if(pilotInvite!==null&&row?.role==='student'&&!db.prepare('SELECT 1 FROM pilot_invitation_claims WHERE user_id=?').get(row.id))return null;
       return human(row);
     },
     logout(token){if(token&&/^[A-Za-z0-9_-]{43}$/.test(token))db.prepare('DELETE FROM sessions WHERE token_hash=?').run(sha(token));},
