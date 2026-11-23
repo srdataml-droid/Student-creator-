@@ -8,6 +8,7 @@ import {createLocalHandler} from '../src/http.mjs';
 
 const invited='invited@alpha.invalid';
 const secret='Synthetic Student Password 2026';
+const privateCode='synthetic_pilot_invitation_abcdefghijklmnop';
 
 function http(store){
   const handle=createLocalHandler(store);
@@ -25,7 +26,7 @@ function http(store){
 
 test('one-student pilot admits only the approved address and the cap survives restart',async()=>{
   const dir=mkdtempSync(join(tmpdir(),'single-student-pilot-')),file=join(dir,'pilot.sqlite');
-  let store=openLocalStore(file,{pilotStudentCap:1,pilotAllowedEmail:' INVITED@ALPHA.INVALID '});
+  let store=openLocalStore(file,{pilotStudentCap:1,pilotAllowedEmail:' INVITED@ALPHA.INVALID ',pilotInviteToken:privateCode});
   let closed=false;
   try{
     store.bootstrapAdmin('reviewer@alpha.invalid','Synthetic Reviewer Password 2026');
@@ -33,11 +34,16 @@ test('one-student pilot admits only the approved address and the cap survives re
     const admin=(await req('auth/login','POST',{email:'reviewer@alpha.invalid',password:'Synthetic Reviewer Password 2026'})).cookie;
     const campus=(await req('admin/institutions','POST',{name:'Consent-based One Student Pilot'},admin)).data.institution.id;
 
-    const uninvited=await req('auth/register','POST',{email:'stranger@alpha.invalid',password:secret,institutionId:campus});
+    const uninvited=await req('auth/register','POST',{email:'stranger@alpha.invalid',password:secret,institutionId:campus,inviteCode:privateCode});
     assert.equal(uninvited.status,403);
     assert.equal(uninvited.data.error,'PILOT_INVITATION_REQUIRED');
 
-    const body={email:invited,password:secret,institutionId:campus};
+    const body={email:invited,password:secret,institutionId:campus,inviteCode:privateCode};
+    const health=await req('health');
+    assert.equal(health.data.pilotInviteOnly,true);
+    assert.equal(JSON.stringify(health.data).includes(privateCode),false);
+    assert.equal((await req('auth/register','POST',{...body,inviteCode:''})).status,403);
+    assert.equal((await req('auth/register','POST',{...body,inviteCode:'wrong_token_0123456789abcdefghijklmnop'})).status,403);
     // A second browser tab or retry must not create another student.
     const two=await Promise.all([req('auth/register','POST',body),req('auth/register','POST',body)]);
     assert.deepEqual(two.map(x=>x.status).sort(),[201,403]);
@@ -51,12 +57,12 @@ test('one-student pilot admits only the approved address and the cap survives re
     assert.equal((await req('admin/pending-users','GET',undefined,loggedIn.cookie)).status,403);
 
     store.close();closed=true;
-    store=openLocalStore(file,{pilotStudentCap:1,pilotAllowedEmail:'replacement@alpha.invalid'});closed=false;
+    store=openLocalStore(file,{pilotStudentCap:1,pilotAllowedEmail:'replacement@alpha.invalid',pilotInviteToken:privateCode});closed=false;
     req=http(store);
     // Existing sessions and logins from a prior pilot invite must stop working.
     assert.equal((await req('me','GET',undefined,loggedIn.cookie)).status,401);
     assert.equal((await req('auth/login','POST',{email:invited,password:secret})).status,401);
-    const beyond=await req('auth/register','POST',{email:'replacement@alpha.invalid',password:secret,institutionId:campus});
+    const beyond=await req('auth/register','POST',{email:'replacement@alpha.invalid',password:secret,institutionId:campus,inviteCode:privateCode});
     assert.equal(beyond.status,403);
     assert.equal(beyond.data.error,'PILOT_CAP_REACHED');
   }finally{if(!closed)store.close();rmSync(dir,{recursive:true,force:true});}
@@ -67,7 +73,9 @@ test('invalid pilot settings fail closed before creating a database',()=>{
     {pilotStudentCap:0,pilotAllowedEmail:invited},
     {pilotStudentCap:1},
     {pilotStudentCap:100,pilotAllowedEmail:invited},
-    {pilotStudentCap:1,pilotAllowedEmail:'not-an-email'},
+    {pilotStudentCap:1,pilotAllowedEmail:'not-an-email',pilotInviteToken:privateCode},
+    {pilotStudentCap:1,pilotAllowedEmail:invited,pilotInviteToken:'too-short'},
+    {pilotStudentCap:100,pilotInviteToken:privateCode},
     {pilotStudentCap:1001},
     {pilotStudentCap:1.5},
   ];
@@ -77,11 +85,11 @@ test('invalid pilot settings fail closed before creating a database',()=>{
 
 test('server environment settings apply the invite-only gate to getLocalStore',async()=>{
   const dir=mkdtempSync(join(tmpdir(),'pilot-environment-')),file=join(dir,'pilot.sqlite');
-  const keys=['LOCAL_SQLITE_PATH','PILOT_STUDENT_CAP','PILOT_STUDENT_EMAIL','APP_DATA_MODE'];
+  const keys=['LOCAL_SQLITE_PATH','PILOT_STUDENT_CAP','PILOT_STUDENT_EMAIL','PILOT_STUDENT_INVITE_TOKEN','APP_DATA_MODE'];
   const before=Object.fromEntries(keys.map(key=>[key,process.env[key]]));
   try{
     Object.assign(process.env,{LOCAL_SQLITE_PATH:file,PILOT_STUDENT_CAP:'1',
-      PILOT_STUDENT_EMAIL:invited,APP_DATA_MODE:'local'});
+      PILOT_STUDENT_EMAIL:invited,PILOT_STUDENT_INVITE_TOKEN:privateCode,APP_DATA_MODE:'local'});
     const store=getLocalStore();
     store.bootstrapAdmin('admin@alpha.invalid','Private Local Admin Password 2026');
     const req=http(store);
@@ -90,7 +98,7 @@ test('server environment settings apply the invite-only gate to getLocalStore',a
     const campus=(await req('admin/institutions','POST',{name:'Private Alpha Campus'},admin)).data.institution.id;
     const banned=await req('auth/register','POST',{email:'unauthorised@alpha.invalid',password:secret,institutionId:campus});
     assert.equal(banned.status,403);
-    assert.equal((await req('auth/register','POST',{email:invited,password:secret,institutionId:campus})).status,201);
+    assert.equal((await req('auth/register','POST',{email:invited,password:secret,institutionId:campus,inviteCode:privateCode})).status,201);
   }finally{
     globalThis.__campusLocalStore?.close();
     delete globalThis.__campusLocalStore;
