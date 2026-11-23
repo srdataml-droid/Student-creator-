@@ -37,7 +37,7 @@ Review focus: second transaction on paid reference must be retained; reversal be
 - [x] M13 synthetic payment tests
 - [x] M14 media security tests
 - [x] M15 regression/integration
-- [ ] M16 GitHub commits/evidence
+- [x] M16 GitHub commits/evidence
 - [x] M17 independent end-to-end verification
 
 ## Rulings
@@ -69,7 +69,7 @@ Concurrent main work was integrated by fast-forward at `8a736ac`, `1120f80`, and
 | M13 | Complete | Success, signature, amount/currency/reference/environment/buyer/status/identity/fee mismatches, duplicates, concurrency, rollback, SIGKILL, recovery, reversals and reconciliation. |
 | M14 | Complete in local HTTP/Chromium scope | Visitor, unverified, unpaid, paid, cross-account/session, expired/tampered grants, copied URL, byte ranges, blocked/refunded/suspended access, watermark and private-file exposure checks. |
 | M15 | Complete in sandbox scope | Full Node suite, locked Next build, PostgreSQL 17 contracts, original Chromium creator/moderator regression and synthetic paid-payment-to-playback/refund browser test. No GitHub Actions dependency. |
-| M16 | Pending remote evidence | Reviewed diff and secret filenames; commit/push verification and issue links recorded in the completion entry below. |
+| M16 | Complete | Source commit `fd799535a11d358764c8bba2d12a699d071a2c9a` pushed normally and verified with `git ls-remote`; #11 and #10 updated, kept open. |
 | M17 | Complete locally | `apps/web/e2e/paid-media.spec.mjs`: verified buyer -> HTTP server order -> mocked trusted PSP adapter -> atomic receipt/entitlement/ledger -> decoded/playing MP4 -> moving/fullscreen watermark -> creator restriction/review -> synthetic refund -> range denied. |
 
 ## Database changes and migration safety
@@ -86,8 +86,8 @@ Environment: Node v24.22.3, Next 16.4.6, system Chromium, temporary Playwright 1
 
 ```
 npm test
-# Latest full-suite summary is recorded in the completion entry below.
-# Earlier verified merged run: tests 205; pass 205; fail 0; cancelled 0; skipped 0; todo 0.
+# Exact source-commit run: tests 206; pass 206; fail 0; cancelled 0; skipped 0; todo 0.
+# duration_ms 28524.900704; exit 0.
 
 NEXT_TELEMETRY_DISABLED=1 npm run build --prefix apps/web
 # exit 0; compiled successfully; static pages generated; /watch/[lessonId] included.
@@ -196,3 +196,11 @@ Official PSP references checked 2026-11-23: [Paystack webhook authentication](ht
 Modified: `.env.example`; `packages/payment-core/src/payments.mjs`, `paystack-client.mjs`; `packages/local-core/src/commerce.mjs`, `store.mjs`, `http.mjs`; `packages/local-core/test/commerce.test.mjs`; `apps/web/app/ProtectedVideo.jsx`, `globals.css`, `purchases/page.jsx`.
 
 Created: `packages/local-core/src/commerce-schema.mjs`; `packages/local-core/test/commerce-migration.test.mjs`, `payment-integrity.test.mjs`, `payment-recovery.test.mjs`, `paid-media-security.test.mjs`; `packages/local-core/test/helpers/commerce-fixture.mjs`, `fulfillment-worker.mjs`, `restriction-worker.mjs`; `apps/web/e2e/paid-media.spec.mjs`; `apps/web/playwright.payment.config.mjs`; `scripts/local-payment-reconcile.mjs`; `scripts/seed-payment-browser-fixture.mjs`; this execution/evidence document. Existing video primitives, financial allocation primitives, PostgreSQL migrations, and other agents' feature files were reused.
+
+## Completion entry
+
+Verified source commit: [`fd799535a11d358764c8bba2d12a699d071a2c9a`](https://github.com/srdataml-droid/Student-creator-/commit/fd799535a11d358764c8bba2d12a699d071a2c9a). Parent `03d7086` includes the latest concurrent profile/onboarding/viewer/UI changes at integration; all were preserved. `git push origin main` succeeded as a normal fast-forward from `03d7086`; `git ls-remote origin refs/heads/main` returned the exact source SHA. This following evidence-only commit does not change the implementation.
+
+Full suite on source revision: **206 tests, 206 pass, 0 fail, 0 cancelled, 0 skipped, 0 todo**, 28,524.900704 ms. Production Next build: **exit 0**, all routes including immersive viewer compiled. PostgreSQL: all five real-engine contract scripts PASS. Published-revision Chromium rerun: paid flow **1 passed (13.9s)**; original creator/moderator plus immersive-viewer/paywall regression **1 passed (12.3s)**. No final failing check remains.
+
+Issue updates: [#11 payment/ledger evidence](https://github.com/srdataml-droid/Student-creator-/issues/11#issuecomment-7116438093) and [#10 protected media evidence](https://github.com/srdataml-droid/Student-creator-/issues/10#issuecomment-7116438460). Both remain OPEN. PR #28 was not merged. No deployment, live credential use, real financial operation or destructive production action occurred.
