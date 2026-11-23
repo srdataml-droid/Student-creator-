@@ -971,6 +971,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     setLessonPrice:commerce.setPrice,
     createPurchaseOrder:commerce.createOrder,
     applyVerifiedTestCharge:commerce.applyVerifiedTestCharge,
+    applySyntheticRefund:commerce.applySyntheticRefund,
     sandboxCheckout:commerce.sandboxCheckout,
     confirmSandboxOrder:commerce.confirmSandboxOrder,
     getPurchaseOrder:commerce.orderStatus,
