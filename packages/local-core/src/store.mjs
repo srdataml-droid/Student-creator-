@@ -555,15 +555,18 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     },
     createLessonComment(actor,id,{text,creationKey}={}){
       requireVerified(actor);
-      const target=store.publicLesson(id);
-      if(!target)throw error('LESSON_NOT_FOUND',404);
-      requireCreatorAction(actor,target.creatorId,'view');
+      // A comment is part of the paid work, not a public preview action.
+      const target=store.viewableLesson(actor,id);
       requireCreatorAction(actor,target.creatorId,'comment');
       if(typeof text!=='string'||text.trim().length<3||text.trim().length>800||/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(text))
         throw error('INVALID_COMMENT',422);
       if(typeof creationKey!=='string'||!/^[A-Za-z0-9_-]{16,128}$/.test(creationKey))throw error('INVALID_IDEMPOTENCY_KEY',422);
       const body=text.trim(),hash=sha(body);
       return transaction(()=>{
+        // Recheck with the write lock held: refund/block and comment revocation
+        // must win over retries, including an old idempotency key.
+        store.viewableLesson(actor,id);
+        requireCreatorAction(actor,target.creatorId,'comment');
         const old=db.prepare('SELECT * FROM lesson_comments WHERE author_id=? AND lesson_id=? AND creation_key=?').get(actor.id,id,creationKey);
         if(old){
           if(old.creation_hash!==hash)throw error('IDEMPOTENCY_CONFLICT',409);
@@ -594,10 +597,12 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       requireVerified(actor);
       if(typeof reason!=='string'||reason.trim().length<10||reason.trim().length>1000)throw error('INVALID_REPORT',422);
       return transaction(()=>{
-        const row=db.prepare(`SELECT lc.id,lc.author_id FROM lesson_comments lc
+        const row=db.prepare(`SELECT lc.id,lc.author_id,lc.lesson_id AS lessonId FROM lesson_comments lc
           JOIN lessons l ON l.id=lc.lesson_id JOIN courses c ON c.id=l.course_id
           WHERE lc.id=? AND lc.hidden_at IS NULL AND l.status='published' AND c.active=1`).get(id);
         if(!row)throw error('COMMENT_NOT_FOUND',404);
+        // Reports are accepted only from a viewer allowed to read that thread.
+        store.viewableLesson(actor,row.lessonId);
         if(row.author_id===actor.id)throw error('CANNOT_REPORT_SELF',403);
         const reportId=randomUUID();
         const created=db.prepare('INSERT OR IGNORE INTO lesson_comment_reports(id,comment_id,reporter_id,reason,created_at) VALUES(?,?,?,?,?)')
