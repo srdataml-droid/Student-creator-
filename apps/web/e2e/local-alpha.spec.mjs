@@ -4,6 +4,7 @@ import {randomUUID, randomBytes} from 'node:crypto';
 
 const BASE='http://localhost:3000';
 const syntheticVideo=Buffer.from(readFileSync(new URL('../../../packages/local-core/test/fixtures/synthetic-1s.mp4.base64',import.meta.url),'utf8'),'base64');
+const syntheticCaptions='WEBVTT\n\n00:00:00.000 --> 00:00:01.000\nOriginal synthetic caption text.\n';
 
 async function login(page,email,password){
   await page.goto('/sign-in');
@@ -118,6 +119,11 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     });
     await creatorPage.getByRole('button',{name:'Upload video'}).click();
     await expect(creatorPage.getByText('Video saved privately.',{exact:false})).toBeVisible();
+    await creatorPage.locator('#captions-'+lessonId).setInputFiles({
+      name:'synthetic.vtt',mimeType:'text/vtt',buffer:Buffer.from(syntheticCaptions),
+    });
+    await creatorPage.getByRole('button',{name:'Upload captions'}).click();
+    await expect(creatorPage.getByText('English captions saved privately.',{exact:false})).toBeVisible();
     expect((await request.get(`${BASE}/api/local/lessons/${lessonId}/video`)).status()).toBe(404);
     await creatorPage.getByRole('button',{name:'Submit for review'}).click();
     await expect(creatorPage.getByText('Lesson submitted.',{exact:false})).toBeVisible();
@@ -135,8 +141,13 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     await expect(viewerPage.getByRole('heading',{name:title})).toBeVisible();
     await expect(viewerPage.getByRole('button',{name:'Enable playback'})).toBeVisible();
     expect((await viewer.request.get(`/api/local/lessons/${lessonId}/video`)).status()).toBe(403);
+    expect((await viewer.request.get(`/api/local/lessons/${lessonId}/video/captions`)).status()).toBe(403);
     await viewerPage.getByRole('button',{name:'Enable playback'}).click();
     await expect(viewerPage.locator('video')).toBeVisible();
+    await expect(viewerPage.locator('video track[kind="captions"]')).toHaveAttribute('src',`/api/local/lessons/${lessonId}/video/captions`);
+    const vttResponse=await viewer.request.get(`/api/local/lessons/${lessonId}/video/captions`);
+    expect(vttResponse.status()).toBe(200);
+    expect(await vttResponse.text()).toBe(syntheticCaptions);
     const privateVideo=await request.get(`${BASE}/api/local/lessons/${lessonId}/video`);
     expect([401,403,404]).toContain(privateVideo.status());
     // No full-text, download or comments leakage to visitors via direct API requests.
@@ -178,6 +189,11 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     });
     await creatorPage.getByRole('button',{name:'Upload video'}).click();
     await expect(creatorPage.getByText('Video saved privately.',{exact:false})).toBeVisible();
+    await creatorPage.locator('#captions-'+paidId).setInputFiles({
+      name:'paid-original.vtt',mimeType:'text/vtt',buffer:Buffer.from(syntheticCaptions),
+    });
+    await creatorPage.getByRole('button',{name:'Upload captions'}).click();
+    await expect(creatorPage.getByText('English captions saved privately.',{exact:false})).toBeVisible();
     await creatorPage.getByRole('button',{name:'Submit for review'}).click();
     console.log('browser-alpha: paid draft priced, uploaded and submitted');
     await adminPage.goto('/manage');
@@ -196,6 +212,7 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     expect((await viewer.request.get('/api/local/lessons/'+paidId+'/notes')).status()).toBe(402);
     expect((await viewer.request.get('/api/local/lessons/'+paidId+'/comments')).status()).toBe(402);
     expect((await viewer.request.get('/api/local/lessons/'+paidId+'/video')).status()).toBe(402);
+    expect((await viewer.request.get('/api/local/lessons/'+paidId+'/video/captions')).status()).toBe(402);
     expect((await viewer.request.post('/api/local/lessons/'+paidId+'/playback-grant',{data:{}})).status()).toBe(402);
     expect((await creator.request.get('/api/local/lessons/'+paidId)).status()).toBe(200);
     await viewerPage.setViewportSize({width:390,height:844});
