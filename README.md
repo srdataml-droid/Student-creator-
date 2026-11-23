@@ -58,10 +58,10 @@ Open **http://localhost:3000**. Use `/manage` to create a university and courses
 GitHub Actions runs unit/SQLite integration tests, a disposable PostgreSQL schema contract, and the pinned Next.js production build. Example successful end-to-end CI for the feed: https://github.com/srdataml-droid/Student-creator-/actions/runs/44884987176 . Each new commit gets its own check; do not assume later commits passed until their own run finishes.
 
 ## What is not live
-- Supabase authentication, hosted Postgres, storage and production access policies.
-- Paystack checkout, creator bank verification/subaccounts, payment splitting, paid content unlocks, recurring subscriptions, refunds or settlements.
-- Creator-set paid price display, verified bank payout setup, real earnings balances. Creator restriction API and Studio settings UI are implemented in local mode; hosted Auth/RLS, private streaming and paid entitlements remain incomplete.
-- Mobile-native app, adaptive video transcoding, production moderation and platform deployment.
+- Supabase authentication, hosted Postgres, private object storage and production access policies. PostgreSQL migration `0005_paid_access_security.sql` is a **disposable CI draft**, not a hosted migration.
+- **Real checkout, live Paystack charges, settlement, transfers, withdrawals, split payments, refunds, reversals or subscriptions.** Only local SQLite synthetic purchase state and optionally Paystack **test-mode** checkout are present.
+- Real bank verification, withdrawable creator balances, commercial commission/split policy, real provider test transaction evidence, and complete cross-device hosted security. The local pending earnings balance is **synthetic**, not money held or owed by the platform.
+- Mobile-native app, production adaptive video transcoding/DRM, public deployment, production moderation/legal approval and real-student identity collection.
 
 The intended **core business model is paid creator content, subscriptions and permissible private tutoring/feedback**, with transparent creator/platform revenue sharing. Ads are **not** required. Payment-domain code exists, but no successful test transaction or production settlement is claimed.
 
@@ -104,5 +104,15 @@ This active repository uses **main** for the current founder-directed work; no a
 
 These issues are **open plans**; do not interpret their existence as completed features. Founder-approved small changes on main only, with exact-commit test evidence.
 
+### Local sandbox creator commerce (synthetic-only)
+
+Published lessons may be free (₦0) or paid (minimum ₦200). In Creator Studio, the verified author sets a price **before submitting for moderation**. Once published, the price cannot change. Feed previews disclose the amount without exposing full text; a buyer sees a limited-access licence and gated checkout screen. The creator retains copyright; purchases never transfer source files.
+
+**Test purchase flow:** buyer signs in as a verified student → creates a single idempotent pending order → opts into Paystack's **test checkout only** if a private server-side `PAYSTACK_TEST_SECRET_KEY=sk_test_...` is configured → separately requests confirmation → server calls the Paystack test verification API and validates provider status, reference, amount, currency, environment and buyer → a single SQLite transaction records an entitlement plus two balanced debit/credit journal lines. A replay cannot grant access twice. An unverified or blocked student, someone with another student's order, a pending charge and an unsigned callback must never unlock media or notes. The browser cannot directly submit settlement evidence.
+
+For local integration tests **only**, `applyVerifiedTestCharge` injects a synthetic provider response directly into the store. It is not an HTTP endpoint and is disabled when `NODE_ENV=production`. This is **not** a completed successful Paystack gateway test payment, a settlement or proof of bank funds. Tests and Studio show synthetic creator pending balances with **0% commission until a formal fee policy is approved**; that is only a neutral test allocation, not a future commercial promise. No payout code is enabled.
+
+`GET /api/local/my/purchases` and `GET /api/local/my/creator-earnings` are owner-scoped; `/purchases` is the signed-in buyer's local order library. Draft database RLS for paid comment access is under `0005_paid_access_security.sql` and tested against disposable PostgreSQL. Do not use any public repository or client-side environment variable for signing keys, school ID evidence or buyer bank details. Local SQLite is not hosted multi-user infrastructure.
+
 ### Local MP4 playback authorization checkpoint
-Published development MP4 requires a verified student's active session, permission from the creator and a short-lived, session-bound playback cookie issued after selecting **Enable playback**. The raw grant is not placed in a video URL. This is **not DRM**: an authorized student can still save video bytes or record the screen. Paid entitlements, hosted private storage and sandbox payment fulfillment are not implemented. See [engineering progress](docs/PROJECT_PROGRESS.md) and Issue #10.
+Published development MP4 requires a verified student's active session, permission from the creator and a short-lived, session-bound playback cookie issued after selecting **Enable playback**. The raw grant is not placed in a video URL. This is **not DRM**: an authorized student can still save video bytes or record the screen. Local synthetic paid entitlements and optional **test-only** Paystack checkout are implemented; production-paid access, hosted private storage and actual provider acceptance have not been verified. See [engineering progress](docs/PROJECT_PROGRESS.md) and Issue #10.
