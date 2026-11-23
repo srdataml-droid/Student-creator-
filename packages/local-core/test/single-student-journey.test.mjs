@@ -56,13 +56,16 @@ test('one-student alpha: invite, verify, original video, independent review, pla
     assert.equal((await send('lessons/'+id+'/video','GET',undefined,undefined)).status,404);
     assert.equal((await send('lessons/'+id+'/submit','POST',{},owner)).status,200);
     assert.equal((await send('lessons/'+id+'/review','POST',{decision:'approve',reason:'Synthetic rights-cleared original work'},admin)).status,200);
-    const playback=await send('lessons/'+id+'/video','GET',undefined,owner,{range:'bytes=0-15'});
+    assert.equal((await send('lessons/'+id+'/video','GET',undefined,owner)).status,403);
+    const issued=(await send('lessons/'+id+'/playback-grant','POST',{},owner)).headers.get('set-cookie').split(';')[0];
+    const secured={cookie:SESSION_COOKIE+'='+owner+'; '+issued};
+    const playback=await send('lessons/'+id+'/video','GET',undefined,owner,{range:'bytes=0-15',...secured});
     assert.equal(playback.status,206);
     assert.deepEqual(playback.data,mp4.subarray(0,16));
     assert.match(playback.headers.get('cache-control')??'',/no-store/);
     assert.equal((await send('lessons/'+id,'GET',undefined,owner)).status,200);
     // The authenticated MP4 can still be downloaded; this is a known DRM limit, not a piracy fix.
-    const fullVideo=await send('lessons/'+id+'/video','GET',undefined,owner);
+    const fullVideo=await send('lessons/'+id+'/video','GET',undefined,owner,secured);
     assert.deepEqual(fullVideo.data,mp4);
     assert.equal((await send('lessons/'+id+'/video','GET')).status,401);
     assert.equal((await send('lessons/'+id+'/video','HEAD')).status,401);

@@ -49,7 +49,8 @@ test('backup snapshots real SQLite and verified lesson videos; fresh restore rev
    assert.throws(()=>r.getVideoFile(null,s.lessonId),/AUTH_REQUIRED/);
    const fresh=r.login('learner@backup.test','Learner Password 2026 Strong');
    assert.ok(fresh.token);
-   const current=r.getVideoFile(fresh.user,s.lessonId);
+   const issued=r.issuePlaybackGrant(fresh.user,s.lessonId,fresh.token);
+   const current=r.getVideoFile(fresh.user,s.lessonId,issued.token,fresh.token);
    assert.deepEqual(readFileSync(current.file),fixture);
   }finally{r.close();}
  }finally{s.cleanup();}

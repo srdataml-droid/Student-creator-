@@ -133,6 +133,7 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     await viewerPage.goto(`/lessons/${lessonId}`);
     await expect(viewerPage.getByRole('heading',{name:title})).toBeVisible();
     await expect(viewerPage.getByRole('button',{name:'Enable playback'})).toBeVisible();
+    expect((await viewer.request.get(`/api/local/lessons/${lessonId}/video`)).status()).toBe(403);
     await viewerPage.getByRole('button',{name:'Enable playback'}).click();
     await expect(viewerPage.locator('video')).toBeVisible();
     const privateVideo=await request.get(`${BASE}/api/local/lessons/${lessonId}/video`);

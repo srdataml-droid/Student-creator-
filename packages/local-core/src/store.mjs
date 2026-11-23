@@ -276,12 +276,15 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         throw error('PLAYBACK_GRANT_REQUIRED',403);
       return true;
     },
-    getVideoFile(actor,id){
+    getVideoFile(actor,id,grantToken=null,sessionToken=null){
       const row=db.prepare(`SELECT v.file_id,v.bytes,l.creator_id,l.status,c.active AS course_active FROM lesson_videos v
         JOIN lessons l ON l.id=v.lesson_id JOIN courses c ON c.id=l.course_id WHERE l.id=?`).get(id);
       if(!row)throw error('VIDEO_NOT_FOUND',404);
       if((row.status!=='published'||!row.course_active)&&!(actor&&!actor.suspended&&(actor.role==='admin'||actor.id===row.creator_id)))throw error('VIDEO_NOT_FOUND',404);
-      if(row.status==='published'&&row.course_active)requireCreatorAction(actor,row.creator_id,'view');
+      if(row.status==='published'&&row.course_active){
+        requireCreatorAction(actor,row.creator_id,'view');
+        store.verifyPlaybackGrant(actor,id,grantToken,sessionToken);
+      }
       if(!mediaDir)throw error('MEDIA_UNAVAILABLE',503);
       const file=join(mediaDir,`${row.file_id}.mp4`);
       let size;try{size=statSync(file).size;}catch{throw error('MEDIA_UNAVAILABLE',503);}

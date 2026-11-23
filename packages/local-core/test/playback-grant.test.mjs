@@ -46,11 +46,17 @@ test('playback grants bind user, session, lesson and a five-minute expiry withou
    assert.equal(Object.hasOwn(result.data,'token'),false);
    assert.match(result.cookie,/HttpOnly; SameSite=Strict; Max-Age=300/);
    const token=result.cookie.split(';')[0].split('=')[1];
+   assert.throws(()=>store.getVideoFile(viewer.user,lesson),/PLAYBACK_GRANT_REQUIRED/);
    assert.equal(store.verifyPlaybackGrant(viewer.user,lesson,token,viewer.token),true);
+   assert.equal(store.getVideoFile(viewer.user,lesson,token,viewer.token).sizeBytes,media.length);
    assert.throws(()=>store.verifyPlaybackGrant(author.user,lesson,token,author.token),/PLAYBACK_GRANT_REQUIRED/);
    assert.throws(()=>store.verifyPlaybackGrant(viewer.user,lesson,token+'x',viewer.token),/PLAYBACK_GRANT_REQUIRED/);
    const secondSession=store.login('buyer@grant.test',pw);
    assert.throws(()=>store.verifyPlaybackGrant(secondSession.user,lesson,token,secondSession.token),/PLAYBACK_GRANT_REQUIRED/);
+   const {DatabaseSync}=await import('node:sqlite');
+   const db=new DatabaseSync(join(dir,'campus.sqlite'));
+   try{db.prepare('UPDATE playback_grants SET expires_at=0').run();}finally{db.close();}
+   assert.throws(()=>store.getVideoFile(viewer.user,lesson,token,viewer.token),/PLAYBACK_GRANT_REQUIRED/);
    store.logout(viewer.token);
    assert.throws(()=>store.verifyPlaybackGrant(secondSession.user,lesson,token,secondSession.token),/PLAYBACK_GRANT_REQUIRED/);
  }finally{store.close();rmSync(dir,{recursive:true,force:true});}

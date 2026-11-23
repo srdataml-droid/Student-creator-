@@ -104,16 +104,19 @@ test('published video is streamed to verified students, survives restart, and ca
     assert.equal(publicPage.body.lesson.hasVideo,true);
     const catalog=await x.request(`courses/${course}`);
     assert.equal(catalog.body.lessons[0].hasVideo,true);
-    const full=await x.request(`lessons/${lessonId}/video`,'GET',undefined,student);
+    assert.equal((await x.request(`lessons/${lessonId}/video`,'GET',undefined,student)).status,403);
+    const grant=(await x.request(`lessons/${lessonId}/playback-grant`,'POST',{},student)).response.headers.get('set-cookie').split(';')[0];
+    const secured={cookie:'campus_local_session='+student+'; '+grant};
+    const full=await x.request(`lessons/${lessonId}/video`,'GET',undefined,student,secured);
     assert.equal(full.status,200);
     assert.equal(full.response.headers.get('content-type'),'video/mp4');
     assert.equal(full.response.headers.get('x-content-type-options'),'nosniff');
     assert.deepEqual(Buffer.from(full.body),fixture);
-    const suffix=await x.request(`lessons/${lessonId}/video`,'GET',undefined,student,{range:'bytes=-20'});
+    const suffix=await x.request(`lessons/${lessonId}/video`,'GET',undefined,student,{range:'bytes=-20',...secured});
     assert.equal(suffix.status,206);
     assert.deepEqual(Buffer.from(suffix.body),fixture.subarray(-20));
     x.reopen();
-    assert.equal((await x.request(`lessons/${lessonId}/video`,'HEAD',undefined,student)).status,200);
+    assert.equal((await x.request(`lessons/${lessonId}/video`,'HEAD',undefined,student,secured)).status,200);
     assert.equal(x.store.publicLesson(lessonId).hasVideo,true);
     assert.equal((await x.request(`lessons/${lessonId}/video`,'POST',fixture,student)).status,409);
   }finally{x.close();}
@@ -163,7 +166,9 @@ test('deactivated courses hide published lessons, notes, creator discovery and v
     await x.request(`lessons/${lessonId}/submit`,'POST',{},student);
     await x.request(`lessons/${lessonId}/review`,'POST',{decision:'approve',reason:'Original teaching material'},admin);
     assert.equal((await x.request(`lessons/${lessonId}`,'GET',undefined,student)).status,200);
-    assert.equal((await x.request(`lessons/${lessonId}/video`,'HEAD',undefined,student)).status,200);
+    const grant=(await x.request(`lessons/${lessonId}/playback-grant`,'POST',{},student)).response.headers.get('set-cookie').split(';')[0];
+    const secured={cookie:'campus_local_session='+student+'; '+grant};
+    assert.equal((await x.request(`lessons/${lessonId}/video`,'HEAD',undefined,student,secured)).status,200);
     assert.equal((await x.request(`creators/${creatorId}`)).status,200);
     assert.equal((await x.request(`creators/${creatorId}/follow`,'POST',{},outsider)).status,200);
     assert.deepEqual((await x.request('following','GET',undefined,outsider)).body.creators,[creatorId]);
@@ -188,6 +193,6 @@ test('deactivated courses hide published lessons, notes, creator discovery and v
     try{restore.prepare('UPDATE courses SET active=1 WHERE id=?').run(course);}
     finally{restore.close();}
     assert.equal((await x.request(`lessons/${lessonId}`,'GET',undefined,student)).status,200);
-    assert.equal((await x.request(`lessons/${lessonId}/video`,'HEAD',undefined,student)).status,200);
+    assert.equal((await x.request(`lessons/${lessonId}/video`,'HEAD',undefined,student,secured)).status,200);
   }finally{x.close();}
 });

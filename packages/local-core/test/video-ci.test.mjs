@@ -37,7 +37,7 @@ test('SQLite video upload, private review, publication and persistence',async()=
    const response=await createLocalHandler(store)(req,route.split('/'));
    const type=response.headers.get('content-type')||'';
    const content=method==='HEAD'?null:(type.includes('application/json')?await response.json():Buffer.from(await response.arrayBuffer()));
-   return {status:response.status,data:content,cookie:response.headers.get('set-cookie')?.match(/campus_local_session=([^;]+)/)?.[1]};
+   return {status:response.status,data:content,cookie:response.headers.get('set-cookie')?.match(/campus_local_session=([^;]+)/)?.[1],setCookie:response.headers.get('set-cookie')};
   }
   const admin=(await send('auth/login','POST',{email:'admin@local.test',password:'Strong Administrator Password 2026'})).cookie;
   const school=(await send('admin/institutions','POST',{name:'Example Video Campus'},admin)).data.institution.id;
@@ -59,9 +59,12 @@ test('SQLite video upload, private review, publication and persistence',async()=
   assert.equal((await send('lessons/'+id+'/video','POST',mp4,creator)).status,409);
   await send('lessons/'+id+'/review','POST',{decision:'approve',reason:'Verified original visual study material'},admin);
   assert.equal((await send('lessons/'+id,'GET',undefined,creator)).data.lesson.hasVideo,true);
-  assert.deepEqual((await send('lessons/'+id+'/video','GET',undefined,creator)).data,mp4);
+  assert.equal((await send('lessons/'+id+'/video','GET',undefined,creator)).status,403);
+  const grant=(await send('lessons/'+id+'/playback-grant','POST',{},creator)).setCookie.split(';')[0];
+  const secured={cookie:'campus_local_session='+creator+'; '+grant};
+  assert.deepEqual((await send('lessons/'+id+'/video','GET',undefined,creator,secured)).data,mp4);
   store.close();
   store=openLocalStore(join(dir,'campus.sqlite'));
-  assert.equal((await send('lessons/'+id+'/video','HEAD',undefined,creator)).status,200);
+  assert.equal((await send('lessons/'+id+'/video','HEAD',undefined,creator,secured)).status,200);
  }finally{store.close();rmSync(dir,{recursive:true,force:true});}
 });

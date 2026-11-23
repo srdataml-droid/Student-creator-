@@ -53,7 +53,8 @@ test('operator CLI independently snapshots, verifies, restores media and revokes
       assert.equal(fresh.getSession(administrator.token),null);
       const newSession=fresh.login('author@alpha.invalid','Private Synthetic Creator Password 2026');
       assert.ok(newSession?.token);
-      const content=fresh.getVideoFile(newSession.user,lessonId);
+      const issued=fresh.issuePlaybackGrant(newSession.user,lessonId,newSession.token);
+      const content=fresh.getVideoFile(newSession.user,lessonId,issued.token,newSession.token);
       assert.deepEqual(readFileSync(content.file),video);
       assert.equal(fresh.viewableLesson(newSession.user,lessonId).id,lessonId);
     }finally{fresh.close();}

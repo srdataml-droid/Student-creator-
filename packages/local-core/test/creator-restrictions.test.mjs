@@ -12,10 +12,10 @@ const lessonText='An original teaching walkthrough showing how to check assumpti
 test('creator-owned view/comment/message settings persist and independently block comment and DM APIs',async()=>{
   const dir=mkdtempSync(join(tmpdir(),'creator-permission-')),file=join(dir,'campus.sqlite');
   let store=openLocalStore(file);
-  async function req(path,method='GET',body,token){
+  async function req(path,method='GET',body,token,headers={}){
     const request=new Request('http://localhost:3000/api/local/'+path,{
       method,headers:{...(token?{cookie:'campus_local_session='+token}:{}),
-        ...(method==='POST'?{origin:'http://localhost:3000','content-type':'application/json'}:{})},
+        ...(method==='POST'?{origin:'http://localhost:3000','content-type':'application/json'}:{}),...headers},
       ...(body===undefined?{}:{body:JSON.stringify(body)})});
     const response=await createLocalHandler(store)(request,path.split('/'));
     const type=response.headers.get('content-type')||'';
@@ -52,7 +52,10 @@ test('creator-owned view/comment/message settings persist and independently bloc
     assert.equal((await req('lessons/'+draft+'/video','HEAD')).status,401);
     assert.equal((await req('lessons/'+draft,'GET',undefined,pending.token)).status,403);
     assert.equal((await req('lessons/'+draft,'GET',undefined,viewer.token)).status,200);
-    const video=await req('lessons/'+draft+'/video','GET',undefined,viewer.token);
+    assert.equal((await req('lessons/'+draft+'/video','GET',undefined,viewer.token)).status,403);
+    const grant=(await req('lessons/'+draft+'/playback-grant','POST',{},viewer.token)).headers.get('set-cookie').split(';')[0];
+    const secured={cookie:'campus_local_session='+viewer.token+'; '+grant};
+    const video=await req('lessons/'+draft+'/video','GET',undefined,viewer.token,secured);
     assert.equal(video.status,200);assert.equal(video.data.byteLength,mp4.length);
     assert.equal((await req('lessons/'+draft+'/notes','GET',undefined,viewer.token)).status,200);
     assert.equal((await req('creators/'+creator.id+'/restrictions')).status,401);

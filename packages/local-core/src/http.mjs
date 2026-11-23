@@ -51,7 +51,7 @@ export function createLocalHandler(store){
           const result=store.saveVideo(actor,id,bytes);
           return responses({video:result},result.replayed?200:201);
         }
-        const {file,sizeBytes}=store.getVideoFile(actor,id);
+        const {file,sizeBytes}=store.getVideoFile(actor,id,cookies['campus_playback_'+id],cookie);
         const range=parseVideoRange(request.headers.get('range'),sizeBytes);
         if(!range)return new Response(null,{status:416,headers:{'content-range':`bytes */${sizeBytes}`,'cache-control':'no-store','x-content-type-options':'nosniff'}});
         const headers={'content-type':'video/mp4','content-length':String(range.end-range.start+1),
