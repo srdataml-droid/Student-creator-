@@ -33,7 +33,8 @@ async function readJson(response){
 }
 
 test('synthetic creator, moderator and viewer journey keeps media access server-enforced',async({browser,request})=>{
-  test.setTimeout(150_000);
+  // Includes two independently moderated videos and a paid buyer path in CI.
+  test.setTimeout(300_000);
   const adminEmail=process.env.CI_ADMIN_EMAIL;
   const adminPassword=process.env.CI_ADMIN_PASSWORD;
   expect(adminEmail&&adminPassword,'Disposable CI administrator is required').toBeTruthy();
@@ -147,6 +148,7 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     expect(await range.body()).toEqual(syntheticVideo.subarray(0,5));
 
     // Paid browser journey, using one synthetic creator and viewer. No Paystack key.
+    console.log('browser-alpha: free protected-video journey passed');
     const paidTitle='Original paid content example '+suffix;
     await creatorPage.goto('/studio');
     await creatorPage.locator('#course').selectOption(courseId);
@@ -160,6 +162,7 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     const paidItems=await readJson(await creator.request.get('/api/local/my/lessons'));
     const paidId=paidItems.lessons.find(x=>x.title===paidTitle)?.id;
     expect(paidId).toBeTruthy();
+    console.log('browser-alpha: paid creator draft created');
     await creatorPage.locator('#price-'+paidId).fill('200');
     await creatorPage.getByRole('button',{name:'Save access price'}).click();
     await expect(creatorPage.getByText('Access price saved.',{exact:false})).toBeVisible();
@@ -169,6 +172,7 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     await creatorPage.getByRole('button',{name:'Upload video'}).click();
     await expect(creatorPage.getByText('Video saved privately.',{exact:false})).toBeVisible();
     await creatorPage.getByRole('button',{name:'Submit for review'}).click();
+    console.log('browser-alpha: paid draft priced, uploaded and submitted');
     await adminPage.goto('/manage');
     const paidReview=adminPage.getByRole('listitem').filter({hasText:paidTitle});
     await expect(paidReview).toBeVisible();
@@ -176,6 +180,7 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     await paidReview.getByRole('button',{name:'Approve'}).click();
     await expect(adminPage.getByText('Lesson approved and published.')).toBeVisible();
 
+    console.log('browser-alpha: paid lesson independently reviewed');
     expect((await viewer.request.get('/api/local/lessons/'+paidId)).status()).toBe(402);
     expect((await viewer.request.get('/api/local/lessons/'+paidId+'/notes')).status()).toBe(402);
     expect((await viewer.request.get('/api/local/lessons/'+paidId+'/comments')).status()).toBe(402);
@@ -189,6 +194,7 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     await expect(viewerPage.getByText('Sandbox checkout is not configured.',{exact:false})).toBeVisible();
     const viewport=await viewerPage.evaluate(()=>({body:document.documentElement.scrollWidth,width:window.innerWidth}));
     expect(viewport.body,'Mobile paywall horizontal overflow').toBeLessThanOrEqual(viewport.width+1);
+    console.log('browser-alpha: paid lesson paywall and mobile viewport passed');
     const buyerOrder=await viewer.request.post('/api/local/lessons/'+paidId+'/orders',{
       data:{requestKey:'browser-payment-'+suffix+'-0001'},
     });
@@ -203,6 +209,7 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     expect((await request.get(BASE+'/api/local/my/purchases')).status()).toBe(401);
     await viewerPage.setViewportSize({width:1280,height:800});
 
+    console.log('browser-alpha: pending buyer order and history passed');
     const comment=`Helpful original question ${suffix}`;
     await viewerPage.locator('#lesson-comment-text').fill(comment);
     await viewerPage.getByRole('button',{name:'Post comment'}).click();
@@ -239,6 +246,7 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     expect((await viewer.request.get(`/api/local/lessons/${lessonId}/comments`)).status()).toBe(403);
     await viewerPage.goto(`/lessons/${lessonId}`);
     await expect(viewerPage.getByText('Full posts require verified student membership',{exact:false})).toBeVisible();
+    console.log('browser-alpha: creator moderation and revocation passed');
   }finally{
     await Promise.all([admin.close(),creator.close(),viewer.close()]);
   }
