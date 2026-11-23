@@ -45,9 +45,12 @@ test('backup snapshots real SQLite and verified lesson videos; fresh restore rev
    assert.equal(r.getSession(s.studentLogin.token),null);
    assert.equal(r.getSession(s.adminLogin.token),null);
    assert.equal(r.publicLesson(s.lessonId).status,'published');
-   const current=r.getVideoFile(null,s.lessonId);
+   // Restored sessions are revoked, so protected playback requires a new login.
+   assert.throws(()=>r.getVideoFile(null,s.lessonId),/AUTH_REQUIRED/);
+   const fresh=r.login('learner@backup.test','Learner Password 2026 Strong');
+   assert.ok(fresh.token);
+   const current=r.getVideoFile(fresh.user,s.lessonId);
    assert.deepEqual(readFileSync(current.file),fixture);
-   assert.ok(r.login('learner@backup.test','Learner Password 2026 Strong').token);
   }finally{r.close();}
  }finally{s.cleanup();}
 });

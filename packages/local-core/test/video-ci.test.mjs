@@ -58,10 +58,10 @@ test('SQLite video upload, private review, publication and persistence',async()=
   await send('lessons/'+id+'/submit','POST',{},creator);
   assert.equal((await send('lessons/'+id+'/video','POST',mp4,creator)).status,409);
   await send('lessons/'+id+'/review','POST',{decision:'approve',reason:'Verified original visual study material'},admin);
-  assert.equal((await send('lessons/'+id)).data.lesson.hasVideo,true);
-  assert.deepEqual((await send('lessons/'+id+'/video')).data,mp4);
+  assert.equal((await send('lessons/'+id,'GET',undefined,creator)).data.lesson.hasVideo,true);
+  assert.deepEqual((await send('lessons/'+id+'/video','GET',undefined,creator)).data,mp4);
   store.close();
   store=openLocalStore(join(dir,'campus.sqlite'));
-  assert.equal((await send('lessons/'+id+'/video','HEAD')).status,200);
+  assert.equal((await send('lessons/'+id+'/video','HEAD',undefined,creator)).status,200);
  }finally{store.close();rmSync(dir,{recursive:true,force:true});}
 });
