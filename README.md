@@ -75,3 +75,14 @@ The founder has confirmed the student-only creator-economy model: creators retai
 - [80–100-student engineering test and release matrix](docs/PILOT_100_STUDENTS_RELEASE_PLAN_2026-11-23.md)
 
 **Status:** These documents do not claim video entitlement security, Paystack payments, payouts, Supabase staging or public deployment are complete. Continue development in this repository rather than the older `school-learning-platform`.
+
+## Architecture and workstream planning — 23 November 2026
+
+This active repository uses **main** for the current founder-directed work; no alternative application repo or feature branch is being created for this architecture phase.
+
+- [C4 architecture and system boundaries](docs/architecture/01_SYSTEM_CONTEXT_AND_CONTAINERS.md) — actual local app vs proposed hosted platform; users, services, deployment and trust boundaries.
+- [Domains, API/data contracts, licensing and security](docs/architecture/02_DOMAIN_DATA_AND_SECURITY_CONTRACTS.md) — creator copyright, purchasing *access*, content restrictions, identity, transactions and tests.
+- [Team roles, deliverables and implementation workstreams](docs/architecture/03_ROLES_WORKSTREAMS_AND_RELEASE_PLAN.md) — role ownership, creator-tester involvement, W00–W14 work items and staged pilot gates.
+- [Expert and open-source engineering research](docs/EXPERT_ROLES_AND_OPEN_SOURCE_PLAYBOOK_2026-11-23.md) — source-linked product, architecture, payment, video and reliability practices.
+
+**Status:** The links above are architecture/implementation plans, NOT confirmation that paid access, hosted streaming, real payouts or global functionality work. See [Project Progress](docs/PROJECT_PROGRESS.md) for tested vs blocked state.
