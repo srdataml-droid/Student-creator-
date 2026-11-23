@@ -74,3 +74,42 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/tests/creator_public_profiles.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/creator_restrictions.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/comments.sql
+
+  browser-alpha:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned web dependencies and disposable browser tooling
+        working-directory: apps/web
+        run: |
+          npm ci --no-audit --no-fund
+          npm install --no-save --no-package-lock --no-audit --no-fund @playwright/test@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Run synthetic student creator / moderator / viewer browser journey
+        env:
+          APP_DATA_MODE: local
+          CI_ADMIN_EMAIL: browser-admin@example.invalid
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: |
+          set -euo pipefail
+          export LOCAL_SQLITE_PATH="$RUNNER_TEMP/student-creators-browser.sqlite"
+          export LOCAL_ADMIN_EMAIL="$CI_ADMIN_EMAIL"
+          export LOCAL_ADMIN_PASSWORD="$(node -e "process.stdout.write(require('node:crypto').randomBytes(24).toString('base64url'))")"
+          export CI_ADMIN_PASSWORD="$LOCAL_ADMIN_PASSWORD"
+          echo "::add-mask::$CI_ADMIN_PASSWORD"
+          node scripts/local-admin.mjs
+          npm run build --prefix apps/web
+          npm run start --prefix apps/web -- -p 3000 > "$RUNNER_TEMP/student-creators-browser.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 45); do
+            if curl -fsS http://127.0.0.1:3000/api/local/health >/dev/null 2>&1; then break; fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then cat "$RUNNER_TEMP/student-creators-browser.log"; exit 1; fi
+            sleep 1
+          done
+          curl -fsS http://127.0.0.1:3000/api/local/health >/dev/null || { cat "$RUNNER_TEMP/student-creators-browser.log"; exit 1; }
+          (cd apps/web && npx playwright test e2e/local-alpha.spec.mjs --workers=1 --reporter=line --trace=retain-on-failure)
