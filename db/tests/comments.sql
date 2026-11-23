@@ -11,7 +11,7 @@ INSERT INTO public.content_comment_reports(comment_id,reporter_id,reason)
 
 \echo 'Anonymous visitors cannot read full comment threads or private reports'
 SET ROLE anon;
-DO $ DECLARE n integer;
+DO $creatorPolicyCheck$ DECLARE n integer;
 BEGIN
  BEGIN
   SELECT count(*) INTO n FROM public.content_comments;
@@ -30,7 +30,7 @@ BEGIN
   RAISE EXCEPTION 'Anonymous inserted comment';
  EXCEPTION WHEN insufficient_privilege THEN NULL;
  END;
-END $$;
+END $creatorPolicyCheck$;
 RESET ROLE;
 
 \echo 'Authenticated cannot bypass independent admin moderation'
