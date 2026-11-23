@@ -2,7 +2,7 @@
 
 **Version:** Operating plan v0.1 · 23 November 2026 · **direct commits to main, one repository**: srdataml-droid/Student-creator-.
 **Status:** Proposed team and feature plan. No volunteer assignment has been accepted; names, permissions, deadlines, team capacity and budgets are NOT presumed.
-**Pilot:** 5–10 closed testers first, then up to 80–100 verified students if release gates pass.
+**Founder-updated active rollout:** **ONE** consenting verified student first, then **100**, then **1,000**, with independent security/reliability and founder approval gates. The earlier 5–10 / 80–100 alpha plan below is superseded wherever it conflicts with this one-student-first requirement; see Issue #12.
 **Product:** social video and student creator economy, NOT a school-management platform.
 
 ## A. Teams represent functions, not 16 salaries
@@ -52,7 +52,7 @@ Founder is the decision owner; AI assists implementation and research but is not
 | ID | Workstream / role lead | Deliverable | Depends on | Acceptance evidence |
 |---|---|---|---|---|
 | W00 | Founder + Eng | Current main audit and CI baseline | None | Actual repo SHA, tests, build, current routes and migration inventory |
-| W01 | PM + Research + Creator | Founder-approved pilot flows and 5–10 tester onboarding plan | W00 | 3–6 grounded user observations; key use-case and success metric |
+| W01 | PM + Research + Creator | One consenting student's pilot flow and later expansion research | W00 | One opt-in task record; clear use-case and success metric without fabricating interviews |
 | W02 | UX + Frontend | Mobile creator-first feed/studio/profile and responsive navigation | W00/W01 | Signed-off usability tasks and mobile layout checks |
 | W03 | Identity + Backend | Private verification, eligibility, appeals and roles | W00 | API/permission tests, no legal identity leak, moderation audit |
 | W04 | Content + Media | Safe creator uploads, rights declaration, transcoding and protected playback | W03 | Failed upload/processing test, blocked unauthenticated media, Android low-data test |
@@ -61,8 +61,8 @@ Founder is the decision owner; AI assists implementation and research but is not
 | W07 | Database + Finance | One-time entitlements and balanced journal, refunds, reconciliation | W06 | Atomic transactions, duplicate/concurrent callback tests, manual audit |
 | W08 | Creator Experience | Earnings dashboard and creator portfolio | W07 for money, W03 for portfolio | Derived figures correct, no fake earnings, creator profile privacy |
 | W09 | SRE + Security | Dedicated hosted DB/Auth/Media staging, backups, monitoring and rollout | W03–W08 | Hosted RLS, restore drill, alerts, auth, video and checkout E2E |
-| W10 | QA + Product | Private alpha 5–10 users | W09 | Independent real-device tests, feedback, no open critical issue |
-| W11 | Growth + Support | 80–100 student pilot | W10 | Activated creators, returning viewers, transactions and cost measured |
+| W10 | QA + Product | Private alpha with exactly **1** consenting student | W09 | Independent real-device tests, consent and feedback, no open critical issue |
+| W11 | Growth + Support | Future **100-student** pilot, then **1,000** only after a second release gate | W10 | Proven one-person alpha, staged capacity/security costs and founder approvals; no automatic scaling |
 | W12 | Community + UX | Reliable DMs, campus communities, classes and tutoring | W11 prioritization | Permission, session and class access tests |
 | W13 | Growth + Finance | Funded sponsorships, referral reward caps, qualifying-view policies | Validated economics | Sponsor funds received, no pay per unqualified raw view |
 | W14 | International + Legal | Country currency/identity/tax and payout readiness | W11 and local partner research | End-to-end supported local payment/payout & compliance per market |
