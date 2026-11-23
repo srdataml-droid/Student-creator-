@@ -31,7 +31,7 @@ export default async function WatchLesson({params}){
     <div className="watch-stage">
      <div className="watch-stage-top"><span>ORIGINAL STUDENT VIDEO</span>{lesson.priceKobo>0?<span className="watch-paid-chip">PURCHASED ACCESS</span>:<span className="watch-free-chip">FREE ACCESS</span>}</div>
      <div className="watch-video-frame">
-      <ProtectedVideo lessonId={lesson.id} label={'Original video lesson: '+lesson.title}/>
+      <ProtectedVideo lessonId={lesson.id} label={'Original video lesson: '+lesson.title} hasCaptions={lesson.hasCaptions}/>
      </div>
      <div className="watch-stage-caption">
       <p className="watch-stage-creator">{handle}</p>
