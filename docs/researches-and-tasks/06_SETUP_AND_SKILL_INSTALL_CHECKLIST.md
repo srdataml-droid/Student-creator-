@@ -3,7 +3,7 @@ Date: 2026-11-23 · Branch researches-and-tasks.
 
 ## Installed in THIS repository (version-controlled, not yet merged to main)
 - Root AGENTS.md, .github/copilot-instructions.md.
-- Eight Agent Skills under .agents/skills/[skill]/SKILL.md: discovery, architecture, UX, secure-access, payments, media, QA and leadership.
+- Ten Agent Skills under .agents/skills/[skill]/SKILL.md: discovery, architecture, UX, secure-access, payments, media, QA, leadership, analytics/growth and trust/compliance.
 - GitHub issue templates engineering-task.yml and learning-task.yml.
 - Research, system maps, time estimates, leadership roadmap and work catalog under docs/researches-and-tasks/.
 
@@ -35,7 +35,7 @@ The available GitHub connector can create issues/branches/docs but does not curr
 Docs: https://docs.github.com/en/issues/planning-and-tracking-with-projects/learning-about-projects/quickstart-for-projects.
 
 ## ChatGPT plugins and external integrations
-Notion is available as a connected plugin, but we choose **GitHub Issues as single source of truth** to avoid duplicates. Plugin discovery in this session now reports **Superpowers installed** in ChatGPT, after a suggestion; this status does **not** prove a project integration, successful execution or that anyone installed it locally. It is optional and independent of the eight repo-local skills. No external plugin can be assumed installed just because we suggested it. Never claim account creation, subscriptions, licenses or tools installed on the user's device without explicit verification.
+Notion is available as a connected plugin, but we choose **GitHub Issues as single source of truth** to avoid duplicates. Plugin discovery in this session now reports **Superpowers installed** in ChatGPT, after a suggestion; this status does **not** prove a project integration, successful execution or that anyone installed it locally. It is optional and independent of the ten repo-local skills. No external plugin can be assumed installed just because we suggested it. Never claim account creation, subscriptions, licenses or tools installed on the user's device without explicit verification.
 
 ## Time/cost reminder
 Avoid paid tools until needed by a real work item. First priority: actual main CI/test/route audit, not shopping for a new engineering suite.
