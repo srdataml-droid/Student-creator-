@@ -59,3 +59,10 @@ Weekly plan = 15 hours. If a critical build fails, prioritize investigation over
 - Weekly goals: one user outcome, one testable increment, one quality/reliability proof.
 - Label milestones as proposed, test-verified, staged, public only when those states are true.
 - Private student names, emails, identities, PSP secrets and informal relationships never belong in public tickets.
+
+## Additional safety and growth learning
+- [#25 — Analytics, creator activation and referral metrics](https://github.com/srdataml-droid/Student-creator-/issues/25), target 2027-01-17 (planning only).
+- [#26 — Copyright, private identity, appeals and finance approval](https://github.com/srdataml-droid/Student-creator-/issues/26), target 2027-01-24 (planning only).
+- [#27 — CI, backups and incident response](https://github.com/srdataml-droid/Student-creator-/issues/27), target 2027-02-07 (planning only).
+
+Ten source-controlled AI skills and two canonical issue templates exist in this research branch; GitHub Projects custom fields and actual calendar schedules remain unconfigured.
