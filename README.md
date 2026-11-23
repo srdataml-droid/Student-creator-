@@ -70,5 +70,8 @@ The founder has confirmed the student-only creator-economy model: creators retai
 - [Paid access, creator rights, monetization research and global strategy](docs/CREATOR_COMMERCE_RIGHTS_AND_GLOBAL_STRATEGY_2026-11-23.md)
 - [80–100-student pilot and engineering release gates](docs/PILOT_AND_ENGINEERING_RELEASE_PLAN_2026-11-23.md)
 - [Product lifecycle and system flow diagrams](docs/PRODUCT_LIFECYCLE_AND_SYSTEM_FLOWS_2026-11-23.md)
+- [Detailed creator access, copyright and blocking acceptance contract](docs/CONTENT_ACCESS_COPYRIGHT_BLOCKING_2026-11-23.md)
+- [Monetization, qualified-view reward, referrals and global currency notes](docs/MONETIZATION_GLOBAL_AND_REFERRALS_2026-11-23.md)
+- [80–100-student engineering test and release matrix](docs/PILOT_100_STUDENTS_RELEASE_PLAN_2026-11-23.md)
 
 **Status:** These documents do not claim video entitlement security, Paystack payments, payouts, Supabase staging or public deployment are complete. Continue development in this repository rather than the older `school-learning-platform`.
