@@ -10,6 +10,7 @@ export function toFeedPreview(lesson,course,institutionName){
     previewText:lesson.previewText,
     publishedAt:lesson.publishedAt,
     hasVideo:Boolean(lesson.hasVideo),
+    hasCaptions:Boolean(lesson.hasCaptions),
     priceKobo:lesson.priceKobo??0,
     courseCode:course.code,
     courseTitle:course.title,
