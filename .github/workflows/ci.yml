@@ -70,10 +70,12 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/migrations/0002_creator_comments.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/0003_creator_public_profiles.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/0004_creator_restrictions.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0005_paid_access_security.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/smoke.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/creator_public_profiles.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/creator_restrictions.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/comments.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/paid_access.sql
 
   browser-alpha:
     runs-on: ubuntu-24.04
