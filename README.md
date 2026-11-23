@@ -95,3 +95,19 @@ This active repository uses **main** for the current founder-directed work; no a
 - [#12 — W10–W11: Creator-user alpha and controlled 80–100-student pilot](https://github.com/srdataml-droid/Student-creator-/issues/12)
 
 These issues are **open plans**; do not interpret their existence as completed features. Founder-approved small changes on main only, with exact-commit test evidence.
+
+## Researches and tasks branch — team and AI engineering setup (23 Nov 2026)
+
+The feature-ready application remains in this repository. The new **researches-and-tasks** branch contains reviewed-source engineering research, diagrams, scoped role skills, AI tools and workload estimates, a proposal for weekly leadership goals and phased release gates. **It is not a working payments implementation or a production launch.**
+
+- [Start here: learned engineering principles and 4 diagrams](docs/researches-and-tasks/00_INDEX_AND_LEARNED_FLOWS.md)
+- [Full proposed architecture and invariants](docs/researches-and-tasks/01_SYSTEM_ARCHITECTURE_DECISIONS.md)
+- [Roles, RACI and learning tracks](docs/researches-and-tasks/02_ROLE_SKILLS_AND_LEARNING.md)
+- [AI tools, account strategy and workload estimates](docs/researches-and-tasks/03_AI_TOOLS_TIME_AND_ACCOUNTS.md)
+- [Goal setting, leadership and milestones](docs/researches-and-tasks/04_GOALS_ROADMAP_AND_LEADERSHIP.md)
+- [Engineering task catalog](docs/researches-and-tasks/05_EXECUTION_TASK_CATALOG.md)
+- [Local skill/tool setup checklist](docs/researches-and-tasks/06_SETUP_AND_SKILL_INSTALL_CHECKLIST.md)
+- [GitHub issues #9–#24, first 15-hour week plan](docs/researches-and-tasks/07_GITHUB_ISSUES_AND_FIRST_SESSIONS.md)
+
+Repository coding agents can load root [AGENTS.md](AGENTS.md) and eight targeted [Agent Skills](.agents/skills/). GitHub issues are the implemented tracker; custom GitHub Projects board/iteration fields need separate authorized UI setup. This planning branch follows the owner's newer instruction to create **researches-and-tasks**; do not interpret the older main-only note as prohibiting it. No second app repository was created.
+

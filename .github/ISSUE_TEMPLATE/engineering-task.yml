@@ -1,0 +1,87 @@
+name: Engineering / Product Delivery Task
+description: A user-grounded, risk-reviewed, AI-assisted task with exact test evidence.
+title: "[Work] "
+body:
+  - type: markdown
+    attributes:
+      value: "Use the researches-and-tasks plan. Do not put real student IDs, passwords, payment keys, or confidential volunteer details in this public repository."
+  - type: input
+    id: task_id
+    attributes:
+      label: Task ID / workstream
+      placeholder: "R06 / W04"
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: Accountable function
+      options:
+        - Founder / Product
+        - Research / Community
+        - UX / Design
+        - Architecture / Tech Lead
+        - Frontend
+        - Backend / API
+        - Database
+        - Media / Streaming
+        - Finance / Payments
+        - Security / Privacy
+        - QA / Test
+        - SRE / DevOps
+        - Analytics / AI
+        - Legal / Compliance
+    validations:
+      required: true
+  - type: dropdown
+    id: priority
+    attributes:
+      label: Priority
+      options:
+        - "P0 — trust, money or data risk"
+        - "P1 — core pilot blocker"
+        - "P2 — important quality"
+        - "P3 — later enhancement"
+    validations:
+      required: true
+  - type: input
+    id: effort
+    attributes:
+      label: Estimated focused founder hours with AI
+      placeholder: "8–16h, excluding provider approvals"
+    validations:
+      required: true
+  - type: input
+    id: date
+    attributes:
+      label: Proposed target date (not a promise)
+      placeholder: "YYYY-MM-DD / dependent on W00"
+  - type: textarea
+    id: scenario
+    attributes:
+      label: User need and scope
+      description: Explain who needs it, why, and what is outside scope.
+    validations:
+      required: true
+  - type: textarea
+    id: source
+    attributes:
+      label: Relevant sources, code paths and expert learning
+      description: Link source documentation, current code, skill and architecture notes.
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance tests and failure/security cases
+      description: Include user task, API negative tests, concurrency, privacy and recovery when relevant.
+    validations:
+      required: true
+  - type: textarea
+    id: dependencies
+    attributes:
+      label: Dependencies, approvals and blockers
+      description: Name issue numbers or decisions needed before starting.
+  - type: textarea
+    id: results
+    attributes:
+      label: Evidence and results (fill when completed)
+      description: Exact commit, test/build commands, CI links, real-device/browser evidence and unresolved issues. Never invent test passes.
