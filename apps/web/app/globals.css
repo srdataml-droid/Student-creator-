@@ -328,3 +328,27 @@ button:disabled{opacity:.55;cursor:not-allowed}
  .watch-video-frame{min-height:260px}
  .watch-info{padding:21px}
 }
+
+
+/* Creator portfolio grid: three compact media tiles as in the screenshots. */
+.profile-post-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:13px}
+.profile-post-visual{position:relative;min-height:182px;padding:16px}
+.profile-post-price{position:absolute;top:13px;left:13px;
+ border-radius:5px;padding:5px 8px;letter-spacing:.05em;
+ background:#eebd5d;color:#212715;font-size:.62rem;font-weight:850}
+.profile-post-price:only-of-type{background:#eebd5d}
+.profile-post-visual small{margin-left:auto}
+.profile-post-copy{padding:13px}
+.profile-post-copy h3{font-size:.94rem;line-height:1.35}
+.profile-post-copy p{font-size:.72rem}
+@media(max-width:600px){
+ .profile-post-grid{grid-template-columns:repeat(3,minmax(0,1fr));gap:7px}
+ .profile-post-visual{min-height:118px;padding:10px}
+ .profile-post-visual span{font-size:1.45rem}
+ .profile-post-visual small{font-size:.52rem}
+ .profile-post-price{top:auto;left:8px;bottom:8px;font-size:.55rem;padding:4px 6px}
+ .profile-post-copy{padding:8px}
+ .profile-post-copy span{font-size:.52rem}
+ .profile-post-copy h3{font-size:.72rem;line-height:1.3;margin:5px 0}
+ .profile-post-copy p{display:none}
+}
