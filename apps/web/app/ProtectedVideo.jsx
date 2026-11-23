@@ -4,7 +4,7 @@ import {api,friendlyError} from '../lib/local-client.js';
 
 /** Session cookies authorize bytes; a removable overlay only discourages capture.
  * No browser API can reliably prevent screenshots or an external camera. */
-export default function ProtectedVideo({lessonId,label}){
+export default function ProtectedVideo({lessonId,label,hasCaptions=false}){
   const [ready,setReady]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
   const [watermark,setWatermark]=useState(null),[position,setPosition]=useState(0);
   const frame=useRef(null);
@@ -31,6 +31,7 @@ export default function ProtectedVideo({lessonId,label}){
         controlsList="nofullscreen" disablePictureInPicture
         src={`/api/local/lessons/${lessonId}/video`}
         onError={()=>{setReady(false);setError('Playback failed or video access expired. Try enabling playback again.');}}>
+        {hasCaptions&&<track kind="captions" srcLang="en" label="English captions" src={`/api/local/lessons/${lessonId}/video/captions`} default/>}
         Your browser cannot play this video.
       </video>
       {watermark&&<span className={`playback-watermark position-${position}`} data-testid="playback-watermark" data-position={position} aria-hidden="true">{watermark.label}</span>}
