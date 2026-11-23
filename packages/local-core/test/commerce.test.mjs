@@ -6,6 +6,7 @@ import {join} from 'node:path';
 import {DatabaseSync} from 'node:sqlite';
 import {openLocalStore} from '../src/store.mjs';
 import {createLocalHandler} from '../src/http.mjs';
+import {PaystackGatewayError} from '../../payment-core/src/paystack-client.mjs';
 const lessonText='An original synthetic explanation of a mathematical worked example. We explain the independent derivation, check each step and give a detailed conclusion without any real user data.';
 test('₦200 synthetic purchase gates access, resists retries, balances journal and survives restart',async()=>{
  const dir=mkdtempSync(join(tmpdir(),'commerce-test-')),path=join(dir,'campus.sqlite');
@@ -67,8 +68,19 @@ test('₦200 synthetic purchase gates access, resists retries, balances journal 
   assert.equal(checkout.status,200);assert.match(checkout.data.checkout.authorizationUrl,/checkout\.paystack\.com/);
   assert.equal((await req('orders/'+reference+'/confirm','POST',{},other.token)).status,404);
   assert.equal((await req('orders/'+reference+'/confirm','POST',{providerTransactionId:'fake'},buyer.token)).status,400);
-  const confirmed=await req('orders/'+reference+'/confirm','POST',{},buyer.token);
-  assert.equal(confirmed.status,200);assert.equal(confirmed.data.order.status,'paid');
+  const healthy=sandboxGateway;
+  sandboxGateway={...healthy,verify:async()=>{throw new PaystackGatewayError('GATEWAY_TIMEOUT','Synthetic provider timeout');}};
+  assert.equal((await req('orders/'+reference+'/confirm','POST',{},buyer.token)).status,503);
+  assert.equal((await req('lessons/'+id,'GET',undefined,buyer.token)).status,402);
+  assert.equal((await req('orders/'+reference,'GET',undefined,buyer.token)).data.order.status,'pending');
+  sandboxGateway=healthy;
+  const confirmed=await Promise.all([
+    req('orders/'+reference+'/confirm','POST',{},buyer.token),
+    req('orders/'+reference+'/confirm','POST',{},buyer.token),
+  ]);
+  assert.equal(confirmed[0].status,200);assert.equal(confirmed[1].status,200);
+  assert.equal(confirmed[0].data.order.status,'paid');assert.equal(confirmed[1].data.order.status,'paid');
+  assert.deepEqual(confirmed.map(x=>x.data.order.replayed).sort(),[false,true]);
   assert.equal(store.applyVerifiedTestCharge(reference,payment('tr_test_01')).status,'paid');
   assert.equal(store.applyVerifiedTestCharge(reference,payment('tr_test_01')).replayed,true);
   assert.throws(()=>store.applyVerifiedTestCharge(reference,payment('tr_test_02')),{code:'PAYMENT_CONFLICT'});
