@@ -61,12 +61,13 @@ export function createLocalCommerce({db,transaction,audit,error,requireVerified,
   * NEVER expose via HTTP, webhook or production callbacks. Real settlement
   * must call the Paystack API with a test key before this state transition.
   */
- function applyVerifiedTestCharge(reference,verificationResponse){
-  if(process.env.NODE_ENV==='production')throw error('TEST_SETTLEMENT_DISABLED',403);
+ function applyTrustedCharge(reference,charge){
   return transaction(()=>{
    const order=db.prepare('SELECT * FROM purchase_orders WHERE reference=?').get(reference);
    if(!order)throw error('ORDER_NOT_FOUND',404);
-   const charge=validateVerifiedCharge({reference:order.reference,amountKobo:order.amount_kobo,buyerEmail:order.buyer_email,domain:'test'},verificationResponse);
+   if(!charge||charge.reference!==order.reference||charge.amountKobo!==order.amount_kobo||
+      charge.currency!=='NGN'||typeof charge.providerTransactionId!=='string'||!charge.providerTransactionId)
+      throw error('PAYMENT_CONFLICT',409);
    if(order.status==='paid'){
     if(order.provider_transaction_id!==charge.providerTransactionId)throw error('PAYMENT_CONFLICT',409);
     return {...snapshot(order),replayed:true};
@@ -80,6 +81,36 @@ export function createLocalCommerce({db,transaction,audit,error,requireVerified,
    audit(order.buyer_id,'purchase.entitlement.granted',reference,{lessonId:order.lesson_id});
    return {...snapshot(db.prepare('SELECT * FROM purchase_orders WHERE reference=?').get(reference)),replayed:false};
   });
+ }
+ function testVerification(reference,response){
+  if(process.env.NODE_ENV==='production')throw error('TEST_SETTLEMENT_DISABLED',403);
+  const order=db.prepare('SELECT * FROM purchase_orders WHERE reference=?').get(reference);
+  if(!order)throw error('ORDER_NOT_FOUND',404);
+  const charge=validateVerifiedCharge({reference:order.reference,amountKobo:order.amount_kobo,buyerEmail:order.buyer_email,domain:'test'},response);
+  return applyTrustedCharge(reference,charge);
+ }
+ function trustedOrder(actor,reference){
+  requireVerified(actor);
+  const r=db.prepare('SELECT * FROM purchase_orders WHERE reference=? AND buyer_id=?').get(reference,actor.id);
+  if(!r)throw error('ORDER_NOT_FOUND',404);
+  return r;
+ }
+ function orderStatus(actor,reference){return snapshot(trustedOrder(actor,reference));}
+ async function sandboxCheckout(actor,reference,gateway){
+  const row=trustedOrder(actor,reference);
+  if(row.status!=='pending')throw error('ALREADY_PURCHASED',409);
+  requireCreatorAction(actor,row.creator_id,'view');
+  if(!gateway||typeof gateway.initialize!=='function')throw error('SANDBOX_PAYMENTS_UNAVAILABLE',503);
+  return gateway.initialize({reference:row.reference,buyerEmail:row.buyer_email,amountKobo:row.amount_kobo,domain:'test'});
+ }
+ async function confirmSandboxOrder(actor,reference,gateway){
+  const row=trustedOrder(actor,reference);
+  if(row.status==='paid')return {...snapshot(row),replayed:true};
+  if(!gateway||typeof gateway.verify!=='function')throw error('SANDBOX_PAYMENTS_UNAVAILABLE',503);
+  // The adapter performs Paystack server-to-server verification of order,
+  // amount, currency, customer and test domain. Never trust the browser callback.
+  const verified=await gateway.verify({reference:row.reference,buyerEmail:row.buyer_email,amountKobo:row.amount_kobo,domain:'test'});
+  return applyTrustedCharge(reference,verified);
  }
  function ownOrders(actor){requireVerified(actor);return db.prepare('SELECT * FROM purchase_orders WHERE buyer_id=? ORDER BY created_at DESC LIMIT 100').all(actor.id).map(snapshot);}
  function creatorEarnings(actor){
@@ -96,5 +127,5 @@ export function createLocalCommerce({db,transaction,audit,error,requireVerified,
    entitled:owned||!amountKobo||Boolean(db.prepare('SELECT 1 FROM content_entitlements WHERE buyer_id=? AND lesson_id=?').get(actor.id,id)),
    creatorOwned:owned,checkoutEnabled:false};
  }
- return Object.freeze({price,setPrice,requireAccess,createOrder,applyVerifiedTestCharge,ownOrders,creatorEarnings,lessonAccess});
+ return Object.freeze({price,setPrice,requireAccess,createOrder,applyVerifiedTestCharge:testVerification,ownOrders,creatorEarnings,lessonAccess,orderStatus,sandboxCheckout,confirmSandboxOrder});
 }
