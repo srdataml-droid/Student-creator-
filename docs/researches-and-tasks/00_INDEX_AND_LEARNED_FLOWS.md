@@ -121,3 +121,18 @@ Reuse the **process** and expert sources, not an accidental Student Creators arc
 - Landlord/Tenant: rent ledger, permission scopes and restoration.
 - Student Attendance: on-device face matching/privacy and error rates.
 All get their own domain threat model, tests and real runtime evidence.
+
+
+## Implementation and learning issue dashboard (created GitHub issues)
+- Existing engineering: [#9 current-source CI audit](https://github.com/srdataml-droid/Student-creator-/issues/9), [#10 creator restriction/identity](https://github.com/srdataml-droid/Student-creator-/issues/10), [#11 sandbox licensed-access commerce](https://github.com/srdataml-droid/Student-creator-/issues/11), [#12 pilot test](https://github.com/srdataml-droid/Student-creator-/issues/12).
+- Expert/role study: [#13 Product](https://github.com/srdataml-droid/Student-creator-/issues/13), [#14 Architecture](https://github.com/srdataml-droid/Student-creator-/issues/14), [#15 UX](https://github.com/srdataml-droid/Student-creator-/issues/15), [#16 Authorization](https://github.com/srdataml-droid/Student-creator-/issues/16), [#17 Payments](https://github.com/srdataml-droid/Student-creator-/issues/17), [#18 Video](https://github.com/srdataml-droid/Student-creator-/issues/18), [#19 QA](https://github.com/srdataml-droid/Student-creator-/issues/19), [#20 Leadership](https://github.com/srdataml-droid/Student-creator-/issues/20).
+- Operations and policy: [#21 leadership configuration](https://github.com/srdataml-droid/Student-creator-/issues/21), [#22 privacy-safe analytics](https://github.com/srdataml-droid/Student-creator-/issues/22), [#23 staging/backup](https://github.com/srdataml-droid/Student-creator-/issues/23), [#24 policy approval](https://github.com/srdataml-droid/Student-creator-/issues/24).
+- Further learning: [#25 analytics/growth](https://github.com/srdataml-droid/Student-creator-/issues/25), [#26 trust/compliance](https://github.com/srdataml-droid/Student-creator-/issues/26), [#27 SRE](https://github.com/srdataml-droid/Student-creator-/issues/27).
+
+### Reusable repo-local skills
+Ten role-specific procedures under `.agents/skills/`: product-discovery, architecture-lead, ux-creator-flows, secure-content-access, payments-ledger, media-upload, qa-release, analytics-growth, trust-compliance-operations, team-leadership. These are GitHub files that compatible agents can load, not separate paid app subscriptions or autonomously running workers.
+
+### Actual setup status
+- **Done:** plan documents, flows, architecture, branch, GitHub issues and templates, repo agent skills.
+- **Not done:** GitHub Projects board/iteration fields, calendar events, external app installs (except any connections the user completes), actual code implementation, PSP sandbox configuration, hosted database, CI test pass on this branch, team assignment or live launch.
+- **Next:** run exact-source build and smoke tests, then begin W00/#9; only update statuses with evidence.
