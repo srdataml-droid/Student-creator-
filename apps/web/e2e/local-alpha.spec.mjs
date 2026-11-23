@@ -75,6 +75,14 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     await login(creatorPage,creatorEmail,password);
     await expect(creatorPage.getByText('Your campus membership is waiting for an administrator', {exact:false})).toBeVisible();
     await login(viewerPage,viewerEmail,password);
+    // An unverified account may sign in, but cannot create content, follow or review identities.
+    expect((await creator.request.get('/api/local/following')).status()).toBe(403);
+    expect((await creator.request.get('/api/local/admin/pending-users')).status()).toBe(403);
+    const deniedDraft=await creator.request.post('/api/local/lessons/drafts',{
+      data:{courseId,title:'Unverified draft should fail',description:'',previewText:'',lessonText:studentText,
+        rightsAttested:true,creationKey:`unverified-browser-${suffix}-draft`},
+    });
+    expect(deniedDraft.status()).toBe(403);
 
     const {users}=await readJson(await admin.request.get('/api/local/admin/pending-users'));
     const creatorId=users.find(x=>x.email===creatorEmail)?.id;
@@ -126,6 +134,10 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     await expect(viewerPage.getByRole('heading',{name:title})).toBeVisible();
     const privateVideo=await request.get(`${BASE}/api/local/lessons/${lessonId}/video`);
     expect([401,403,404]).toContain(privateVideo.status());
+    // No full-text, download or comments leakage to visitors via direct API requests.
+    expect((await request.get(`${BASE}/api/local/lessons/${lessonId}`)).status()).toBe(403);
+    expect((await request.get(`${BASE}/api/local/lessons/${lessonId}/notes`)).status()).toBe(403);
+    expect((await request.get(`${BASE}/api/local/lessons/${lessonId}/comments`)).status()).toBe(403);
     const range=await viewer.request.get(`/api/local/lessons/${lessonId}/video`,{headers:{range:'bytes=0-4'}});
     expect(range.status()).toBe(206);
     expect(await range.body()).toEqual(syntheticVideo.subarray(0,5));
@@ -138,12 +150,31 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     await viewerPage.getByRole('button',{name:'+ Follow creator'}).click();
     await expect(viewerPage.getByRole('button',{name:/Following/})).toBeVisible();
 
-    // Creator restriction must prevent direct media and full-post retrieval, not just hide UI.
+    // Independent permission flags: comment-only denial must not block authorized viewing.
+    const commentOnly=await creator.request.post(`/api/local/creators/${creatorId}/restrictions/${viewerId}`,{
+      data:{view:false,comment:true,message:false},
+    });
+    await readJson(commentOnly);
+    expect((await viewer.request.get(`/api/local/lessons/${lessonId}/video`,{
+      headers:{range:'bytes=0-4'},
+    })).status()).toBe(206);
+    const deniedComment=await viewer.request.post(`/api/local/lessons/${lessonId}/comments`,{
+      data:{text:'This comment must be blocked',creationKey:`denied-browser-${suffix}-comment`},
+    });
+    expect(deniedComment.status()).toBe(403);
+
+    // Viewing restriction must prevent direct media and full-post retrieval, not just hide UI.
     const rule=await creator.request.post(`/api/local/creators/${creatorId}/restrictions/${viewerId}`,{
       data:{view:true,comment:false,message:false},
     });
     await readJson(rule);
     expect((await viewer.request.get(`/api/local/lessons/${lessonId}/video`)).status()).toBe(403);
+    expect((await viewer.request.head(`/api/local/lessons/${lessonId}/video`)).status()).toBe(403);
+    expect((await viewer.request.get(`/api/local/lessons/${lessonId}/video`,{
+      headers:{range:'bytes=0-4'},
+    })).status()).toBe(403);
+    expect((await viewer.request.get(`/api/local/lessons/${lessonId}/notes`)).status()).toBe(403);
+    expect((await viewer.request.get(`/api/local/lessons/${lessonId}`)).status()).toBe(403);
     expect((await viewer.request.get(`/api/local/lessons/${lessonId}/comments`)).status()).toBe(403);
     await viewerPage.goto(`/lessons/${lessonId}`);
     await expect(viewerPage.getByText('Full posts require verified student membership',{exact:false})).toBeVisible();
