@@ -29,7 +29,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
   // A quota by itself is not enough: a stranger could otherwise take the sole slot.
   const pilotEmail=typeof pilotAllowedEmail==='string' ? pilotAllowedEmail.trim().toLowerCase() : null;
   if((pilotStudentCap!==null&&(!Number.isSafeInteger(pilotStudentCap)||pilotStudentCap<1||pilotStudentCap>1000))||
-      (pilotEmail!==null&&(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(pilotEmail)||pilotEmail.length>254))||
+      (pilotEmail!==null&&(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(pilotEmail)||pilotEmail.length>254))||
       ((pilotStudentCap===1)!==(pilotEmail!==null)))
     throw error('INVALID_PILOT_CONFIGURATION',503);
   const filename=path===':memory:'?path:resolve(path);
@@ -940,7 +940,7 @@ export function getLocalStore(){
   if(process.env.VERCEL||process.env.AWS_LAMBDA_FUNCTION_NAME||process.env.NETLIFY)throw error('LOCAL_MODE_UNAVAILABLE_ON_SERVERLESS',503);
   const path=getLocalDbPath();
   const rawCap=process.env.PILOT_STUDENT_CAP;
-  const pilotStudentCap=rawCap===undefined?null:(/^[1-9]\\d{0,3}$/.test(rawCap)?Number(rawCap):NaN);
+  const pilotStudentCap=rawCap===undefined?null:(/^[1-9]\d{0,3}$/.test(rawCap)?Number(rawCap):NaN);
   const pilotAllowedEmail=process.env.PILOT_STUDENT_EMAIL??null;
   if(!globalThis.__campusLocalStore||globalThis.__campusLocalStorePath!==path){
     globalThis.__campusLocalStore?.close();
