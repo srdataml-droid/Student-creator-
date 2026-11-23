@@ -86,3 +86,12 @@ This active repository uses **main** for the current founder-directed work; no a
 - [Expert and open-source engineering research](docs/EXPERT_ROLES_AND_OPEN_SOURCE_PLAYBOOK_2026-11-23.md) — source-linked product, architecture, payment, video and reliability practices.
 
 **Status:** The links above are architecture/implementation plans, NOT confirmation that paid access, hosted streaming, real payouts or global functionality work. See [Project Progress](docs/PROJECT_PROGRESS.md) for tested vs blocked state.
+
+### First tracked engineering work (same repository)
+
+- [#9 — W00: Audit current main, test CI/build and inventory routes](https://github.com/srdataml-droid/Student-creator-/issues/9)
+- [#10 — W03–W05: Verified student and creator viewing/comment/DM restrictions](https://github.com/srdataml-droid/Student-creator-/issues/10)
+- [#11 — W06–W07: Paid viewing access, sandbox transactions and ledger](https://github.com/srdataml-droid/Student-creator-/issues/11)
+- [#12 — W10–W11: Creator-user alpha and controlled 80–100-student pilot](https://github.com/srdataml-droid/Student-creator-/issues/12)
+
+These issues are **open plans**; do not interpret their existence as completed features. Founder-approved small changes on main only, with exact-commit test evidence.
