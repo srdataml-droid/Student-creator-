@@ -387,7 +387,11 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       // An email address alone cannot claim the single invitation.
       if(pilotInvite!==null){
         const validCode=typeof inviteCode==='string'&&/^[A-Za-z0-9_-]{32,128}$/.test(inviteCode);
-        if(normalized!==pilotEmail||!validCode||!timingSafeEqual(Buffer.from(sha(inviteCode),'hex'),Buffer.from(sha(pilotInvite),'hex')))
+        // Compare fixed-size digests for both fields; avoid an early-exit
+        // email check that could serve as a guessable invitation oracle.
+        const emailMatches=timingSafeEqual(Buffer.from(sha(normalized),'hex'),Buffer.from(sha(pilotEmail),'hex'));
+        const codeMatches=timingSafeEqual(Buffer.from(sha(validCode?inviteCode:'-'.repeat(32)),'hex'),Buffer.from(sha(pilotInvite),'hex'));
+        if(!emailMatches||!validCode||!codeMatches)
           throw error('PILOT_INVITATION_REQUIRED',403);
       }
       if(!db.prepare('SELECT id FROM institutions WHERE id=?').get(institutionId))throw error('INSTITUTION_NOT_FOUND',404);
