@@ -53,6 +53,9 @@ test('one-student pilot admits only the approved address and the cap survives re
     store.close();closed=true;
     store=openLocalStore(file,{pilotStudentCap:1,pilotAllowedEmail:'replacement@alpha.invalid'});closed=false;
     req=http(store);
+    // Existing sessions and logins from a prior pilot invite must stop working.
+    assert.equal((await req('me','GET',undefined,loggedIn.cookie)).status,401);
+    assert.equal((await req('auth/login','POST',{email:invited,password:secret})).status,401);
     const beyond=await req('auth/register','POST',{email:'replacement@alpha.invalid',password:secret,institutionId:campus});
     assert.equal(beyond.status,403);
     assert.equal(beyond.data.error,'PILOT_CAP_REACHED');
