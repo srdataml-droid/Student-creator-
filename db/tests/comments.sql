@@ -63,7 +63,8 @@ RESET ROLE;
 
 \echo 'Hiding and deactivating published course revokes visibility'
 UPDATE public.content_comments SET hidden_at=now() WHERE id='aaaaaaaa-3333-4333-8333-aaaaaaaaaaaa';
-SET ROLE anon;
+SET request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
+SET ROLE authenticated;
 DO $$ DECLARE n integer;
 BEGIN
  SELECT count(*) INTO n FROM public.content_comments;
@@ -72,7 +73,8 @@ END $$;
 RESET ROLE;
 UPDATE public.content_comments SET hidden_at=NULL WHERE id='aaaaaaaa-3333-4333-8333-aaaaaaaaaaaa';
 UPDATE public.courses SET active=false WHERE id='aaaaaaaa-1111-4111-8111-aaaaaaaaaaaa';
-SET ROLE anon;
+SET request.jwt.claim.sub = '11111111-1111-4111-8111-111111111111';
+SET ROLE authenticated;
 DO $$ DECLARE n integer;
 BEGIN
  SELECT count(*) INTO n FROM public.content_comments;
