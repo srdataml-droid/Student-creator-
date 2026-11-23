@@ -18,10 +18,10 @@ export default function PurchaseHistory(){
    state==='error'?<p role="alert" className="status">{error} <Link href="/sign-in">Sign in</Link></p>:
    orders.length===0?<div className="panel"><p>No purchases yet.</p><Link className="secondary-link" href="/">Discover student creators</Link></div>:
    <section className="panel"><h2>Order history</h2><ul className="review-list">{orders.map(order=><li key={order.reference}>
-    <p className="eyebrow">{order.status==='paid'?'Verified test purchase':'Awaiting sandbox verification'}</p>
+    <p className="eyebrow">{order.status==='paid'?'Verified test purchase':order.status==='refunded'?'Synthetic refund · access revoked':'Awaiting sandbox verification'}</p>
     <h3>₦{(order.amountKobo/100).toLocaleString('en-NG')} · {order.currency}</h3>
     <p className="hint">Reference: {order.reference} · Created {new Date(order.createdAt).toLocaleDateString('en-NG')}</p>
-    {order.status==='paid'?<p className="hint">Access was granted in the local synthetic ledger; no bank settlement or creator withdrawal occurred.</p>:
+    {order.status==='paid'?<p className="hint">Access was granted in the local synthetic ledger; no bank settlement or creator withdrawal occurred.</p>:order.status==='refunded'?<p className="hint">This synthetic purchase was reversed using a balanced journal adjustment, and viewing access was revoked.</p>:
       <p className="hint">Pending orders do not unlock lessons.</p>}
     <Link className="secondary-link" href={'/lessons/'+order.lessonId}>{order.status==='paid'?'Open lesson':'Check lesson access'}</Link>
    </li>)}</ul></section>}
