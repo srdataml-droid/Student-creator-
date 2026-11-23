@@ -11,6 +11,7 @@ import { fileURLToPath } from 'node:url';
 import { join } from 'node:path';
 import { validateMp4 } from './video.mjs';
 import { creatorProfileInput } from './creator-profile.mjs';
+import { createLocalCommerce } from './commerce.mjs';
 
 export const SESSION_COOKIE='campus_local_session';
 const SESSION_TTL=7*24*60*60;
@@ -207,7 +208,8 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       if(restriction?.['deny_'+kind])throw error('CREATOR_ACCESS_RESTRICTED',403);
     }
   }
-  const withVideo=(row)=>row?{...lesson(row),hasVideo:Boolean(db.prepare('SELECT 1 FROM lesson_videos WHERE lesson_id=?').get(row.id)),likeCount:db.prepare('SELECT COUNT(*) AS n FROM lesson_likes WHERE lesson_id=?').get(row.id).n}:null;
+  const commerce=createLocalCommerce({db,transaction,audit,error,requireVerified,requireCreatorAction});
+  const withVideo=(row)=>row?{...lesson(row),priceKobo:commerce.price(row.id),hasVideo:Boolean(db.prepare('SELECT 1 FROM lesson_videos WHERE lesson_id=?').get(row.id)),likeCount:db.prepare('SELECT COUNT(*) AS n FROM lesson_likes WHERE lesson_id=?').get(row.id).n}:null;
   function editableVideoLesson(actor,id){
     requireVerified(actor);
     const row=db.prepare('SELECT id,creator_id,institution_id,status FROM lessons WHERE id=?').get(id);
@@ -283,6 +285,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       if((row.status!=='published'||!row.course_active)&&!(actor&&!actor.suspended&&(actor.role==='admin'||actor.id===row.creator_id)))throw error('VIDEO_NOT_FOUND',404);
       if(row.status==='published'&&row.course_active){
         requireCreatorAction(actor,row.creator_id,'view');
+        commerce.requireAccess(actor,id,row.creator_id);
         store.verifyPlaybackGrant(actor,id,grantToken,sessionToken);
       }
       if(!mediaDir)throw error('MEDIA_UNAVAILABLE',503);
@@ -444,7 +447,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       if(courseId){where.push('l.course_id=?');values.push(courseId);}
       if(topicId){where.push('l.topic_id=?');values.push(topicId);}
       const sql='SELECT l.id,l.title,l.description,l.preview_text AS previewText,l.topic_id AS topicId,l.published_at AS publishedAt,c.id AS courseId,c.code AS courseCode,c.title AS courseTitle,i.id AS institutionId,i.name AS institutionName,EXISTS(SELECT 1 FROM lesson_videos v WHERE v.lesson_id=l.id) AS hasVideo FROM lessons l JOIN courses c ON c.id=l.course_id JOIN institutions i ON i.id=l.institution_id WHERE '+where.join(' AND ')+' ORDER BY CASE WHEN instr(lower(l.title),lower(?))>0 THEN 0 WHEN instr(lower(c.code),lower(?))>0 THEN 1 ELSE 2 END,l.published_at DESC,l.id DESC LIMIT ?';
-      return db.prepare(sql).all(...values,term,term,limit).map(row=>({...row,hasVideo:Boolean(row.hasVideo)}));
+      return db.prepare(sql).all(...values,term,term,limit).map(row=>({...row,priceKobo:commerce.price(row.id),hasVideo:Boolean(row.hasVideo)}));
     },
 
     myBookmarks(actor){
@@ -589,6 +592,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       const item=store.publicLesson(id);
       if(!item)throw error('LESSON_NOT_FOUND',404);
       requireCreatorAction(actor,item.creatorId,'view');
+      commerce.requireAccess(actor,id,item.creatorId);
       return item;
     },
     publicLesson(id){const row=db.prepare("SELECT l.* FROM lessons l JOIN courses c ON c.id=l.course_id WHERE l.id=? AND l.status='published' AND c.active=1").get(id);return withVideo(row);},
@@ -964,6 +968,12 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         return {status:'completed',replayed:false};
       });
     },
+    setLessonPrice:commerce.setPrice,
+    createPurchaseOrder:commerce.createOrder,
+    applyVerifiedTestCharge:commerce.applyVerifiedTestCharge,
+    myPurchaseOrders:commerce.ownOrders,
+    creatorEarnings:commerce.creatorEarnings,
+    lessonAccess:commerce.lessonAccess,
     auditCount(){return db.prepare('SELECT count(*) AS n FROM audit_events').get().n;}
   };
   return store;
