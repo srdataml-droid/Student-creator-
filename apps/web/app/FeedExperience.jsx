@@ -3,6 +3,7 @@ import Link from 'next/link';
 import {useEffect,useMemo,useState} from 'react';
 import {api,friendlyError} from '../lib/local-client.js';
 import {savedIdsFromLessons,afterBookmarkRequest} from '../lib/bookmark-state.mjs';
+import ProtectedVideo from './ProtectedVideo.jsx';
 const relative=(date)=>{if(!date)return 'Recently';const d=new Date(date);return Number.isNaN(d.valueOf())?'Recently':d.toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'});};
 const alias=(id)=>'Student creator · '+String(id||'').slice(0,5).toUpperCase();
 function Post({post,onSave,saved,pending,canPlay}){
@@ -10,7 +11,7 @@ function Post({post,onSave,saved,pending,canPlay}){
   return <article className="creator-post" aria-label={post.title}>
     <div className="post-author"><div className="creator-avatar" aria-hidden="true">{letter}</div><div className="post-author-info"><Link href={`/creators/${post.creatorId}`} className="post-handle">{alias(post.creatorId)}</Link><span>{post.institutionName} <span aria-hidden="true">·</span> {relative(post.publishedAt)}</span></div><Link href={`/courses/${post.courseId}`} className="post-course">{post.courseCode||'Course'}</Link></div>
     <div className="post-content"><div className="post-kind">{post.hasVideo?'▶  VIDEO LESSON':'✎  STUDENT WORK'}</div><h3><Link href={`/lessons/${post.id}`}>{post.title}</Link></h3>{post.description&&<p>{post.description}</p>}</div>
-    {post.hasVideo?<div className="post-media">{canPlay?<video controls playsInline preload="none" aria-label={`Student video: ${post.title}`}><source src={`/api/local/lessons/${post.id}/video`} type="video/mp4"/>Your browser cannot play this video.</video>:<Link className="text-preview" href="/sign-in"><span className="preview-label">Verified students only</span><p>Sign in and complete student verification to watch this video.</p></Link>}</div>:<Link className="text-preview" href={`/lessons/${post.id}`}><span className="preview-label">A preview of this creator's work</span><p>{post.previewText||'Open this work to see the full original explanation.'}</p><span className="preview-arrow">Read post ↗</span></Link>}
+    {post.hasVideo?<div className="post-media">{canPlay?<ProtectedVideo lessonId={post.id} label={`Student video: ${post.title}`}/> :<Link className="text-preview" href="/sign-in"><span className="preview-label">Verified students only</span><p>Sign in and complete student verification to watch this video.</p></Link>}</div>:<Link className="text-preview" href={`/lessons/${post.id}`}><span className="preview-label">A preview of this creator's work</span><p>{post.previewText||'Open this work to see the full original explanation.'}</p><span className="preview-arrow">Read post ↗</span></Link>}
     <div className="post-actions"><Link href={`/lessons/${post.id}`}>↗ <span>View post</span></Link><Link href={`/messages/${post.creatorId}`}>◌ <span>Message creator</span></Link><button disabled={pending} onClick={()=>onSave(post.id)} type="button" aria-pressed={saved}>{pending?'Updating…':saved?'✓ Saved':'♧ Save'}</button></div>
   </article>;
 }

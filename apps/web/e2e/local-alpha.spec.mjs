@@ -132,6 +132,9 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     await expect(viewerPage.getByRole('heading',{name:title})).toBeVisible();
     await viewerPage.goto(`/lessons/${lessonId}`);
     await expect(viewerPage.getByRole('heading',{name:title})).toBeVisible();
+    await expect(viewerPage.getByRole('button',{name:'Enable playback'})).toBeVisible();
+    await viewerPage.getByRole('button',{name:'Enable playback'}).click();
+    await expect(viewerPage.locator('video')).toBeVisible();
     const privateVideo=await request.get(`${BASE}/api/local/lessons/${lessonId}/video`);
     expect([401,403,404]).toContain(privateVideo.status());
     // No full-text, download or comments leakage to visitors via direct API requests.
