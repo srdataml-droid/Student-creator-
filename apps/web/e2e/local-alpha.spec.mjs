@@ -22,7 +22,7 @@ async function join(page,schoolId,email,password){
   await expect(page.getByRole('heading',{name:'Account created'})).toBeVisible();
 }
 async function readJson(response){
-  expect(response.ok(),\`HTTP \${response.status()} from \${response.url()}\`).toBeTruthy();
+  expect(response.ok(),`HTTP ${response.status()} from ${response.url()}`).toBeTruthy();
   return response.json();
 }
 
@@ -32,11 +32,11 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
   const adminPassword=process.env.CI_ADMIN_PASSWORD;
   expect(adminEmail&&adminPassword,'Disposable CI administrator is required').toBeTruthy();
   const suffix=randomUUID().slice(0,8);
-  const schoolName=\`Browser Alpha Campus \${suffix}\`;
-  const creatorEmail=\`creator-\${suffix}@example.invalid\`;
-  const viewerEmail=\`viewer-\${suffix}@example.invalid\`;
+  const schoolName=`Browser Alpha Campus ${suffix}`;
+  const creatorEmail=`creator-${suffix}@example.invalid`;
+  const viewerEmail=`viewer-${suffix}@example.invalid`;
   const password=randomBytes(24).toString('base64url');
-  const title=\`Original campus media explanation \${suffix}\`;
+  const title=`Original campus media explanation ${suffix}`;
   const studentText='I created this original walkthrough of a fundamental concept. First identify the question, then describe the key definitions and work through a small example. Check the final result and explain where beginners commonly make mistakes.';
   const admin=await browser.newContext({baseURL:BASE});
   const creator=await browser.newContext({baseURL:BASE});
@@ -97,49 +97,49 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     expect(lessonId).toBeTruthy();
 
     // Draft video must be invisible to other viewers, including anonymous users.
-    expect((await request.get(\`\${BASE}/api/local/lessons/\${lessonId}/video\`)).status()).toBe(404);
-    await creatorPage.locator(\`#video-\${lessonId}\`).setInputFiles({
+    expect((await request.get(`${BASE}/api/local/lessons/${lessonId}/video`)).status()).toBe(404);
+    await creatorPage.locator(`#video-${lessonId}`).setInputFiles({
       name:'synthetic-1s.mp4',mimeType:'video/mp4',buffer:syntheticVideo,
     });
     await creatorPage.getByRole('button',{name:'Upload video'}).click();
     await expect(creatorPage.getByText('Video saved privately.',{exact:false})).toBeVisible();
-    expect((await request.get(\`\${BASE}/api/local/lessons/\${lessonId}/video\`)).status()).toBe(404);
+    expect((await request.get(`${BASE}/api/local/lessons/${lessonId}/video`)).status()).toBe(404);
     await creatorPage.getByRole('button',{name:'Submit for review'}).click();
     await expect(creatorPage.getByText('Lesson submitted.',{exact:false})).toBeVisible();
 
     await adminPage.goto('/manage');
     const reviewed=adminPage.getByRole('listitem').filter({hasText:title});
     await expect(reviewed).toBeVisible();
-    await reviewed.locator(\`#reason-\${lessonId}\`).fill('Verified independent original synthetic lesson for browser testing');
+    await reviewed.locator(`#reason-${lessonId}`).fill('Verified independent original synthetic lesson for browser testing');
     await reviewed.getByRole('button',{name:'Approve'}).click();
     await expect(adminPage.getByText('Lesson approved and published.')).toBeVisible();
 
     await viewerPage.goto('/');
     await expect(viewerPage.getByRole('heading',{name:title})).toBeVisible();
-    await viewerPage.goto(\`/lessons/\${lessonId}\`);
+    await viewerPage.goto(`/lessons/${lessonId}`);
     await expect(viewerPage.getByRole('heading',{name:title})).toBeVisible();
-    const privateVideo=await request.get(\`\${BASE}/api/local/lessons/\${lessonId}/video\`);
+    const privateVideo=await request.get(`${BASE}/api/local/lessons/${lessonId}/video`);
     expect([401,403,404]).toContain(privateVideo.status());
-    const range=await viewer.request.get(\`/api/local/lessons/\${lessonId}/video\`,{headers:{range:'bytes=0-4'}});
+    const range=await viewer.request.get(`/api/local/lessons/${lessonId}/video`,{headers:{range:'bytes=0-4'}});
     expect(range.status()).toBe(206);
     expect(await range.body()).toEqual(syntheticVideo.subarray(0,5));
 
-    const comment=\`Helpful original question \${suffix}\`;
+    const comment=`Helpful original question ${suffix}`;
     await viewerPage.locator('#lesson-comment-text').fill(comment);
     await viewerPage.getByRole('button',{name:'Post comment'}).click();
     await expect(viewerPage.getByText(comment)).toBeVisible();
-    await viewerPage.goto(\`/creators/\${creatorId}\`);
+    await viewerPage.goto(`/creators/${creatorId}`);
     await viewerPage.getByRole('button',{name:'+ Follow creator'}).click();
     await expect(viewerPage.getByRole('button',{name:/Following/})).toBeVisible();
 
     // Creator restriction must prevent direct media and full-post retrieval, not just hide UI.
-    const rule=await creator.request.post(\`/api/local/creators/\${creatorId}/restrictions/\${viewerId}\`,{
+    const rule=await creator.request.post(`/api/local/creators/${creatorId}/restrictions/${viewerId}`,{
       data:{view:true,comment:false,message:false},
     });
     await readJson(rule);
-    expect((await viewer.request.get(\`/api/local/lessons/\${lessonId}/video\`)).status()).toBe(403);
-    expect((await viewer.request.get(\`/api/local/lessons/\${lessonId}/comments\`)).status()).toBe(403);
-    await viewerPage.goto(\`/lessons/\${lessonId}\`);
+    expect((await viewer.request.get(`/api/local/lessons/${lessonId}/video`)).status()).toBe(403);
+    expect((await viewer.request.get(`/api/local/lessons/${lessonId}/comments`)).status()).toBe(403);
+    await viewerPage.goto(`/lessons/${lessonId}`);
     await expect(viewerPage.getByText('Full posts require verified student membership',{exact:false})).toBeVisible();
   }finally{
     await Promise.all([admin.close(),creator.close(),viewer.close()]);
