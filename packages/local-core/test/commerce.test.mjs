@@ -70,7 +70,7 @@ test('₦200 synthetic purchase gates access, resists retries, balances journal 
   const db=new DatabaseSync(path);
   try{
    const journal=db.prepare('SELECT SUM(debit_kobo) AS debit,SUM(credit_kobo) AS credit,COUNT(*) AS count FROM commerce_journal').get();
-   assert.deepEqual(journal,{debit:20000,credit:20000,count:2});
+   assert.equal(journal.debit,20000);assert.equal(journal.credit,20000);assert.equal(journal.count,2);
    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM content_entitlements').get().count,1);
    assert.equal(db.prepare('SELECT COUNT(*) AS count FROM purchase_orders').get().count,1);
   }finally{db.close();}
