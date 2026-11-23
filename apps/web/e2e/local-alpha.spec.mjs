@@ -284,6 +284,18 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     expect((await viewer.request.get(`/api/local/lessons/${lessonId}/comments`)).status()).toBe(403);
     await viewerPage.goto(`/lessons/${lessonId}`);
     await expect(viewerPage.getByText('Full posts require verified student membership',{exact:false})).toBeVisible();
+    // The real local backend is tested with a secret invitation code in Node;
+    // this browser-only response override tests the private-code field without
+    // configuring a real invitation or exposing an email in public CI logs.
+    const invitePage=await viewer.newPage();
+    await invitePage.route('**/api/local/health',route=>route.fulfill({
+      status:200,contentType:'application/json',body:JSON.stringify({state:'local',pilotInviteOnly:true})
+    }));
+    await invitePage.goto('/join');
+    await expect(invitePage.locator('#inviteCode')).toBeVisible();
+    await expect(invitePage.locator('#inviteCode')).toHaveAttribute('required','');
+    await expect(invitePage.locator('#inviteCode')).toHaveAttribute('type','password');
+    await invitePage.close();
     console.log('browser-alpha: creator moderation and revocation passed');
   }finally{
     await Promise.all([admin.close(),creator.close(),viewer.close()]);
