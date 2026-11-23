@@ -42,8 +42,8 @@ SRE → incident/restore documentation with rehearsal evidence.
 Creator success/growth → real opt-in behavior, upload success and return reasons.
 
 ## Issue templates and skills
-- Use .github/ISSUE_TEMPLATE/task.yml for founder-assigned work with role, priority, estimated hours and evidence.
-- Use .github/ISSUE_TEMPLATE/learning.yml for readings with links, practical code experiment and taught-back summary.
+- Use .github/ISSUE_TEMPLATE/engineering-task.yml for founder-assigned work with role, priority, estimated hours and evidence.
+- Use .github/ISSUE_TEMPLATE/learning-task.yml for readings with links, practical code experiment and taught-back summary.
 - Agent skills in .agents/skills include role-specific procedures for discovery, architecture, access, financial integrity, media, verification and leadership; they are guidance, not autonomous staff or a paid plugin install.
 - Root AGENTS.md establishes project nonnegotiable behaviors.
 
