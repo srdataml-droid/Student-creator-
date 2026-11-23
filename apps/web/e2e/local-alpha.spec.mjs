@@ -190,7 +190,8 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     console.log('browser-alpha: paid lesson independently reviewed');
     // Direct watch requests never render paid content without buyer entitlement.
     await viewerPage.goto('/watch/'+paidId);
-    await expect(viewerPage).toHaveURL(new RegExp('/lessons/'+paidId+'
+    await expect(viewerPage).toHaveURL(new RegExp('/lessons/'+paidId+'$'));
+    await expect(viewerPage.getByRole('heading',{name:'Unlock access for ₦200'})).toBeVisible();
     expect((await viewer.request.get('/api/local/lessons/'+paidId)).status()).toBe(402);
     expect((await viewer.request.get('/api/local/lessons/'+paidId+'/notes')).status()).toBe(402);
     expect((await viewer.request.get('/api/local/lessons/'+paidId+'/comments')).status()).toBe(402);
