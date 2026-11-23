@@ -93,5 +93,25 @@ test('₦200 synthetic purchase gates access, resists retries, balances journal 
   store.close();store=openLocalStore(path);
   assert.equal((await req('lessons/'+id,'GET',undefined,buyer.token)).status,200);
   assert.equal((await req('my/creator-earnings','GET',undefined,creator.token)).data.earnings.creatorPendingKobo,20000);
+  assert.throws(()=>store.applySyntheticRefund(reference,{refundReference:'rf_test_001',providerTransactionId:'wrong_tx'}),{code:'INVALID_REFUND_EVIDENCE'});
+  assert.equal((await req('lessons/'+id,'GET',undefined,buyer.token)).status,200);
+  const refund=store.applySyntheticRefund(reference,{refundReference:'rf_test_001',providerTransactionId:'tr_test_01'});
+  assert.equal(refund.status,'refunded');
+  assert.equal(store.applySyntheticRefund(reference,{refundReference:'rf_test_001',providerTransactionId:'tr_test_01'}).replayed,true);
+  assert.throws(()=>store.applySyntheticRefund(reference,{refundReference:'rf_test_002',providerTransactionId:'tr_test_01'}),{code:'REFUND_CONFLICT'});
+  assert.equal((await req('lessons/'+id,'GET',undefined,buyer.token)).status,402);
+  assert.equal((await req('lessons/'+id+'/access','GET',undefined,buyer.token)).data.access.entitled,false);
+  assert.equal((await req('orders/'+reference+'/confirm','POST',{},buyer.token)).data.order.status,'refunded');
+  assert.equal((await req('orders/'+reference+'/checkout','POST',{},buyer.token)).status,409);
+  assert.equal((await req('my/purchases','GET',undefined,buyer.token)).data.orders[0].status,'refunded');
+  assert.equal((await req('my/creator-earnings','GET',undefined,creator.token)).data.earnings.creatorPendingKobo,0);
+  const refundedDb=new DatabaseSync(path);
+  try{
+   const journal=refundedDb.prepare('SELECT SUM(debit_kobo) AS debit,SUM(credit_kobo) AS credit,COUNT(*) AS count FROM commerce_journal').get();
+   assert.equal(journal.debit,40000);assert.equal(journal.credit,40000);assert.equal(journal.count,4);
+   assert.equal(refundedDb.prepare('SELECT COUNT(*) AS n FROM content_entitlements').get().n,0);
+   assert.equal(refundedDb.prepare('SELECT COUNT(*) AS n FROM purchase_orders').get().n,1);
+   assert.equal(refundedDb.prepare('SELECT COUNT(*) AS n FROM synthetic_refunds').get().n,1);
+  }finally{refundedDb.close();}
  }finally{store.close();rmSync(dir,{recursive:true,force:true});}
 });
