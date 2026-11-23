@@ -35,7 +35,7 @@ The available GitHub connector can create issues/branches/docs but does not curr
 Docs: https://docs.github.com/en/issues/planning-and-tracking-with-projects/learning-about-projects/quickstart-for-projects.
 
 ## ChatGPT plugins and external integrations
-Notion is available as a connected plugin, but we choose **GitHub Issues as single source of truth** to avoid duplicates. Superpowers (third-party development methodology) can be connected by user action if desired; it is not required for these repo-local skills. No external plugin can be assumed installed just because we suggested it. Never claim account creation, subscriptions, licenses or tools installed on the user's device without explicit verification.
+Notion is available as a connected plugin, but we choose **GitHub Issues as single source of truth** to avoid duplicates. Plugin discovery in this session now reports **Superpowers installed** in ChatGPT, after a suggestion; this status does **not** prove a project integration, successful execution or that anyone installed it locally. It is optional and independent of the eight repo-local skills. No external plugin can be assumed installed just because we suggested it. Never claim account creation, subscriptions, licenses or tools installed on the user's device without explicit verification.
 
 ## Time/cost reminder
 Avoid paid tools until needed by a real work item. First priority: actual main CI/test/route audit, not shopping for a new engineering suite.
