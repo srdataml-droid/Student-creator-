@@ -33,7 +33,7 @@ test('caption validator accepts bounded plain WebVTT and rejects markup and inva
 
 test('creator captions: draft upload, paid playback grant, creator block, refund, no cross-account/anonymous leak',async()=>{
  const dir=mkdtempSync(join(tmpdir(),'student-captions-')),path=join(dir,'campus.sqlite');
- const store=openLocalStore(path),handle=createLocalHandler(store);
+ let store=openLocalStore(path),handle=createLocalHandler(store);
  const password='Strong Synthetic Student Password 2026';
  async function call(route,method='GET',body,token,headers={}){
   const request=new Request('http://localhost:3000/api/local/'+route,{method,
@@ -97,6 +97,10 @@ test('creator captions: draft upload, paid playback grant, creator block, refund
   const freshCookie=refreshed.headers.get('set-cookie').split(';')[0];
   assert.equal((await call(url,'GET',undefined,buyer.token,{cookie:SESSION_COOKIE+'='+buyer.token+'; '+freshCookie})).status,200);
   store.applySyntheticRefund(order.reference,{refundReference:'caption_refund_001',providerTransactionId:'caption_provider_001'});
+  assert.equal((await call(url,'GET',undefined,buyer.token,{cookie:SESSION_COOKIE+'='+buyer.token+'; '+freshCookie})).status,402);
+  // A database reopen must preserve authored captions and the financial access denial.
+  store.close();store=openLocalStore(path);handle=createLocalHandler(store);
+  assert.equal(store.myLessons(creator.user)[0].hasCaptions,true);
   assert.equal((await call(url,'GET',undefined,buyer.token,{cookie:SESSION_COOKIE+'='+buyer.token+'; '+freshCookie})).status,402);
  }finally{store.close();rmSync(dir,{recursive:true,force:true});}
 });
