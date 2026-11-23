@@ -210,6 +210,8 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     await viewerPage.setViewportSize({width:1280,height:800});
 
     console.log('browser-alpha: pending buyer order and history passed');
+    // Restore the free lesson context before testing comments and creator blocking.
+    await viewerPage.goto('/lessons/'+lessonId);
     const comment=`Helpful original question ${suffix}`;
     await viewerPage.locator('#lesson-comment-text').fill(comment);
     await viewerPage.getByRole('button',{name:'Post comment'}).click();
