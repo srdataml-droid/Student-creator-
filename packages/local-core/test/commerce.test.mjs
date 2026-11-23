@@ -59,9 +59,9 @@ test('₦200 synthetic purchase gates access, resists retries, balances journal 
   assert.throws(()=>store.applyVerifiedTestCharge(reference,{status:false,data:payment('tr_test_01').data}),{code:'NOT_PAID'});
   assert.equal((await req('lessons/'+id,'GET',undefined,buyer.token)).status,402);
   assert.equal((await req('orders/'+reference+'/checkout','POST',{},buyer.token)).status,503);
-  sandboxGateway={
+  sandboxGateway={environment:'test',
    initialize:async snapshot=>{assert.equal(snapshot.reference,reference);assert.equal(snapshot.amountKobo,20000);assert.equal(snapshot.domain,'test');return {reference,authorizationUrl:'https://checkout.paystack.com/synthetic-test-only'};},
-   verify:async snapshot=>{assert.equal(snapshot.reference,reference);return {reference,amountKobo:20000,currency:'NGN',providerTransactionId:'tr_test_01'};}
+   verify:async snapshot=>{assert.equal(snapshot.reference,reference);return {reference,amountKobo:20000,currency:'NGN',domain:'test',providerTransactionId:'tr_test_01'};}
   };
   assert.equal((await req('orders/'+reference+'/checkout','POST',{},other.token)).status,404);
   const checkout=await req('orders/'+reference+'/checkout','POST',{},buyer.token);
@@ -121,7 +121,8 @@ test('₦200 synthetic purchase gates access, resists retries, balances journal 
   try{
    const journal=refundedDb.prepare('SELECT SUM(debit_kobo) AS debit,SUM(credit_kobo) AS credit,COUNT(*) AS count FROM commerce_journal').get();
    assert.equal(journal.debit,40000);assert.equal(journal.credit,40000);assert.equal(journal.count,4);
-   assert.equal(refundedDb.prepare('SELECT COUNT(*) AS n FROM content_entitlements').get().n,0);
+   assert.equal(refundedDb.prepare("SELECT COUNT(*) AS n FROM content_entitlements WHERE state='active'").get().n,0);
+   assert.equal(refundedDb.prepare("SELECT COUNT(*) AS n FROM content_entitlements WHERE state='revoked'").get().n,1);
    assert.equal(refundedDb.prepare('SELECT COUNT(*) AS n FROM purchase_orders').get().n,1);
    assert.equal(refundedDb.prepare('SELECT COUNT(*) AS n FROM synthetic_refunds').get().n,1);
   }finally{refundedDb.close();}

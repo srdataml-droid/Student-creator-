@@ -74,6 +74,7 @@ export function createPaystackClient({ secretKey, environment, fetchImpl = fetch
   }
 
   return Object.freeze({
+    environment,
     /** Payment init must only be called with a trusted persisted order snapshot. */
     async initialize(order) {
       assertOrder(order);

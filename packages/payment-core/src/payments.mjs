@@ -92,8 +92,9 @@ export function validateVerifiedCharge(order, verificationResponse) {
   if (typeof data.customer?.email !== 'string' || data.customer.email.trim().toLowerCase() !== order.buyerEmail.trim().toLowerCase()) {
     throw new PaymentValidationError('BUYER_MISMATCH', 'Provider buyer identity differs from order');
   }
-  if (!['number', 'string'].includes(typeof data.id) || !String(data.id).trim()) {
+  if ((typeof data.id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(data.id)) && (typeof data.id !== 'number' || !Number.isSafeInteger(data.id) || data.id <= 0)) {
     throw new PaymentValidationError('MISSING_TRANSACTION_ID', 'Provider transaction ID missing');
   }
-  return Object.freeze({ reference: order.reference, providerTransactionId: String(data.id), amountKobo: data.amount, currency: 'NGN' });
+  if (data.fees != null && (!Number.isSafeInteger(data.fees) || data.fees < 0 || data.fees > data.amount)) throw new PaymentValidationError('INVALID_PROVIDER_FEE', 'Provider fee must be valid integer kobo');
+  return Object.freeze({ reference: order.reference, providerTransactionId: String(data.id), amountKobo: data.amount, currency: 'NGN', domain: data.domain, providerFeeKobo: data.fees ?? 0 });
 }

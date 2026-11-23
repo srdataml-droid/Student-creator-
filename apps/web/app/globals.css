@@ -391,3 +391,14 @@ button:disabled{opacity:.55;cursor:not-allowed}
 
 .profile-post-price.free{background:#0b976a;color:white}
 .profile-post-price.paid{background:#e6b452;color:#253021}
+/* Capture deterrent only; plaintext playback remains copyable by an authorized viewer. */
+.protected-video-frame{position:relative;isolation:isolate;background:#080c13;max-width:100%}
+.protected-video-frame video{display:block;width:100%;max-height:75vh}
+.protected-video-frame:fullscreen{display:grid;place-items:center;width:100%;height:100%}
+.protected-video-frame:fullscreen video{max-height:100vh}
+.playback-watermark{position:absolute;z-index:2;pointer-events:none;color:#fff;background:#0008;padding:5px 8px;border-radius:4px;font:11px/1.3 monospace;text-shadow:0 1px 2px #000;max-width:90%;overflow-wrap:anywhere}
+.playback-watermark.position-0{top:9%;left:5%}
+.playback-watermark.position-1{top:9%;right:5%}
+.playback-watermark.position-2{bottom:23%;right:5%}
+.playback-watermark.position-3{bottom:23%;left:5%}
+.video-fullscreen{position:relative;z-index:3;color:#fff}

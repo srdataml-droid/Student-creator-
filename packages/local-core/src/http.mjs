@@ -7,7 +7,7 @@ import {Readable} from 'node:stream';
 import {createPaystackClient,PaystackGatewayError} from '../../payment-core/src/paystack-client.mjs';
 const MAX_BODY=32768;
 const RESTRICTED=Symbol('restricted');
-const responses=(data,status=200,headers={})=>Response.json(data,{status,headers:{'cache-control':'no-store','x-content-type-options':'nosniff',...headers}});
+const responses=(data,status=200,headers={})=>Response.json(data,{status,headers:{'cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer',...headers}});
 const fail=(code,status)=>responses({error:code},status);
 function parseCookies(cookie){const record={};for(const part of (cookie??'').split(';')){const eq=part.indexOf('=');if(eq<0)continue;record[part.slice(0,eq).trim()]=part.slice(eq+1).trim();}return record;}
 async function jsonBody(request){
@@ -34,13 +34,25 @@ const allowed=(s)=>s&&typeof s==='string'&&s.length<100;
  * Only standalone localhost use. No payment provider, no staging credentials.
  * @param {object} store - an open local SQLite store
  */
-export function createLocalHandler(store,{sandboxGateway}={}){
-  // Only sk_test keys may enable checkout. No live charge or settlement paths exist.
-  const gateway=sandboxGateway===undefined?(process.env.PAYSTACK_TEST_SECRET_KEY?createPaystackClient({secretKey:process.env.PAYSTACK_TEST_SECRET_KEY,environment:'test'}):null):sandboxGateway;
+export function createLocalHandler(store,{sandboxGateway,payments=null}={}){
+  // No live mode. Production builds keep all financial actions disabled.
+  const gateway=process.env.NODE_ENV==='production'?null:(payments?.gateway??(sandboxGateway===undefined?(process.env.PAYSTACK_TEST_SECRET_KEY?createPaystackClient({secretKey:process.env.PAYSTACK_TEST_SECRET_KEY,environment:'test'}):null):sandboxGateway));
+  const signingSecrets=payments?.signingSecrets??(process.env.PAYSTACK_WEBHOOK_KEY_ID&&process.env.PAYSTACK_WEBHOOK_SIGNING_SECRET?[{id:process.env.PAYSTACK_WEBHOOK_KEY_ID,secret:process.env.PAYSTACK_WEBHOOK_SIGNING_SECRET}]:[]);
   return async function handle(request,segments=[]){
     try{
       const method=request.method.toUpperCase(),path=segments.join('/');
       if(!['GET','POST','HEAD'].includes(method))return fail('METHOD_NOT_ALLOWED',405);
+      if(path==='payments/webhook'&&method==='POST'){
+        if(gateway?.environment!=='test'||process.env.NODE_ENV==='production')return fail('SANDBOX_PAYMENTS_UNAVAILABLE',503);
+        const reader=request.body?.getReader();if(!reader)return fail('INVALID_EVENT',400);
+        const chunks=[];let size=0;
+        try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>1048576){await reader.cancel();return fail('BODY_TOO_LARGE',413);}chunks.push(Buffer.from(value));}}
+        finally{reader.releaseLock();}
+        try{store.receivePaymentWebhook(Buffer.concat(chunks),request.headers.get('paystack-signature'),signingSecrets);}
+        catch(e){if(e.code==='INVALID_SIGNATURE')return fail('INVALID_SIGNATURE',401);if(['BAD_JSON','INVALID_EVENT'].includes(e.code))return fail(e.code,400);throw e;}
+        // ACK only after durable inbox commit. Worker drains independently and retries.
+        return responses({received:true});
+      }
       if(method==='POST'&&!checkOrigin(request))return fail('ORIGIN_REJECTED',403);
       const cookies=parseCookies(request.headers.get('cookie'));
       const cookie=cookies[SESSION_COOKIE];
@@ -58,7 +70,7 @@ export function createLocalHandler(store,{sandboxGateway}={}){
         const range=parseVideoRange(request.headers.get('range'),sizeBytes);
         if(!range)return new Response(null,{status:416,headers:{'content-range':`bytes */${sizeBytes}`,'cache-control':'no-store','x-content-type-options':'nosniff'}});
         const headers={'content-type':'video/mp4','content-length':String(range.end-range.start+1),
-          'accept-ranges':'bytes','cache-control':'private, no-store','x-content-type-options':'nosniff',
+          'referrer-policy':'no-referrer','accept-ranges':'bytes','cache-control':'private, no-store','x-content-type-options':'nosniff',
           'cross-origin-resource-policy':'same-origin','content-disposition':'inline; filename="lesson-video.mp4"'};
         if(range.status===206)headers['content-range']=`bytes ${range.start}-${range.end}/${sizeBytes}`;
         if(method==='HEAD')return new Response(null,{status:range.status,headers});
@@ -113,6 +125,7 @@ export function createLocalHandler(store,{sandboxGateway}={}){
         if(path==='my/lessons'){if(!actor)return unauthorized();return responses({lessons:store.myLessons(actor)});}
         if(path==='my/bookmarks'){if(!actor)return unauthorized();return responses({lessons:store.myBookmarks(actor)});}
         if(path==='my/likes'){if(!actor)return unauthorized();return responses({likes:store.myLikes(actor)});}
+        if(path==='my/payment-disputes'){if(!actor)return unauthorized();return responses({cases:store.myPaymentDisputes(actor)});}
         if(path==='my/purchases'){if(!actor)return unauthorized();return responses({orders:store.myPurchaseOrders(actor)});}
         if(segments.length===2&&segments[0]==='orders'){if(!actor)return unauthorized();return responses({order:store.getPurchaseOrder(actor,segments[1])});}
         if(path==='my/creator-earnings'){if(!actor)return unauthorized();return responses({earnings:store.creatorEarnings(actor)});}
@@ -162,10 +175,12 @@ export function createLocalHandler(store,{sandboxGateway}={}){
       if(!actor)return unauthorized();
       if(segments.length===3&&segments[0]==='orders'&&['checkout','confirm'].includes(segments[2])){
          if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
+         if(!gateway){store.getPurchaseOrder(actor,segments[1]);return fail('SANDBOX_PAYMENTS_UNAVAILABLE',503);}
          if(segments[2]==='checkout')return responses({checkout:await store.sandboxCheckout(actor,segments[1],gateway)});
          return responses({order:await store.confirmSandboxOrder(actor,segments[1],gateway)});
        }
-       if(segments.length===3&&segments[0]==='lessons'&&segments[2]==='price'){
+      if(segments.length===3&&segments[0]==='admin'&&segments[1]==='payment-disputes')return responses({result:store.resolvePaymentDispute(actor,segments[2],body.resolution)});
+      if(segments.length===3&&segments[0]==='lessons'&&segments[2]==='price'){
          if(Object.keys(body).some(k=>k!=='amountKobo'))return fail('UNEXPECTED_BODY',400);
          return responses({price:store.setLessonPrice(actor,segments[1],body.amountKobo)});
        }
@@ -179,7 +194,7 @@ export function createLocalHandler(store,{sandboxGateway}={}){
         const id=segments[1],grant=store.issuePlaybackGrant(actor,id,cookie);
         const secure=new URL(request.url).protocol==='https:'?'; Secure':'';
         const mediaCookie=`campus_playback_${id}=${grant.token}; Path=/api/local/lessons/${id}/video; HttpOnly; SameSite=Strict; Max-Age=300${secure}`;
-        return responses({expiresAt:grant.expiresAt},200,{'set-cookie':mediaCookie});
+        return responses({expiresAt:grant.expiresAt,watermark:grant.watermark},200,{'set-cookie':mediaCookie});
       }
       if(path==='my/creator-profile'){const result=store.updatePublicProfile(actor,body);return responses(result,result.replayed?200:201);}
       if(segments.length===4&&segments[0]==='creators'&&segments[2]==='restrictions'){

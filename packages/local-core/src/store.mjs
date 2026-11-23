@@ -4,7 +4,7 @@
  * Requires Node >=22.16 (node:sqlite is experimental in Node 22).
  */
 import { DatabaseSync } from 'node:sqlite';
-import { randomUUID, createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
+import { randomUUID, createHash, createHmac, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto';
 import { mkdirSync, chmodSync, writeFileSync, unlinkSync, statSync } from 'node:fs';
 import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -208,6 +208,12 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       if(restriction?.['deny_'+kind])throw error('CREATOR_ACCESS_RESTRICTED',403);
     }
   }
+  function requireVerified(actor){
+    requireVerifiedUser(actor);
+    const current=human(db.prepare('SELECT * FROM users WHERE id=?').get(actor.id));
+    requireVerifiedUser(current);
+    if(current.institutionId!==actor.institutionId)throw error('VERIFICATION_REQUIRED',403);
+  }
   const commerce=createLocalCommerce({db,transaction,audit,error,requireVerified,requireCreatorAction});
   const withVideo=(row)=>row?{...lesson(row),priceKobo:commerce.price(row.id),hasVideo:Boolean(db.prepare('SELECT 1 FROM lesson_videos WHERE lesson_id=?').get(row.id)),likeCount:db.prepare('SELECT COUNT(*) AS n FROM lesson_likes WHERE lesson_id=?').get(row.id).n}:null;
   function editableVideoLesson(actor,id){
@@ -251,13 +257,13 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       return {hasVideo:true,replayed:false,sizeBytes:bytes.length};
     },
     issuePlaybackGrant(actor,id,sessionToken){
-      store.viewableLesson(actor,id);
-      if(!db.prepare('SELECT 1 FROM lesson_videos WHERE lesson_id=?').get(id))throw error('VIDEO_NOT_FOUND',404);
-      const sessionHash=typeof sessionToken==='string'?sha(sessionToken):null;
-      const now=Math.floor(Date.now()/1000);
-      if(!sessionHash||!db.prepare('SELECT 1 FROM sessions WHERE token_hash=? AND user_id=? AND expires_at>?').get(sessionHash,actor.id,now))
-        throw error('AUTH_REQUIRED',401);
       return transaction(()=>{
+        store.viewableLesson(actor,id);
+        if(!db.prepare('SELECT 1 FROM lesson_videos WHERE lesson_id=?').get(id))throw error('VIDEO_NOT_FOUND',404);
+        const sessionHash=typeof sessionToken==='string'?sha(sessionToken):null;
+        const now=Math.floor(Date.now()/1000);
+        if(!sessionHash||!db.prepare('SELECT 1 FROM sessions WHERE token_hash=? AND user_id=? AND expires_at>?').get(sessionHash,actor.id,now))
+          throw error('AUTH_REQUIRED',401);
         db.prepare('DELETE FROM playback_grants WHERE expires_at<=?').run(now);
         if(db.prepare('SELECT count(*) AS n FROM playback_grants WHERE user_id=?').get(actor.id).n>=20)
           throw error('PLAYBACK_GRANT_LIMIT',429);
@@ -265,7 +271,11 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         db.prepare('INSERT INTO playback_grants(token_hash,session_hash,user_id,lesson_id,expires_at,created_at) VALUES(?,?,?,?,?,?)')
           .run(sha(token),sessionHash,actor.id,id,expiresAt,stamp());
         audit(actor.id,'video.playback.granted',id);
-        return {token,expiresAt};
+        // Pseudonyms are keyed with a random session secret, not student IDs or email.
+        const viewerMark=createHmac('sha256',sessionToken).update('viewer:'+actor.id).digest('hex').slice(0,12);
+        const sessionMark=createHmac('sha256',sessionToken).update('session-watermark').digest('hex').slice(0,8);
+        audit(actor.id,'video.watermark.issued',id,{viewerMark,sessionMark});
+        return {token,expiresAt,watermark:{label:`WK-${viewerMark} · ${sessionMark}`,intervalSeconds:9}};
       });
     },
     verifyPlaybackGrant(actor,id,token,sessionToken){
@@ -273,8 +283,8 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       requireVerified(actor);
       if(typeof token!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(token)||
           typeof sessionToken!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(sessionToken)||
-          !db.prepare('SELECT 1 FROM playback_grants WHERE token_hash=? AND session_hash=? AND user_id=? AND lesson_id=? AND expires_at>?')
-            .get(sha(token),sha(sessionToken),actor.id,id,Math.floor(Date.now()/1000)))
+          !db.prepare('SELECT 1 FROM playback_grants g JOIN sessions s ON s.token_hash=g.session_hash WHERE g.token_hash=? AND g.session_hash=? AND g.user_id=? AND g.lesson_id=? AND g.expires_at>? AND s.user_id=g.user_id AND s.expires_at>?')
+            .get(sha(token),sha(sessionToken),actor.id,id,Math.floor(Date.now()/1000),Math.floor(Date.now()/1000)))
         throw error('PLAYBACK_GRANT_REQUIRED',403);
       return true;
     },
@@ -282,7 +292,8 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       const row=db.prepare(`SELECT v.file_id,v.bytes,l.creator_id,l.status,c.active AS course_active FROM lesson_videos v
         JOIN lessons l ON l.id=v.lesson_id JOIN courses c ON c.id=l.course_id WHERE l.id=?`).get(id);
       if(!row)throw error('VIDEO_NOT_FOUND',404);
-      if((row.status!=='published'||!row.course_active)&&!(actor&&!actor.suspended&&(actor.role==='admin'||actor.id===row.creator_id)))throw error('VIDEO_NOT_FOUND',404);
+      const current=actor?human(db.prepare('SELECT * FROM users WHERE id=?').get(actor.id)):null;
+      if((row.status!=='published'||!row.course_active)&&!(current&&!current.suspended&&(current.role==='admin'||(current.role==='student'&&current.verifiedAt&&current.id===row.creator_id))))throw error('VIDEO_NOT_FOUND',404);
       if(row.status==='published'&&row.course_active){
         requireCreatorAction(actor,row.creator_id,'view');
         commerce.requireAccess(actor,id,row.creator_id);
@@ -706,6 +717,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
           // A newly issued viewing block permanently invalidates earlier media grants.
           // Unblocking requires a fresh authorization, not resurrection of an old cookie.
           if(input.view&&!old.view){
+            commerce.recordRestrictedPurchases(creatorId,viewerId);
             const revoked=db.prepare(`DELETE FROM playback_grants WHERE user_id=? AND lesson_id IN
               (SELECT id FROM lessons WHERE creator_id=?)`).run(viewerId,creatorId).changes;
             audit(actor.id,'video.playback.revoked',viewerId,{creatorId,revoked});
@@ -975,6 +987,14 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     sandboxCheckout:commerce.sandboxCheckout,
     confirmSandboxOrder:commerce.confirmSandboxOrder,
     getPurchaseOrder:commerce.orderStatus,
+    reconcilePurchase:commerce.reconcilePurchase,
+    simulatePaymentReversal:commerce.simulateReversal,
+    receivePaymentWebhook:commerce.receiveWebhook,
+    drainPaymentInbox:commerce.drainInbox,
+    recoverPendingPayments:commerce.recoverPending,
+    paymentReconciliation:commerce.reconciliation,
+    myPaymentDisputes:commerce.disputes,
+    resolvePaymentDispute:commerce.resolveDispute,
     myPurchaseOrders:commerce.ownOrders,
     creatorEarnings:commerce.creatorEarnings,
     lessonAccess:commerce.lessonAccess,
@@ -985,7 +1005,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
 function validateEmail(email){const value=String(email??'').trim().toLowerCase();if(value.length>254||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value))throw error('INVALID_EMAIL',422);return value;}
 function validatePassword(pw){if(typeof pw!=='string'||pw.length<12||pw.length>128)throw error('INVALID_PASSWORD',422);}
 function requireAdmin(u){if(!u||u.role!=='admin'||u.suspended)throw error('ADMIN_REQUIRED',403);}
-function requireVerified(u){if(!u||u.role!=='student'||!u.verifiedAt||u.suspended||!u.institutionId)throw error('VERIFICATION_REQUIRED',403);}
+function requireVerifiedUser(u){if(!u||u.role!=='student'||!u.verifiedAt||u.suspended||!u.institutionId)throw error('VERIFICATION_REQUIRED',403);}
 function validateDraft(input){
   if(input.rightsAttested!==true)throw error('RIGHTS_REQUIRED',422);
   const v={};for(const [key,max,min] of [['title',160,3],['description',2500,0],['previewText',800,0],['lessonText',25000,100]]){
