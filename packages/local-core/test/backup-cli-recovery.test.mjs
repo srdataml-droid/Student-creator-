@@ -15,7 +15,12 @@ function exec(args,expectSuccess=true){
   const result=spawnSync(process.execPath,[cli,...args],{encoding:'utf8',timeout:30000,env:{...process.env,APP_DATA_MODE:'local'}});
   assert.equal(result.error,undefined);
   assert.equal(result.status,expectSuccess?0:1,'backup CLI failed unexpectedly: '+result.stderr);
-  return JSON.parse((expectSuccess?result.stdout:result.stderr).trim());
+  // Node 22 may prefix stderr with SQLite experimental warnings before CLI JSON.
+  const output=expectSuccess?result.stdout:result.stderr;
+  const record=output.split(String.fromCharCode(10)).map(line=>line.trim())
+    .filter(line=>line.startsWith('{"ok":')).at(-1);
+  assert.ok(record,'CLI did not produce an action result: '+output);
+  return JSON.parse(record);
 }
 
 test('operator CLI independently snapshots, verifies, restores media and revokes browser sessions',async()=>{
