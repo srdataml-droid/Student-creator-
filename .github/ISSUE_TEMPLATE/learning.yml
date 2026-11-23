@@ -1,0 +1,48 @@
+name: Learn and apply an expert practice
+description: Convert a cited public source into one experiment and reusable engineering lesson.
+title: "[Learn] "
+labels: []
+body:
+  - type: input
+    id: source
+    attributes:
+      label: Original source URL
+      placeholder: https://...
+    validations:
+      required: true
+  - type: dropdown
+    id: role
+    attributes:
+      label: Learning role
+      options:
+        - Product / research
+        - Design / frontend
+        - Architecture / backend
+        - Data / database
+        - Video engineering
+        - Payments / finance
+        - Security / privacy
+        - Quality / reliability
+        - Growth / community
+        - Leadership / goal setting
+    validations:
+      required: true
+  - type: textarea
+    id: lesson
+    attributes:
+      label: What the source actually teaches
+      description: Separate source-derived findings from our proposed application; no fabricated quotes.
+    validations:
+      required: true
+  - type: textarea
+    id: exercise
+    attributes:
+      label: Practical learning experiment, expected hours and deliverable
+      description: Specify source paths, tests and how to verify understanding.
+    validations:
+      required: true
+  - type: textarea
+    id: proof
+    attributes:
+      label: Evidence after completion
+      description: Explain in your own words; link code/doc/issue, actual test command, commit and findings.
