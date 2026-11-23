@@ -9,12 +9,15 @@ INSERT INTO public.content_comments(id,content_id,author_id,body,creation_key,cr
 INSERT INTO public.content_comment_reports(comment_id,reporter_id,reason)
  VALUES('aaaaaaaa-3333-4333-8333-aaaaaaaaaaaa','22222222-2222-4222-8222-222222222222','Review a potentially misleading comment');
 
-\echo 'Public sees published comments but not draft, reports or client write privileges'
+\echo 'Anonymous visitors cannot read full comment threads or private reports'
 SET ROLE anon;
-DO $$ DECLARE n integer;
+DO $ DECLARE n integer;
 BEGIN
- SELECT count(*) INTO n FROM public.content_comments;
- IF n<>1 THEN RAISE EXCEPTION 'Public comment visibility failed: %',n; END IF;
+ BEGIN
+  SELECT count(*) INTO n FROM public.content_comments;
+  RAISE EXCEPTION 'Anonymous visitor read protected comments';
+ EXCEPTION WHEN insufficient_privilege THEN NULL;
+ END;
  BEGIN
   PERFORM 1 FROM public.content_comment_reports;
   RAISE EXCEPTION 'Anonymous read private reports';

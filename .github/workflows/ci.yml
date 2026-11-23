@@ -69,6 +69,8 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/migrations/0001_proposed_core.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/0002_creator_comments.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/0003_creator_public_profiles.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0004_creator_restrictions.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/smoke.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/creator_public_profiles.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/creator_restrictions.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/comments.sql
