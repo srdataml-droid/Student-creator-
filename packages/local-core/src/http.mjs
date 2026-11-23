@@ -110,6 +110,9 @@ export function createLocalHandler(store){
         if(path==='my/lessons'){if(!actor)return unauthorized();return responses({lessons:store.myLessons(actor)});}
         if(path==='my/bookmarks'){if(!actor)return unauthorized();return responses({lessons:store.myBookmarks(actor)});}
         if(path==='my/likes'){if(!actor)return unauthorized();return responses({likes:store.myLikes(actor)});}
+        if(path==='my/purchases'){if(!actor)return unauthorized();return responses({orders:store.myPurchaseOrders(actor)});}
+        if(path==='my/creator-earnings'){if(!actor)return unauthorized();return responses({earnings:store.creatorEarnings(actor)});}
+        if(segments.length===3&&segments[0]==='lessons'&&segments[2]==='access'){if(!actor)return unauthorized();return responses({access:store.lessonAccess(actor,segments[1])});}
         if(path==='admin/pending-users'){if(!actor)return unauthorized();return responses({users:store.listPendingUsers(actor)});}
         if(path==='admin/review-queue'){if(!actor)return unauthorized();return responses({lessons:store.reviewQueue(actor)});}
         if(path==='admin/reports'){if(!actor)return unauthorized();return responses({reports:store.reportQueue(actor)});}
@@ -153,7 +156,16 @@ export function createLocalHandler(store){
         return responses({user:result.user},200,{'set-cookie':`${SESSION_COOKIE}=${result.token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800${secure}`});
       }
       if(!actor)return unauthorized();
-      if(segments.length===3&&segments[0]==='lessons'&&segments[2]==='playback-grant'){
+      if(segments.length===3&&segments[0]==='lessons'&&segments[2]==='price'){
+         if(Object.keys(body).some(k=>k!=='amountKobo'))return fail('UNEXPECTED_BODY',400);
+         return responses({price:store.setLessonPrice(actor,segments[1],body.amountKobo)});
+       }
+       if(segments.length===3&&segments[0]==='lessons'&&segments[2]==='orders'){
+         if(Object.keys(body).some(k=>k!=='requestKey'))return fail('UNEXPECTED_BODY',400);
+         const order=store.createPurchaseOrder(actor,segments[1],body.requestKey);
+         return responses({order},order.replayed?200:201);
+       }
+       if(segments.length===3&&segments[0]==='lessons'&&segments[2]==='playback-grant'){
         if(Object.keys(body).length!==0)return fail('UNEXPECTED_BODY',400);
         const id=segments[1],grant=store.issuePlaybackGrant(actor,id,cookie);
         const secure=new URL(request.url).protocol==='https:'?'; Secure':'';
