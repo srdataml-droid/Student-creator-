@@ -4,6 +4,7 @@ import {readMp4Body,parseVideoRange} from './video.mjs';
 import {publicLessonNotesResponse} from './notes.mjs';
 import {createReadStream} from 'node:fs';
 import {Readable} from 'node:stream';
+import {createPaystackClient,PaystackGatewayError} from '../../payment-core/src/paystack-client.mjs';
 const MAX_BODY=32768;
 const RESTRICTED=Symbol('restricted');
 const responses=(data,status=200,headers={})=>Response.json(data,{status,headers:{'cache-control':'no-store','x-content-type-options':'nosniff',...headers}});
@@ -33,7 +34,9 @@ const allowed=(s)=>s&&typeof s==='string'&&s.length<100;
  * Only standalone localhost use. No payment provider, no staging credentials.
  * @param {object} store - an open local SQLite store
  */
-export function createLocalHandler(store){
+export function createLocalHandler(store,{sandboxGateway}={}){
+  // Only sk_test keys may enable checkout. No live charge or settlement paths exist.
+  const gateway=sandboxGateway===undefined?(process.env.PAYSTACK_TEST_SECRET_KEY?createPaystackClient({secretKey:process.env.PAYSTACK_TEST_SECRET_KEY,environment:'test'}):null):sandboxGateway;
   return async function handle(request,segments=[]){
     try{
       const method=request.method.toUpperCase(),path=segments.join('/');
@@ -63,7 +66,7 @@ export function createLocalHandler(store){
       }
       if(method==='HEAD')return fail('METHOD_NOT_ALLOWED',405);
       if(method==='GET'){
-        if(path==='health')return responses({state:'local',database:'sqlite',providerPayments:false});
+        if(path==='health')return responses({state:'local',database:'sqlite',providerPayments:false,sandboxCheckoutEnabled:Boolean(gateway)});
         if(path==='me')return actor?responses({user:actor}):fail('AUTH_REQUIRED',401);
         if(path==='following'){if(!actor)return unauthorized();return responses({creators:store.followingCreators(actor)});}
         if(segments.length===3&&segments[0]==='creators'&&segments[2]==='follow'){
@@ -111,6 +114,7 @@ export function createLocalHandler(store){
         if(path==='my/bookmarks'){if(!actor)return unauthorized();return responses({lessons:store.myBookmarks(actor)});}
         if(path==='my/likes'){if(!actor)return unauthorized();return responses({likes:store.myLikes(actor)});}
         if(path==='my/purchases'){if(!actor)return unauthorized();return responses({orders:store.myPurchaseOrders(actor)});}
+        if(segments.length===2&&segments[0]==='orders'){if(!actor)return unauthorized();return responses({order:store.getPurchaseOrder(actor,segments[1])});}
         if(path==='my/creator-earnings'){if(!actor)return unauthorized();return responses({earnings:store.creatorEarnings(actor)});}
         if(segments.length===3&&segments[0]==='lessons'&&segments[2]==='access'){if(!actor)return unauthorized();return responses({access:store.lessonAccess(actor,segments[1])});}
         if(path==='admin/pending-users'){if(!actor)return unauthorized();return responses({users:store.listPendingUsers(actor)});}
@@ -156,7 +160,12 @@ export function createLocalHandler(store){
         return responses({user:result.user},200,{'set-cookie':`${SESSION_COOKIE}=${result.token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800${secure}`});
       }
       if(!actor)return unauthorized();
-      if(segments.length===3&&segments[0]==='lessons'&&segments[2]==='price'){
+      if(segments.length===3&&segments[0]==='orders'&&['checkout','confirm'].includes(segments[2])){
+         if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
+         if(segments[2]==='checkout')return responses({checkout:await store.sandboxCheckout(actor,segments[1],gateway)});
+         return responses({order:await store.confirmSandboxOrder(actor,segments[1],gateway)});
+       }
+       if(segments.length===3&&segments[0]==='lessons'&&segments[2]==='price'){
          if(Object.keys(body).some(k=>k!=='amountKobo'))return fail('UNEXPECTED_BODY',400);
          return responses({price:store.setLessonPrice(actor,segments[1],body.amountKobo)});
        }
@@ -255,6 +264,11 @@ export function createLocalHandler(store){
     }catch(e){
       if(e?.code==='SQLITE_CONSTRAINT_UNIQUE'||(e?.code==='ERR_SQLITE_ERROR'&&e?.errcode===2067))return fail('ALREADY_EXISTS',409);
       if(e?.status>=400&&e?.status<500)return fail(e.code??e.message,e.status);
+      if(e instanceof PaystackGatewayError){
+        if(e.code==='NOT_PAID')return fail('PAYMENT_NOT_CONFIRMED',409);
+        if(['AMOUNT_MISMATCH','CURRENCY_MISMATCH','ENVIRONMENT_MISMATCH','BUYER_MISMATCH','REFERENCE_MISMATCH'].includes(e.code))return fail('PAYMENT_VERIFICATION_FAILED',409);
+        return fail('SANDBOX_GATEWAY_UNAVAILABLE',503);
+      }
       return fail('LOCAL_SERVICE_UNAVAILABLE',503);
     }
   };
