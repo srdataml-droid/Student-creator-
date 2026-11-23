@@ -15,6 +15,14 @@
 
 This is a real local Node/Next.js application, **not yet a public multi-user production deployment**. Its file-based SQLite backend is deliberately disabled on stateless serverless hosts. Use dedicated Postgres/Supabase and media infrastructure before public launch.
 
+## One-student alpha registration gate (not a public launch)
+
+The first rollout milestone is **one** privately invited, consenting student. Keep the SQLite test environment isolated. Before launching the local server, set both server-only settings: `PILOT_STUDENT_CAP=1` and `PILOT_STUDENT_EMAIL` to the approved student's normalized email. Enter the real email privately at runtime, **not in a tracked file or GitHub issue**. Restart the server when changing pilot settings; the first-stage local quota does not migrate to hosted Supabase automatically.
+
+The server rejects uninvited registrations and a second student account, and denies old student sessions when the invite changes. An administrator account is separate and may independently verify and moderate. The student should upload only consented original work; no private student ID evidence, production payments or confidential videos should be entered into the public GitHub repository. The gate does **not** prevent an authorized viewer downloading the local plain MP4 or capturing their screen.
+
+This is a development safeguard, **not proof that the app is hosted or suitable for real student identity evidence**. Stage 2 (100) and Stage 3 (1,000) are postponed until security, private media, real-device, backup and operator gates pass. [Authoritative rollout checklist: Issue #12](https://github.com/srdataml-droid/Student-creator-/issues/12).
+
 ## Run it locally
 
 Requirements: Node.js **22.16+**, npm, and a local filesystem where the server can persist SQLite and media. On Node 22, `node:sqlite` is experimental.
@@ -64,7 +72,7 @@ See [project progress](docs/PROJECT_PROGRESS.md) and [product scope](docs/PRODUC
 
 ## November 23, 2026 — Creator-first pilot and research handoff
 
-The founder has confirmed the student-only creator-economy model: creators retain copyright; viewers buy limited **access** (not content ownership); the initial pilot targets about 80–100 verified students. Creator-controlled view/comment/message restrictions, a secure paid-access model, direct monetization, portfolios, and future globally localized markets are tracked here as **requirements**, not implemented production features.
+The founder has confirmed the student-only creator-economy model: creators retain copyright; viewers buy limited **access** (not content ownership); the ACTIVE rollout targets **one consenting student first**, then **100**, then **1,000**, each behind independent engineering and founder approval gates (see Issue #12). Creator-controlled view/comment/message restrictions, a secure paid-access model, direct monetization, portfolios, and future globally localized markets are tracked here as **requirements**, not implemented production features.
 
 - [Founder product blueprint and owner decisions](docs/CREATOR_FIRST_PRODUCT_BLUEPRINT_2026-11-23.md)
 - [Paid access, creator rights, monetization research and global strategy](docs/CREATOR_COMMERCE_RIGHTS_AND_GLOBAL_STRATEGY_2026-11-23.md)
