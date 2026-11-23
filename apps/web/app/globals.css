@@ -388,3 +388,6 @@ button:disabled{opacity:.55;cursor:not-allowed}
  .onboarding-steps{gap:15px;margin-top:27px}
  .campus-onboarding .panel{padding:25px 20px}
 }
+
+.profile-post-price.free{background:#0b976a;color:white}
+.profile-post-price.paid{background:#e6b452;color:#253021}
