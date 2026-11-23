@@ -10,12 +10,13 @@ import {createLocalHandler} from '../src/http.mjs';
 const mp4=Buffer.from(readFileSync(new URL('./fixtures/synthetic-1s.mp4.base64',import.meta.url),'utf8'),'base64');
 const BASE='http://localhost:3000/api/local/';
 const pilotEmail='one-consented-person@example.invalid';
+const testInvite='synthetic_alpha_token_abcdefghijklmnopqrstuvwxyz';
 const password='Strong Synthetic Student Password 2026';
 const text='This is an original synthetic explanation. I introduce the problem, describe a worked example using independent data, explain each step in a clear order and check the result without revealing another student\'s assignment or private information.';
 
 test('one-student alpha: invite, verify, original video, independent review, play and revoke',async()=>{
   const dir=mkdtempSync(join(tmpdir(),'school-one-student-'));
-  const store=openLocalStore(join(dir,'one.sqlite'),{pilotStudentCap:1,pilotAllowedEmail:pilotEmail});
+  const store=openLocalStore(join(dir,'one.sqlite'),{pilotStudentCap:1,pilotAllowedEmail:pilotEmail,pilotInviteToken:testInvite});
   const handle=createLocalHandler(store);
   async function send(path,method='GET',body,token,extra={}){
     const media=body instanceof Uint8Array;
@@ -35,7 +36,7 @@ test('one-student alpha: invite, verify, original video, independent review, pla
     const admin=(await send('auth/login','POST',{email:'moderator@example.invalid',password:'Strong Synthetic Moderator Password 2026'})).token;
     const institution=(await send('admin/institutions','POST',{name:'One-Person Pilot University'},admin)).data.institution.id;
     const course=(await send('admin/courses','POST',{institutionId:institution,code:'ONE101',title:'Original Media'},admin)).data.course.id;
-    const invite={email:pilotEmail,password,institutionId:institution};
+    const invite={email:pilotEmail,password,institutionId:institution,inviteCode:testInvite};
     const rejected=await send('auth/register','POST',{...invite,email:'uninvited@example.invalid'});
     assert.equal(rejected.status,403);
     const registered=await send('auth/register','POST',invite);
