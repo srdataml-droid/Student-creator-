@@ -5,13 +5,13 @@
 **This is the actual application repository:** https://github.com/srdataml-droid/Student-creator-
 
 ## What already runs in development
-- **Creator-first homepage** at `/`: responsive feed of published creator posts, video playback, filtering, local search, and save-post actions.
+- **Creator-first homepage** at `/`: responsive feed of published creator post previews, verified-student video playback, filtering, local search, and save-post actions.
 - **Creator profiles** at `/creators/[creatorId]`: published content, private-message CTA, follow/unfollow and follower count.
 - **Following feed:** account-scoped followed creators, stored persistently in the SQLite development database.
 - **Approved-post likes:** verified student accounts can like or unlike public lessons with owner-scoped state, duplicate-safe persistence, and rate controls. The local adapter and a proposed PostgreSQL/RLS schema are separate; this is not a hosted social feature yet.
 - **Studio:** students submit original text lessons and MP4 videos; a distinct administrator approves or rejects submissions before public discovery.
 - **Campus/course discovery**, searchable lessons, bookmarked posts, course communities, one-to-one messages (with opt-in/block/report), and scheduled group study sessions.
-- **Local SQLite** persistence and video files, backup/restore, and HTTP tests. An admin must create the first campus/courses and verify learners; there are **no fictitious students, posts, payments, view counts or payouts**.
+- **Local SQLite** persistence and video files, backup/restore, and HTTP tests. Full posts, notes downloads, comment threads and MP4 playback now require a verified student and creator view permission; visitor previews remain public. An admin must create the first campus/courses and verify learners; there are **no fictitious students, posts, payments, view counts or payouts**.
 
 This is a real local Node/Next.js application, **not yet a public multi-user production deployment**. Its file-based SQLite backend is deliberately disabled on stateless serverless hosts. Use dedicated Postgres/Supabase and media infrastructure before public launch.
 
@@ -52,7 +52,7 @@ GitHub Actions runs unit/SQLite integration tests, a disposable PostgreSQL schem
 ## What is not live
 - Supabase authentication, hosted Postgres, storage and production access policies.
 - Paystack checkout, creator bank verification/subaccounts, payment splitting, paid content unlocks, recurring subscriptions, refunds or settlements.
-- Creator-set paid price display, verified bank payout setup, real earnings balances.
+- Creator-set paid price display, verified bank payout setup, real earnings balances. Granular creator restriction APIs are implemented in local mode, but settings UI, hosted RLS and paid entitlements remain incomplete.
 - Mobile-native app, adaptive video transcoding, production moderation and platform deployment.
 
 The intended **core business model is paid creator content, subscriptions and permissible private tutoring/feedback**, with transparent creator/platform revenue sharing. Ads are **not** required. Payment-domain code exists, but no successful test transaction or production settlement is claimed.

@@ -39,7 +39,7 @@ test('persistent campus journey: register, verify, draft, review, publish and re
   assert.equal((await x.request(`lessons/${id}/submit`,'POST',{},s.student)).status,200);
   assert.equal((await x.request(`lessons/${id}/review`,'POST',{decision:'approve',reason:'Original student tutorial'},s.owner)).status,200);
   assert.equal((await x.request('courses/'+s.course)).data.lessons.length,1);
-  assert.equal((await x.request('lessons/'+id)).data.lesson.lessonText,sample);
+  assert.equal((await x.request('lessons/'+id,'GET',undefined,s.student)).data.lesson.lessonText,sample);
   assert.equal((await x.request(`lessons/${id}/review`,'POST',{decision:'approve',reason:'Repeated approval'},s.owner)).status,409);
   x.store.close();closed=true;
   const reopened=openLocalStore(x.path);assert.equal(reopened.publicLesson(id).lessonText,sample);assert.ok(reopened.auditCount()>=6);reopened.close();

@@ -57,7 +57,7 @@ test('likes require verified students and publicly approved content, including a
   assert.equal((await x.req('lessons/'+x.draft+'/like','POST',{},x.viewer.token)).status,200);
   assert.deepEqual((await x.req('my/likes','GET',undefined,x.viewer.token)).data.likes,[x.draft]);
   assert.deepEqual((await x.req('my/likes','GET',undefined,x.creator.token)).data.likes,[]);
-  const publicResult=await x.req('lessons/'+x.draft);
+  const publicResult=await x.req('lessons/'+x.draft,'GET',undefined,x.viewer.token);
   assert.equal(publicResult.status,200);
   assert.equal(publicResult.data.lesson.likeCount,1);
   x.reopen();
@@ -65,7 +65,7 @@ test('likes require verified students and publicly approved content, including a
   assert.equal((await x.req('lessons/'+x.draft+'/unlike','POST',{},x.creator.token)).data.like.replayed,true);
   assert.equal((await x.req('lessons/'+x.draft+'/unlike','POST',{},x.viewer.token)).status,201);
   assert.equal((await x.req('lessons/'+x.draft+'/unlike','POST',{},x.viewer.token)).status,200);
-  assert.equal((await x.req('lessons/'+x.draft)).data.lesson.likeCount,0);
+  assert.equal((await x.req('lessons/'+x.draft,'GET',undefined,x.viewer.token)).data.lesson.likeCount,0);
  }finally{x.close();}
 });
 
@@ -74,12 +74,12 @@ test('session-scoped like state survives retry and cannot be changed cross-origi
   const path='lessons/'+x.draft+'/like';
   assert.equal((await x.req(path,'POST',{},x.creator.token)).status,201);
   assert.equal((await x.req(path,'POST',{},x.viewer.token)).status,201);
-  assert.equal((await x.req('lessons/'+x.draft)).data.lesson.likeCount,2);
+  assert.equal((await x.req('lessons/'+x.draft,'GET',undefined,x.viewer.token)).data.lesson.likeCount,2);
   const hostile=new Request('http://localhost:3000/api/local/'+path,{method:'POST',
    headers:{cookie:'campus_local_session='+x.viewer.token,origin:'https://other-campus.test','content-type':'application/json'},body:'{}'});
   const rejected=await createLocalHandlerFrom(x,hostile,path);
   assert.equal(rejected.status,403);
-  assert.equal((await x.req('lessons/'+x.draft)).data.lesson.likeCount,2);
+  assert.equal((await x.req('lessons/'+x.draft,'GET',undefined,x.viewer.token)).data.lesson.likeCount,2);
  }finally{x.close();}
 });
 

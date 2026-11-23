@@ -46,8 +46,8 @@ async function withCampus(fn){
 
 test('comments allow idempotent creation and owner removal while excluding unpublished notes',()=>withCampus(async({req,lesson,draft,reader,other,pending,reopen})=>{
  const key='engagement-comment-001',path='lessons/'+lesson+'/comments';
- assert.equal((await req(path)).data.comments.length,0);
- assert.equal((await req('lessons/'+lesson+'/comments','GET',undefined,pending.token)).status,200);
+ assert.equal((await req(path,'GET',undefined,reader.token)).data.comments.length,0);
+ assert.equal((await req('lessons/'+lesson+'/comments','GET',undefined,pending.token)).status,403);
  assert.equal((await req('lessons/'+lesson+'/comments','POST',{text:'Unverified cannot post',creationKey:'pending_attempt_00001'},pending.token)).status,403);
  assert.equal((await req('lessons/'+draft+'/comments')).status,404);
  assert.equal((await req(path,'POST',{text:'An insightful point',creationKey:key})).status,401);
@@ -58,16 +58,16 @@ test('comments allow idempotent creation and owner removal while excluding unpub
  assert.equal((await req(path,'POST',{text:'An insightful question about this concept',creationKey:key},reader.token)).status,200);
  assert.equal((await req(path,'POST',{text:'A different question with the same key',creationKey:key},reader.token)).status,409);
  const item=created.data.comment;
- assert.equal((await req(path)).data.comments[0].id,item.id);
- assert.equal((await req(path)).data.comments.length,1);
- assert.equal(JSON.stringify((await req(path)).data).includes('reader@engagement.test'),false);
+ assert.equal((await req(path,'GET',undefined,reader.token)).data.comments[0].id,item.id);
+ assert.equal((await req(path,'GET',undefined,reader.token)).data.comments.length,1);
+ assert.equal(JSON.stringify((await req(path,'GET',undefined,reader.token)).data).includes('reader@engagement.test'),false);
  assert.equal((await req('lesson-comments/'+item.id+'/remove','POST',{},other.token)).status,404);
  reopen();
- assert.equal((await req(path)).data.comments.length,1);
+ assert.equal((await req(path,'GET',undefined,reader.token)).data.comments.length,1);
  assert.equal((await req('lesson-comments/'+item.id+'/remove','POST',{},reader.token)).status,201);
  assert.equal((await req('lesson-comments/'+item.id+'/remove','POST',{},reader.token)).status,200);
- assert.equal((await req(path)).data.comments.length,0);
- assert.equal((await req(path)).data.comments.length,0);
+ assert.equal((await req(path,'GET',undefined,reader.token)).data.comments.length,0);
+ assert.equal((await req(path,'GET',undefined,reader.token)).data.comments.length,0);
  assert.equal((await req(path,'POST',{text:'An insightful question about this concept',creationKey:key},reader.token)).status,409);
 }));
 
@@ -85,11 +85,11 @@ test('comments can be reported by others and hidden only through administrator r
  assert.equal((await req('admin/comment-reports/'+report.data.report.reportId,'POST',{decision:'hide',reason:'Moderation completed'},reader.token)).status,403);
  assert.equal((await req('admin/comment-reports/'+report.data.report.reportId,'POST',{decision:'hide',reason:'Moderation completed'},admin)).status,200);
  assert.equal((await req('admin/comment-reports','GET',undefined,admin)).data.reports.length,0);
- assert.deepEqual((await req(path)).data.comments.map(x=>x.id),[b]);
- assert.equal((await req(path)).data.comments.length,1);
+ assert.deepEqual((await req(path,'GET',undefined,reader.token)).data.comments.map(x=>x.id),[b]);
+ assert.equal((await req(path,'GET',undefined,reader.token)).data.comments.length,1);
  assert.equal((await req('admin/comment-reports/'+report.data.report.reportId,'POST',{decision:'hide',reason:'Repeated action'},admin)).status,409);
  const r2=(await req('lesson-comments/'+b+'/report','POST',{reason:'Please check this explanation'},other.token)).data.report.reportId;
  assert.equal((await req('admin/comment-reports/'+r2,'POST',{decision:'dismiss',reason:'No violation found'},admin)).status,200);
- assert.equal((await req(path)).data.comments.length,1);
+ assert.equal((await req(path,'GET',undefined,reader.token)).data.comments.length,1);
  assert.equal((await req('admin/comment-reports','GET',undefined,admin)).data.reports.length,0);
 }));

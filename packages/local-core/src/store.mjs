@@ -180,6 +180,7 @@ export function openLocalStore(path){
     return {target,joined};
   }
   function requireCreatorAction(actor,creatorId,kind){
+    if(!actor)throw error('AUTH_REQUIRED',401);
     requireVerified(actor);
     if(!['view','comment','message'].includes(kind))throw error('INVALID_RESTRICTIONS',422);
     const creator=db.prepare("SELECT id FROM users WHERE id=? AND role='student' AND verified_at IS NOT NULL AND suspended=0").get(creatorId);
@@ -235,6 +236,7 @@ export function openLocalStore(path){
         JOIN lessons l ON l.id=v.lesson_id JOIN courses c ON c.id=l.course_id WHERE l.id=?`).get(id);
       if(!row)throw error('VIDEO_NOT_FOUND',404);
       if((row.status!=='published'||!row.course_active)&&!(actor&&!actor.suspended&&(actor.role==='admin'||actor.id===row.creator_id)))throw error('VIDEO_NOT_FOUND',404);
+      if(row.status==='published'&&row.course_active)requireCreatorAction(actor,row.creator_id,'view');
       if(!mediaDir)throw error('MEDIA_UNAVAILABLE',503);
       const file=join(mediaDir,`${row.file_id}.mp4`);
       let size;try{size=statSync(file).size;}catch{throw error('MEDIA_UNAVAILABLE',503);}
@@ -378,7 +380,7 @@ export function openLocalStore(path){
       }
       if(courseId){const parent=store.getCourse(courseId);if(!parent)throw error('INVALID_SEARCH_FILTER',422);if(institutionId&&parent.institutionId!==institutionId)throw error('INVALID_SEARCH_FILTER',422);}
       if(topicId){const topic=store.getTopic(topicId);if(!topic||(courseId&&topic.courseId!==courseId))throw error('INVALID_SEARCH_FILTER',422);if(institutionId&&store.getCourse(topic.courseId)?.institutionId!==institutionId)throw error('INVALID_SEARCH_FILTER',422);}
-      const fields=['l.title','l.description','l.preview_text','l.lesson_text','c.code','c.title','i.name'];
+      const fields=['l.title','l.description','l.preview_text','c.code','c.title','i.name'];
       const where=["l.status='published'",'c.active=1','('+fields.map(f=>'instr(lower('+f+'),lower(?))>0').join(' OR ')+')'];
       const values=fields.map(()=>term);
       if(institutionId){where.push('l.institution_id=?');values.push(institutionId);}
@@ -526,6 +528,12 @@ export function openLocalStore(path){
       });
     },
     publicLessons(courseId,topicId=null){if(!store.getCourse(courseId))return [];return (topicId?db.prepare("SELECT * FROM lessons WHERE course_id=? AND topic_id=? AND status='published' ORDER BY published_at DESC LIMIT 100").all(courseId,topicId):db.prepare("SELECT * FROM lessons WHERE course_id=? AND status='published' ORDER BY published_at DESC LIMIT 100").all(courseId)).map(withVideo);},
+    viewableLesson(actor,id){
+      const item=store.publicLesson(id);
+      if(!item)throw error('LESSON_NOT_FOUND',404);
+      requireCreatorAction(actor,item.creatorId,'view');
+      return item;
+    },
     publicLesson(id){const row=db.prepare("SELECT l.* FROM lessons l JOIN courses c ON c.id=l.course_id WHERE l.id=? AND l.status='published' AND c.active=1").get(id);return withVideo(row);},
     getOwnPublicProfile(actor){
       requireVerified(actor);

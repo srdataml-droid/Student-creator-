@@ -89,7 +89,7 @@ test('local MP4 upload is owner-only, limited, authenticated, and not public unt
   }finally{x.close();}
 });
 
-test('published video is streamed publicly, survives restart, and cannot be silently replaced after approval',async()=>{
+test('published video is streamed to verified students, survives restart, and cannot be silently replaced after approval',async()=>{
   const x=setup();try{
     const {admin,student,lessonId,course}=await x.seed();
     await x.request(`lessons/${lessonId}/video`,'POST',fixture,student);
@@ -100,20 +100,20 @@ test('published video is streamed publicly, survives restart, and cannot be sile
     const queue=await x.request('admin/review-queue','GET',undefined,admin);
     assert.equal(queue.body.lessons[0].hasVideo,true);
     await x.request(`lessons/${lessonId}/review`,'POST',{decision:'approve',reason:'Original lesson and video reviewed'},admin);
-    const publicPage=await x.request(`lessons/${lessonId}`);
+    const publicPage=await x.request(`lessons/${lessonId}`,'GET',undefined,student);
     assert.equal(publicPage.body.lesson.hasVideo,true);
     const catalog=await x.request(`courses/${course}`);
     assert.equal(catalog.body.lessons[0].hasVideo,true);
-    const full=await x.request(`lessons/${lessonId}/video`);
+    const full=await x.request(`lessons/${lessonId}/video`,'GET',undefined,student);
     assert.equal(full.status,200);
     assert.equal(full.response.headers.get('content-type'),'video/mp4');
     assert.equal(full.response.headers.get('x-content-type-options'),'nosniff');
     assert.deepEqual(Buffer.from(full.body),fixture);
-    const suffix=await x.request(`lessons/${lessonId}/video`,'GET',undefined,null,{range:'bytes=-20'});
+    const suffix=await x.request(`lessons/${lessonId}/video`,'GET',undefined,student,{range:'bytes=-20'});
     assert.equal(suffix.status,206);
     assert.deepEqual(Buffer.from(suffix.body),fixture.subarray(-20));
     x.reopen();
-    assert.equal((await x.request(`lessons/${lessonId}/video`,'HEAD')).status,200);
+    assert.equal((await x.request(`lessons/${lessonId}/video`,'HEAD',undefined,student)).status,200);
     assert.equal(x.store.publicLesson(lessonId).hasVideo,true);
     assert.equal((await x.request(`lessons/${lessonId}/video`,'POST',fixture,student)).status,409);
   }finally{x.close();}
@@ -162,8 +162,8 @@ test('deactivated courses hide published lessons, notes, creator discovery and v
     await x.request(`lessons/${lessonId}/video`,'POST',fixture,student);
     await x.request(`lessons/${lessonId}/submit`,'POST',{},student);
     await x.request(`lessons/${lessonId}/review`,'POST',{decision:'approve',reason:'Original teaching material'},admin);
-    assert.equal((await x.request(`lessons/${lessonId}`)).status,200);
-    assert.equal((await x.request(`lessons/${lessonId}/video`,'HEAD')).status,200);
+    assert.equal((await x.request(`lessons/${lessonId}`,'GET',undefined,student)).status,200);
+    assert.equal((await x.request(`lessons/${lessonId}/video`,'HEAD',undefined,student)).status,200);
     assert.equal((await x.request(`creators/${creatorId}`)).status,200);
     assert.equal((await x.request(`creators/${creatorId}/follow`,'POST',{},outsider)).status,200);
     assert.deepEqual((await x.request('following','GET',undefined,outsider)).body.creators,[creatorId]);
@@ -187,7 +187,7 @@ test('deactivated courses hide published lessons, notes, creator discovery and v
     const restore=new DatabaseSync(x.path);
     try{restore.prepare('UPDATE courses SET active=1 WHERE id=?').run(course);}
     finally{restore.close();}
-    assert.equal((await x.request(`lessons/${lessonId}`)).status,200);
-    assert.equal((await x.request(`lessons/${lessonId}/video`,'HEAD')).status,200);
+    assert.equal((await x.request(`lessons/${lessonId}`,'GET',undefined,student)).status,200);
+    assert.equal((await x.request(`lessons/${lessonId}/video`,'HEAD',undefined,student)).status,200);
   }finally{x.close();}
 });

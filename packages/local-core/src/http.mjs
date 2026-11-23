@@ -89,20 +89,21 @@ export function createLocalHandler(store){
           if(topicId&&!topics.some(t=>t.id===topicId))return fail('INVALID_TOPIC',422);
           return responses({course:item,topics,lessons:store.publicLessons(item.id,topicId).map(l=>({id:l.id,title:l.title,topicId:l.topicId,description:l.description,previewText:l.previewText,publishedAt:l.publishedAt,hasVideo:l.hasVideo}))});
         }
-        if(segments.length===3&&segments[0]==='lessons'&&segments[2]==='comments')
+        if(segments.length===3&&segments[0]==='lessons'&&segments[2]==='comments'){
+          store.viewableLesson(actor,segments[1]);
           return responses({comments:store.lessonComments(segments[1])});
+        }
         if(path==='admin/comment-reports'){
           if(!actor)return unauthorized();
           return responses({reports:store.lessonCommentReportQueue(actor)});
         }
         if(segments.length===3&&segments[0]==='lessons'&&segments[2]==='notes'){
-          // Public/free notes only; do not use this route for future paid assets.
-          const lesson=store.publicLesson(segments[1]);
-          if(!lesson||!store.getCourse(lesson.courseId)?.active)return fail('LESSON_NOT_FOUND',404);
+          const lesson=store.viewableLesson(actor,segments[1]);
+          if(!lesson)return fail('LESSON_NOT_FOUND',404);
           return publicLessonNotesResponse(lesson);
         }
         if(segments.length===2&&segments[0]==='lessons'){
-          const item=store.publicLesson(segments[1]);return item?responses({lesson:item}):fail('LESSON_NOT_FOUND',404);
+          const item=store.viewableLesson(actor,segments[1]);return responses({lesson:item});
         }
         if(path==='my/creator-profile'){if(!actor)return unauthorized();return responses({profile:store.getOwnPublicProfile(actor)});}
         if(path==='my/lessons'){if(!actor)return unauthorized();return responses({lessons:store.myLessons(actor)});}

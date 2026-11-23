@@ -1,11 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {mkdtempSync,rmSync} from 'node:fs';
+import {mkdtempSync,rmSync,readFileSync} from 'node:fs';
+import {fileURLToPath} from 'node:url';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
 import {openLocalStore} from '../src/store.mjs';
 import {createLocalHandler} from '../src/http.mjs';
 
+const mp4=Buffer.from(readFileSync(fileURLToPath(new URL('./fixtures/synthetic-1s.mp4.base64',import.meta.url)),'utf8'),'base64');
 const lessonText='An original teaching walkthrough showing how to check assumptions, compare two approaches, derive a conclusion and apply the idea to a new independent exercise. It has no purchased or private student information.';
 test('creator-owned view/comment/message settings persist and independently block comment and DM APIs',async()=>{
   const dir=mkdtempSync(join(tmpdir(),'creator-permission-')),file=join(dir,'campus.sqlite');
@@ -16,7 +18,9 @@ test('creator-owned view/comment/message settings persist and independently bloc
         ...(method==='POST'?{origin:'http://localhost:3000','content-type':'application/json'}:{})},
       ...(body===undefined?{}:{body:JSON.stringify(body)})});
     const response=await createLocalHandler(store)(request,path.split('/'));
-    return {status:response.status,data:await response.json(),
+    const type=response.headers.get('content-type')||'';
+    const data=type.includes('application/json')?await response.json():(method==='HEAD'?null:await response.arrayBuffer());
+    return {status:response.status,data,headers:response.headers,
       token:response.headers.get('set-cookie')?.match(/campus_local_session=([^;]+)/)?.[1]};
   }
   try{
@@ -38,10 +42,19 @@ test('creator-owned view/comment/message settings persist and independently bloc
     const draft=(await req('lessons/drafts','POST',{courseId:course,title:'Protecting original tutorials',
       description:'Free synthetic tutorial',previewText:'Public excerpt',lessonText,rightsAttested:true,
       creationKey:'permission-test-draft-0001'},creator.token)).data.lesson.id;
+    const up=new Request('http://localhost:3000/api/local/lessons/'+draft+'/video',{method:'POST',headers:{origin:'http://localhost:3000','content-type':'video/mp4',cookie:'campus_local_session='+creator.token},body:mp4});
+    assert.equal((await createLocalHandler(store)(up,['lessons',draft,'video'])).status,201);
     await req('lessons/'+draft+'/submit','POST',{},creator.token);
     assert.equal((await req('lessons/'+draft+'/review','POST',{decision:'approve',reason:'Independent approval'},admin)).status,200);
     assert.equal((await req('messages/preference','POST',{allowMessages:true},creator.token)).status,200);
     const route='creators/'+creator.id+'/restrictions/'+viewer.id;
+    for(const path of ['lessons/'+draft,'lessons/'+draft+'/notes','lessons/'+draft+'/video','lessons/'+draft+'/comments'])assert.equal((await req(path)).status,401,path);
+    assert.equal((await req('lessons/'+draft+'/video','HEAD')).status,401);
+    assert.equal((await req('lessons/'+draft,'GET',undefined,pending.token)).status,403);
+    assert.equal((await req('lessons/'+draft,'GET',undefined,viewer.token)).status,200);
+    const video=await req('lessons/'+draft+'/video','GET',undefined,viewer.token);
+    assert.equal(video.status,200);assert.equal(video.data.byteLength,mp4.length);
+    assert.equal((await req('lessons/'+draft+'/notes','GET',undefined,viewer.token)).status,200);
     assert.equal((await req('creators/'+creator.id+'/restrictions')).status,401);
     assert.equal((await req('creators/'+creator.id+'/restrictions','GET',undefined,viewer.token)).status,403);
     assert.equal((await req('creators/'+creator.id+'/restrictions','GET',undefined,pending.token)).status,403);
@@ -68,5 +81,13 @@ test('creator-owned view/comment/message settings persist and independently bloc
     assert.equal((await req(route,'POST',{view:false,comment:false,message:false},creator.token)).status,200);
     assert.equal((await req('creators/'+creator.id+'/restrictions','GET',undefined,creator.token)).data.restrictions.length,0);
     assert.equal((await req('messages/'+creator.id,'POST',{text:'Allowed after lifting restriction'},viewer.token)).status,201);
+    assert.equal((await req(route,'POST',{view:true,comment:false,message:false},creator.token)).status,200);
+    for(const path of ['lessons/'+draft,'lessons/'+draft+'/notes','lessons/'+draft+'/video','lessons/'+draft+'/comments'])assert.equal((await req(path,'GET',undefined,viewer.token)).status,403,path);
+    assert.equal((await req('lessons/'+draft+'/video','HEAD',undefined,viewer.token)).status,403);
+    assert.equal((await req('lessons/'+draft+'/comments','POST',{text:'Denied even without a comment-only ban',creationKey:'viewer-blocked-comment-004'},viewer.token)).status,403);
+    assert.equal((await req('messages/'+creator.id,'POST',{text:'Direct messaging remains allowed'},viewer.token)).status,201);
+    assert.equal((await req('lessons/'+draft,'GET',undefined,outsider.token)).status,200);
+    assert.equal((await req(route,'POST',{view:false,comment:false,message:false},creator.token)).status,200);
+    assert.equal((await req('lessons/'+draft,'GET',undefined,viewer.token)).status,200);
   }finally{store.close();rmSync(dir,{recursive:true,force:true});}
 });

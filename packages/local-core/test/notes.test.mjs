@@ -52,7 +52,8 @@ test('HTTP notes endpoint denies unpublished lessons, permits approved lessons, 
   assert.equal((await api('lessons/'+lesson+'/notes')).status,404);
   const approval=await api('lessons/'+lesson+'/review','POST',{decision:'approve',reason:'Original permitted educational notes'},admin);
   assert.equal(approval.status,200);
-  const published=await api('lessons/'+lesson+'/notes');assert.equal(published.status,200);
+  assert.equal((await api('lessons/'+lesson+'/notes')).status,401);
+  const published=await api('lessons/'+lesson+'/notes','GET',undefined,student);assert.equal(published.status,200);
   assert.match(published.headers.get('content-disposition'),/attachment;/);
   assert.match(await published.text(),/My original mathematics notes/);
   const missing=await api('lessons/missing-lesson-id/notes');assert.equal(missing.status,404);
@@ -62,7 +63,7 @@ test('HTTP notes endpoint denies unpublished lessons, permits approved lessons, 
 
 test('inactive or missing parent course cannot export a previously approved lesson',async()=>{
   const lesson={id:'visible-id',courseId:'course-id',status:'published',title:'Approved',lessonText:text};
-  const stub={getSession:()=>null,publicLesson:()=>lesson,getCourse:()=>({active:false})};
+  const stub={getSession:()=>null,viewableLesson:()=>null};
   const response=await createLocalHandler(stub)(new Request('http://localhost:3000/api/local/lessons/visible-id/notes'),['lessons','visible-id','notes']);
   assert.equal(response.status,404);
   assert.equal((await response.json()).error,'LESSON_NOT_FOUND');
