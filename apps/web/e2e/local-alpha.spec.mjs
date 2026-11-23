@@ -160,11 +160,19 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
 
     // Paid browser journey, using one synthetic creator and viewer. No Paystack key.
     // Media-first viewer must use the exact same authenticated playback gate.
+    await viewerPage.setViewportSize({width:360,height:780});
     await viewerPage.goto('/watch/'+lessonId);
     await expect(viewerPage.getByRole('heading',{name:title}).first()).toBeVisible();
-    await expect(viewerPage.getByRole('button',{name:'Enable playback'})).toBeVisible();
-    await viewerPage.getByRole('button',{name:'Enable playback'}).click();
+    await expect(viewerPage.getByRole('navigation',{name:'Mobile navigation'})).toBeVisible();
+    const watchViewport=await viewerPage.evaluate(()=>({width:window.innerWidth,scrollWidth:document.documentElement.scrollWidth}));
+    expect(watchViewport.scrollWidth,'Protected Android-width viewer overflows horizontally').toBeLessThanOrEqual(watchViewport.width+1);
+    const playButton=viewerPage.getByRole('button',{name:'Enable playback'});
+    await expect(playButton).toBeVisible();
+    await playButton.focus();await expect(playButton).toBeFocused();
+    await playButton.click();
     await expect(viewerPage.locator('.watch-stage video')).toBeVisible();
+    await expect(viewerPage.locator('.watch-stage video track[kind="captions"]')).toHaveAttribute('src',`/api/local/lessons/${lessonId}/video/captions`);
+    await viewerPage.setViewportSize({width:1280,height:800});
     expect((await request.get(BASE+'/api/local/lessons/'+lessonId+'/video')).status()).toBe(401);
     console.log('browser-alpha: free protected-video and immersive viewer passed');
     const paidTitle='Original paid content example '+suffix;
