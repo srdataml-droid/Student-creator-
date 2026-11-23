@@ -60,3 +60,15 @@ The intended **core business model is paid creator content, subscriptions and pe
 Content must be original or permission-cleared. Buying an example does not transfer its copyright. Do not facilitate submitting another student's work as one's own.
 
 See [project progress](docs/PROJECT_PROGRESS.md) and [product scope](docs/PRODUCT_SCOPE.md). Never commit keys or real student ID documents.
+
+
+## November 23, 2026 — Creator-first pilot and research handoff
+
+The founder has confirmed the student-only creator-economy model: creators retain copyright; viewers buy limited **access** (not content ownership); the initial pilot targets about 80–100 verified students. Creator-controlled view/comment/message restrictions, a secure paid-access model, direct monetization, portfolios, and future globally localized markets are tracked here as **requirements**, not implemented production features.
+
+- [Founder product blueprint and owner decisions](docs/CREATOR_FIRST_PRODUCT_BLUEPRINT_2026-11-23.md)
+- [Paid access, creator rights, monetization research and global strategy](docs/CREATOR_COMMERCE_RIGHTS_AND_GLOBAL_STRATEGY_2026-11-23.md)
+- [80–100-student pilot and engineering release gates](docs/PILOT_AND_ENGINEERING_RELEASE_PLAN_2026-11-23.md)
+- [Product lifecycle and system flow diagrams](docs/PRODUCT_LIFECYCLE_AND_SYSTEM_FLOWS_2026-11-23.md)
+
+**Status:** These documents do not claim video entitlement security, Paystack payments, payouts, Supabase staging or public deployment are complete. Continue development in this repository rather than the older `school-learning-platform`.
