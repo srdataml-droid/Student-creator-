@@ -26,13 +26,16 @@ const lesson=(r)=>r?({id:r.id,creatorId:r.creator_id,institutionId:r.institution
 const course=(r)=>r?({id:r.id,institutionId:r.institution_id,code:r.code,title:r.title,active:Boolean(r.active)}):null;
 const error=(code,status)=>Object.assign(new Error(code),{code,status});
 
-export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null}={}){
+export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null,pilotInviteToken=null}={}){
   // Optional local-only gate for a consented, invite-only one-student alpha.
   // A quota by itself is not enough: a stranger could otherwise take the sole slot.
   const pilotEmail=typeof pilotAllowedEmail==='string' ? pilotAllowedEmail.trim().toLowerCase() : null;
+  const pilotInvite=typeof pilotInviteToken==='string'?pilotInviteToken:null;
   if((pilotStudentCap!==null&&(!Number.isSafeInteger(pilotStudentCap)||pilotStudentCap<1||pilotStudentCap>1000))||
       (pilotEmail!==null&&(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(pilotEmail)||pilotEmail.length>254))||
-      ((pilotStudentCap===1)!==(pilotEmail!==null)))
+      ((pilotStudentCap===1)!==(pilotEmail!==null))||
+      ((pilotStudentCap===1)!==(pilotInvite!==null))||
+      (pilotInvite!==null&&!/^[A-Za-z0-9_-]{32,128}$/.test(pilotInvite)))
     throw error('INVALID_PILOT_CONFIGURATION',503);
   const filename=path===':memory:'?path:resolve(path);
   if(filename!==':memory:')mkdirSync(dirname(filename),{recursive:true,mode:0o700});
@@ -376,9 +379,15 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     listTopics(courseId){return db.prepare('SELECT id,course_id AS courseId,name FROM topics WHERE course_id=? ORDER BY name LIMIT 200').all(courseId);},
     getTopic(id){const x=db.prepare('SELECT id,course_id AS courseId,name FROM topics WHERE id=?').get(id);return x||null;},
     getCourse(id){return course(db.prepare('SELECT * FROM courses WHERE id=? AND active=1').get(id));},
-    register({email,password,institutionId}){
+    pilotInviteOnly(){return pilotInvite!==null;},
+    register({email,password,institutionId,inviteCode=null}){
       const normalized=validateEmail(email);validatePassword(password);
-      if(pilotEmail!==null&&normalized!==pilotEmail)throw error('PILOT_INVITATION_REQUIRED',403);
+      // An email address alone cannot claim the single invitation.
+      if(pilotInvite!==null){
+        const validCode=typeof inviteCode==='string'&&/^[A-Za-z0-9_-]{32,128}$/.test(inviteCode);
+        if(normalized!==pilotEmail||!validCode||!timingSafeEqual(Buffer.from(sha(inviteCode),'hex'),Buffer.from(sha(pilotInvite),'hex')))
+          throw error('PILOT_INVITATION_REQUIRED',403);
+      }
       if(!db.prepare('SELECT id FROM institutions WHERE id=?').get(institutionId))throw error('INSTITUTION_NOT_FOUND',404);
       const id=randomUUID(),salt=randomBytes(16).toString('hex'),hash=scryptSync(password,salt,64).toString('hex');
       transaction(()=>{
@@ -1064,9 +1073,10 @@ export function getLocalStore(){
   const rawCap=process.env.PILOT_STUDENT_CAP;
   const pilotStudentCap=rawCap===undefined?null:(/^[1-9]\d{0,3}$/.test(rawCap)?Number(rawCap):NaN);
   const pilotAllowedEmail=process.env.PILOT_STUDENT_EMAIL??null;
+  const pilotInviteToken=process.env.PILOT_STUDENT_INVITE_TOKEN??null;
   if(!globalThis.__campusLocalStore||globalThis.__campusLocalStorePath!==path){
     globalThis.__campusLocalStore?.close();
-    globalThis.__campusLocalStore=openLocalStore(path,{pilotStudentCap,pilotAllowedEmail});
+    globalThis.__campusLocalStore=openLocalStore(path,{pilotStudentCap,pilotAllowedEmail,pilotInviteToken});
     globalThis.__campusLocalStorePath=path;
   }
   return globalThis.__campusLocalStore;
