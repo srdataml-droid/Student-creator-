@@ -51,7 +51,7 @@ export default function PurchasePanel({lessonId,priceKobo}){
   <h2>Unlock access for ₦{naira}</h2>
   <p>Buying access lets you view this creator’s original work. The creator retains the copyright. Republishing or sharing source files is not included.</p>
   <p className="hint">No real purchases or payouts are enabled. The checkout below uses Paystack test credentials only when configured by the developer.</p>
-  {checkoutAvailable?<div className="button-row">
+  {order?.status==='refunded'?<p role="status" className="hint">This synthetic order was refunded and its viewing access was revoked. Re-purchase is disabled during the one-student technical pilot.</p>:checkoutAvailable?<div className="button-row">
    <button className="primary-link" type="button" disabled={busy} onClick={checkout}>{busy?'Checking…':'Open Paystack test checkout'}</button>
    {order?.status==='pending'&&<button className="secondary-link" type="button" disabled={busy} onClick={verify}>Verify sandbox payment</button>}
   </div>:<p role="status" className="hint">Sandbox checkout is not configured. The lesson remains locked until a verified test payment is recorded.</p>}
