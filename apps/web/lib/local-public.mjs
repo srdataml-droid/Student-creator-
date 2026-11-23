@@ -11,6 +11,12 @@ export async function getLocalViewablePublishedLesson(id){
   return store.viewableLesson(store.getSession(token),id);
 }
 
+/** Preview fields only: never serialize protected lessonText to a paywall. */
+export function getLocalPublishedPricePreview(id){
+ const lesson=getLocalStore().publicLesson(id);
+ return lesson?{id:lesson.id,title:lesson.title,priceKobo:lesson.priceKobo??0}:null;
+}
+
 export function getLocalPublicCreator(id){return getLocalStore().publicCreator(id);}
 
 export function getLocalPublicInstitutions(){return getLocalStore().listInstitutions();}
