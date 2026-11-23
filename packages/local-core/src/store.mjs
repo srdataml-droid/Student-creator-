@@ -309,7 +309,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       // Always run a scrypt check even for unknown users (limit enumeration/timing).
       const salt=row?.salt??'f'.repeat(32),check=scryptSync(password,salt,64);
       const valid=timingSafeEqual(check,Buffer.from(row?.password_hash??'0'.repeat(128),'hex'));
-      if(!valid||!row||row.suspended)return null;
+      if(!valid||!row||row.suspended||(pilotEmail!==null&&row.role==='student'&&row.email!==pilotEmail))return null;
       const token=randomBytes(32).toString('base64url');
       transaction(()=>{db.prepare('INSERT INTO sessions VALUES(?,?,?)').run(sha(token),row.id,Math.floor(Date.now()/1000)+SESSION_TTL);audit(row.id,'session.created',row.id);});
       return {token,user:human(row)};
@@ -317,6 +317,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     getSession(token){
       if(!token||!/^[A-Za-z0-9_-]{43}$/.test(token))return null;
       const row=db.prepare('SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.suspended=0').get(sha(token),Math.floor(Date.now()/1000));
+      if(pilotEmail!==null&&row?.role==='student'&&row.email!==pilotEmail)return null;
       return human(row);
     },
     logout(token){if(token&&/^[A-Za-z0-9_-]{43}$/.test(token))db.prepare('DELETE FROM sessions WHERE token_hash=?').run(sha(token));},
