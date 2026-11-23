@@ -69,6 +69,16 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       file_id TEXT NOT NULL UNIQUE,content_hash TEXT NOT NULL,
       bytes INTEGER NOT NULL CHECK(bytes BETWEEN 32 AND 26214400),created_at TEXT NOT NULL
     );
+    -- Ephemeral playback grants bound to a real login session; raw secrets never persist.
+    CREATE TABLE IF NOT EXISTS playback_grants(
+      token_hash TEXT PRIMARY KEY,
+      session_hash TEXT NOT NULL REFERENCES sessions(token_hash) ON DELETE CASCADE,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      lesson_id TEXT NOT NULL REFERENCES lessons(id) ON DELETE CASCADE,
+      expires_at INTEGER NOT NULL,
+      created_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS playback_grants_expiry ON playback_grants(expires_at);
     CREATE TABLE IF NOT EXISTS creator_follows(
       follower_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
       creator_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -237,6 +247,34 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       if(replayed){try{unlinkSync(file);}catch{}return {hasVideo:true,replayed:true};}
       if(previousId)try{unlinkSync(join(mediaDir,`${previousId}.mp4`));}catch{}
       return {hasVideo:true,replayed:false,sizeBytes:bytes.length};
+    },
+    issuePlaybackGrant(actor,id,sessionToken){
+      store.viewableLesson(actor,id);
+      if(!db.prepare('SELECT 1 FROM lesson_videos WHERE lesson_id=?').get(id))throw error('VIDEO_NOT_FOUND',404);
+      const sessionHash=typeof sessionToken==='string'?sha(sessionToken):null;
+      const now=Math.floor(Date.now()/1000);
+      if(!sessionHash||!db.prepare('SELECT 1 FROM sessions WHERE token_hash=? AND user_id=? AND expires_at>?').get(sessionHash,actor.id,now))
+        throw error('AUTH_REQUIRED',401);
+      return transaction(()=>{
+        db.prepare('DELETE FROM playback_grants WHERE expires_at<=?').run(now);
+        if(db.prepare('SELECT count(*) AS n FROM playback_grants WHERE user_id=?').get(actor.id).n>=20)
+          throw error('PLAYBACK_GRANT_LIMIT',429);
+        const token=randomBytes(32).toString('base64url'),expiresAt=now+300;
+        db.prepare('INSERT INTO playback_grants(token_hash,session_hash,user_id,lesson_id,expires_at,created_at) VALUES(?,?,?,?,?,?)')
+          .run(sha(token),sessionHash,actor.id,id,expiresAt,stamp());
+        audit(actor.id,'video.playback.granted',id);
+        return {token,expiresAt};
+      });
+    },
+    verifyPlaybackGrant(actor,id,token,sessionToken){
+      if(!actor)throw error('AUTH_REQUIRED',401);
+      requireVerified(actor);
+      if(typeof token!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(token)||
+          typeof sessionToken!=='string'||!/^[A-Za-z0-9_-]{43}$/.test(sessionToken)||
+          !db.prepare('SELECT 1 FROM playback_grants WHERE token_hash=? AND session_hash=? AND user_id=? AND lesson_id=? AND expires_at>?')
+            .get(sha(token),sha(sessionToken),actor.id,id,Math.floor(Date.now()/1000)))
+        throw error('PLAYBACK_GRANT_REQUIRED',403);
+      return true;
     },
     getVideoFile(actor,id){
       const row=db.prepare(`SELECT v.file_id,v.bytes,l.creator_id,l.status,c.active AS course_active FROM lesson_videos v

@@ -39,7 +39,8 @@ export function createLocalHandler(store){
       const method=request.method.toUpperCase(),path=segments.join('/');
       if(!['GET','POST','HEAD'].includes(method))return fail('METHOD_NOT_ALLOWED',405);
       if(method==='POST'&&!checkOrigin(request))return fail('ORIGIN_REJECTED',403);
-      const cookie=parseCookies(request.headers.get('cookie'))[SESSION_COOKIE];
+      const cookies=parseCookies(request.headers.get('cookie'));
+      const cookie=cookies[SESSION_COOKIE];
       const actor=store.getSession(cookie);
       if(segments.length===3&&segments[0]==='lessons'&&segments[2]==='video'){
         const id=segments[1];
@@ -152,6 +153,13 @@ export function createLocalHandler(store){
         return responses({user:result.user},200,{'set-cookie':`${SESSION_COOKIE}=${result.token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800${secure}`});
       }
       if(!actor)return unauthorized();
+      if(segments.length===3&&segments[0]==='lessons'&&segments[2]==='playback-grant'){
+        if(Object.keys(body).length!==0)return fail('UNEXPECTED_BODY',400);
+        const id=segments[1],grant=store.issuePlaybackGrant(actor,id,cookie);
+        const secure=new URL(request.url).protocol==='https:'?'; Secure':'';
+        const mediaCookie=`campus_playback_${id}=${grant.token}; Path=/api/local/lessons/${id}/video; HttpOnly; SameSite=Strict; Max-Age=300${secure}`;
+        return responses({expiresAt:grant.expiresAt},200,{'set-cookie':mediaCookie});
+      }
       if(path==='my/creator-profile'){const result=store.updatePublicProfile(actor,body);return responses(result,result.replayed?200:201);}
       if(segments.length===4&&segments[0]==='creators'&&segments[2]==='restrictions'){
         const result=store.setCreatorRestrictions(actor,segments[1],segments[3],body);
