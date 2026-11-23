@@ -7,19 +7,20 @@ export const MAX_CAPTION_BYTES=128*1024;
 const invalid=()=>Object.assign(new Error('INVALID_CAPTIONS'),{code:'INVALID_CAPTIONS',status:422});
 const CLOCK=/^(?:\d{2}:\d{2}:\d{2}|\d{2}:\d{2})\.\d{3}$/;
 const TIMERANGE=/^((?:\d{2}:)?\d{2}:\d{2}\.\d{3}) --> ((?:\d{2}:)?\d{2}:\d{2}\.\d{3})$/;
+const BAD_CONTROL=/[\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u202a-\u202e\u2066-\u2069]/u;
 const BAD_TEXT=/[<>\u0000-\u0008\u000b\u000c\u000e-\u001f\u007f\u202a-\u202e\u2066-\u2069]/u;
 function millis(s){
  if(!CLOCK.test(s))throw invalid();
  const groups=s.split(':'),last=groups.pop(),[second,ms]=last.split('.').map(Number);
- const minute=Number(groups.pop()??0),hour=Number(groups.pop()??0);
- if(second>59||(hour&&minute>59)||hour>48)throw invalid();
+ const hasHour=groups.length===2,minute=Number(groups.pop()??0),hour=Number(groups.pop()??0);
+ if(second>59||(hasHour&&minute>59)||hour>48)throw invalid();
  return ((hour*60+minute)*60+second)*1000+ms;
 }
 export function validateWebVtt(input){
  if(typeof input!=='string'||Buffer.byteLength(input,'utf8')>MAX_CAPTION_BYTES)throw invalid();
  if(input.includes('\uFFFD'))throw invalid();
  const normalized=input.replace(/^\uFEFF/,'').replace(/\r\n?/g,'\n').trimEnd();
- if(!normalized.startsWith('WEBVTT\n\n')||BAD_TEXT.test(normalized)||normalized.includes('\uFEFF'))throw invalid();
+ if(!normalized.startsWith('WEBVTT\n\n')||BAD_CONTROL.test(normalized)||normalized.includes('\uFEFF'))throw invalid();
  const body=normalized.slice('WEBVTT\n\n'.length);
  if(!body||body.length>MAX_CAPTION_BYTES)throw invalid();
  const blocks=body.split(/\n{2,}/);
