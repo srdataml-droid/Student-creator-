@@ -9,13 +9,13 @@ import {createLocalHandler} from '../src/http.mjs';
 const lessonText='An original synthetic explanation of a mathematical worked example. We explain the independent derivation, check each step and give a detailed conclusion without any real user data.';
 test('₦200 synthetic purchase gates access, resists retries, balances journal and survives restart',async()=>{
  const dir=mkdtempSync(join(tmpdir(),'commerce-test-')),path=join(dir,'campus.sqlite');
- let store=openLocalStore(path);
+ let store=openLocalStore(path),sandboxGateway=null;
  const pw='Strong Synthetic Student Password 2026';
  const req=async(route,method='GET',body,session)=>{
   const r=new Request('http://localhost:3000/api/local/'+route,{method,
    headers:{...(session?{cookie:'campus_local_session='+session}:{}),...(method==='POST'?{origin:'http://localhost:3000','content-type':'application/json'}:{})},
    ...(body===undefined?{}:{body:JSON.stringify(body)})});
-  const response=await createLocalHandler(store)(r,route.split('/'));
+  const response=await createLocalHandler(store,{sandboxGateway})(r,route.split('/'));
   return {status:response.status,data:await response.json()};
  };
  try{
@@ -57,6 +57,18 @@ test('₦200 synthetic purchase gates access, resists retries, balances journal 
   }
   assert.throws(()=>store.applyVerifiedTestCharge(reference,{status:false,data:payment('tr_test_01').data}),{code:'NOT_PAID'});
   assert.equal((await req('lessons/'+id,'GET',undefined,buyer.token)).status,402);
+  assert.equal((await req('orders/'+reference+'/checkout','POST',{},buyer.token)).status,503);
+  sandboxGateway={
+   initialize:async snapshot=>{assert.equal(snapshot.reference,reference);assert.equal(snapshot.amountKobo,20000);assert.equal(snapshot.domain,'test');return {reference,authorizationUrl:'https://checkout.paystack.com/synthetic-test-only'};},
+   verify:async snapshot=>{assert.equal(snapshot.reference,reference);return {reference,amountKobo:20000,currency:'NGN',providerTransactionId:'tr_test_01'};}
+  };
+  assert.equal((await req('orders/'+reference+'/checkout','POST',{},other.token)).status,404);
+  const checkout=await req('orders/'+reference+'/checkout','POST',{},buyer.token);
+  assert.equal(checkout.status,200);assert.match(checkout.data.checkout.authorizationUrl,/checkout\.paystack\.com/);
+  assert.equal((await req('orders/'+reference+'/confirm','POST',{},other.token)).status,404);
+  assert.equal((await req('orders/'+reference+'/confirm','POST',{providerTransactionId:'fake'},buyer.token)).status,400);
+  const confirmed=await req('orders/'+reference+'/confirm','POST',{},buyer.token);
+  assert.equal(confirmed.status,200);assert.equal(confirmed.data.order.status,'paid');
   assert.equal(store.applyVerifiedTestCharge(reference,payment('tr_test_01')).status,'paid');
   assert.equal(store.applyVerifiedTestCharge(reference,payment('tr_test_01')).replayed,true);
   assert.throws(()=>store.applyVerifiedTestCharge(reference,payment('tr_test_02')),{code:'PAYMENT_CONFLICT'});
