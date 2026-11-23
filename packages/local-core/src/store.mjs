@@ -24,7 +24,14 @@ const lesson=(r)=>r?({id:r.id,creatorId:r.creator_id,institutionId:r.institution
 const course=(r)=>r?({id:r.id,institutionId:r.institution_id,code:r.code,title:r.title,active:Boolean(r.active)}):null;
 const error=(code,status)=>Object.assign(new Error(code),{code,status});
 
-export function openLocalStore(path){
+export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null}={}){
+  // Optional local-only gate for a consented, invite-only one-student alpha.
+  // A quota by itself is not enough: a stranger could otherwise take the sole slot.
+  const pilotEmail=typeof pilotAllowedEmail==='string' ? pilotAllowedEmail.trim().toLowerCase() : null;
+  if((pilotStudentCap!==null&&(!Number.isSafeInteger(pilotStudentCap)||pilotStudentCap<1||pilotStudentCap>1000))||
+      (pilotEmail!==null&&(!/^[^\\s@]+@[^\\s@]+\\.[^\\s@]+$/.test(pilotEmail)||pilotEmail.length>254))||
+      ((pilotStudentCap===1)!==(pilotEmail!==null)))
+    throw error('INVALID_PILOT_CONFIGURATION',503);
   const filename=path===':memory:'?path:resolve(path);
   if(filename!==':memory:')mkdirSync(dirname(filename),{recursive:true,mode:0o700});
   const mediaDir=filename===':memory:'?null:`${filename}.media`;
@@ -282,9 +289,17 @@ export function openLocalStore(path){
     getCourse(id){return course(db.prepare('SELECT * FROM courses WHERE id=? AND active=1').get(id));},
     register({email,password,institutionId}){
       const normalized=validateEmail(email);validatePassword(password);
+      if(pilotEmail!==null&&normalized!==pilotEmail)throw error('PILOT_INVITATION_REQUIRED',403);
       if(!db.prepare('SELECT id FROM institutions WHERE id=?').get(institutionId))throw error('INSTITUTION_NOT_FOUND',404);
       const id=randomUUID(),salt=randomBytes(16).toString('hex'),hash=scryptSync(password,salt,64).toString('hex');
-      transaction(()=>{db.prepare('INSERT INTO users(id,email,password_hash,salt,institution_id,created_at) VALUES(?,?,?,?,?,?)').run(id,normalized,hash,salt,institutionId,stamp());audit(id,'account.created',id);});
+      transaction(()=>{
+        // SQLite BEGIN IMMEDIATE prevents two concurrent registrations consuming the final slot.
+        if(pilotStudentCap!==null&&
+            db.prepare("SELECT COUNT(*) AS n FROM users WHERE role='student'").get().n>=pilotStudentCap)
+          throw error('PILOT_CAP_REACHED',403);
+        db.prepare('INSERT INTO users(id,email,password_hash,salt,institution_id,created_at) VALUES(?,?,?,?,?,?)').run(id,normalized,hash,salt,institutionId,stamp());
+        audit(id,'account.created',id);
+      });
       return {id,email:normalized};
     },
     login(email,password){
@@ -924,6 +939,13 @@ export function getLocalStore(){
   if(process.env.APP_DATA_MODE&&process.env.APP_DATA_MODE!=='local')throw error('LOCAL_MODE_DISABLED',503);
   if(process.env.VERCEL||process.env.AWS_LAMBDA_FUNCTION_NAME||process.env.NETLIFY)throw error('LOCAL_MODE_UNAVAILABLE_ON_SERVERLESS',503);
   const path=getLocalDbPath();
-  if(!globalThis.__campusLocalStore||globalThis.__campusLocalStorePath!==path){globalThis.__campusLocalStore?.close();globalThis.__campusLocalStore=openLocalStore(path);globalThis.__campusLocalStorePath=path;}
+  const rawCap=process.env.PILOT_STUDENT_CAP;
+  const pilotStudentCap=rawCap===undefined?null:(/^[1-9]\\d{0,3}$/.test(rawCap)?Number(rawCap):NaN);
+  const pilotAllowedEmail=process.env.PILOT_STUDENT_EMAIL??null;
+  if(!globalThis.__campusLocalStore||globalThis.__campusLocalStorePath!==path){
+    globalThis.__campusLocalStore?.close();
+    globalThis.__campusLocalStore=openLocalStore(path,{pilotStudentCap,pilotAllowedEmail});
+    globalThis.__campusLocalStorePath=path;
+  }
   return globalThis.__campusLocalStore;
 }
