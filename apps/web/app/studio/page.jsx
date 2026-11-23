@@ -5,7 +5,7 @@ import {api,friendlyError} from '../../lib/local-client.js';
 import CreatorRestrictions from './CreatorRestrictions.jsx';
 const fresh=()=>({courseId:'',topicId:'',title:'',description:'',previewText:'',lessonText:'',rightsAttested:false,creationKey:globalThis.crypto?.randomUUID?.()||'local-unique-creation-12345'});
 export default function Studio(){
- const [earnings,setEarnings]=useState(null),[priceInputs,setPriceInputs]=useState({}),[user,setUser]=useState(null),[courses,setCourses]=useState([]),[topics,setTopics]=useState([]),[items,setItems]=useState([]),[inbox,setInbox]=useState([]),[state,setState]=useState('loading'),[form,setForm]=useState(fresh),[error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false),[editingId,setEditingId]=useState(null),[videoFiles,setVideoFiles]=useState({}),[profile,setProfile]=useState({handle:'',displayName:'',bio:''}),[profileBusy,setProfileBusy]=useState(false),[profileError,setProfileError]=useState(''),[profileSaved,setProfileSaved]=useState('');
+ const [earnings,setEarnings]=useState(null),[priceInputs,setPriceInputs]=useState({}),[user,setUser]=useState(null),[courses,setCourses]=useState([]),[topics,setTopics]=useState([]),[items,setItems]=useState([]),[inbox,setInbox]=useState([]),[state,setState]=useState('loading'),[form,setForm]=useState(fresh),[error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false),[editingId,setEditingId]=useState(null),[videoFiles,setVideoFiles]=useState({}),[captionFiles,setCaptionFiles]=useState({}),[profile,setProfile]=useState({handle:'',displayName:'',bio:''}),[profileBusy,setProfileBusy]=useState(false),[profileError,setProfileError]=useState(''),[profileSaved,setProfileSaved]=useState('');
  async function load(){try{const m=await api('me');setUser(m.user);const c=await api('courses');setCourses(c.courses);if(m.user.role==='student'&&m.user.verifiedAt){const x=await api('my/lessons');setItems(x.lessons);setPriceInputs(Object.fromEntries(x.lessons.map(item=>[item.id,String((item.priceKobo??0)/100)])));const earning=await api('my/creator-earnings');setEarnings(earning.earnings);const d=await api('messages/inbox');setInbox(d.inbox);const p=await api('my/creator-profile');setProfile(p.profile||{handle:'',displayName:'',bio:''});}setState('ready');}catch(e){setState(e.status===401?'signed-out':'unavailable');}}
  useEffect(()=>{load();},[]);
  useEffect(()=>{if(!form.courseId){setTopics([]);return;}api(`courses/${form.courseId}/topics`).then(d=>setTopics(d.topics)).catch(()=>setTopics([]));},[form.courseId]);
@@ -29,6 +29,23 @@ export default function Studio(){
     const out=await r.json().catch(()=>({error:'INVALID_SERVER_RESPONSE'}));if(!r.ok)throw new Error(out.error||'UPLOAD_FAILED');
     setMessage('Video saved privately. A reviewer can preview it before publishing.');
     setVideoFiles(v=>({...v,[id]:null}));await load();
+  }catch(e){setError(friendlyError(e));}finally{setBusy(false);}
+ }
+ async function uploadCaptions(id){
+  const file=captionFiles[id];if(!file){setError('Choose an English WebVTT captions file.');return;}
+  if(!file.name.toLowerCase().endsWith('.vtt')||file.size<25||file.size>128*1024){
+   setError('Choose a plain-text .vtt file between 25 bytes and 128 KiB.');return;
+  }
+  setBusy(true);setError('');setMessage('');
+  try{
+   const response=await fetch('/api/local/lessons/'+id+'/video/captions',{
+    method:'POST',headers:{'content-type':'text/vtt; charset=utf-8'},body:await file.text(),
+    credentials:'same-origin',cache:'no-store'
+   });
+   const result=await response.json().catch(()=>({error:'INVALID_SERVER_RESPONSE'}));
+   if(!response.ok)throw new Error(result.error||'CAPTIONS_UPLOAD_FAILED');
+   setMessage('English captions saved privately. A reviewer can inspect them with the video.');
+   setCaptionFiles(v=>({...v,[id]:null}));await load();
   }catch(e){setError(friendlyError(e));}finally{setBusy(false);}
  }
  async function savePublicProfile(e){
@@ -72,9 +89,17 @@ export default function Studio(){
  <label className="check-line"><input type="checkbox" required checked={form.rightsAttested} onChange={e=>setForm({...form,rightsAttested:e.target.checked})}/><span>This is my original teaching material or I have permission to distribute it. It is not a completed student assignment for submission.</span></label>
  <button className="primary-link" disabled={busy} type="submit">{busy?'Saving…':editingId?'Save changes':'Save private draft'}</button>{editingId&&<button className="quiet-button" type="button" onClick={()=>{setEditingId(null);setForm(fresh());}}>Cancel editing</button>}</form></section>
  <section className="panel"><h2>Your lessons</h2>{items.length===0?<p className="hint">Your drafts and submissions will appear here.</p>:<ul className="review-list">{items.map(item=><li key={item.id}><span className="pill">{item.status.replaceAll('_',' ')}</span><h3>{item.title}</h3>{item.reviewReason&&<p className="hint">Review feedback: {item.reviewReason}</p>}
- {item.hasVideo&&<div className="lesson-video-preview"><p className="hint">Original video · local MP4</p><video controls playsInline preload="none" aria-label={`Video preview for ${item.title}`}><source src={`/api/local/lessons/${item.id}/video`} type="video/mp4"/>Your browser cannot play this video.</video></div>}
+ {item.hasVideo&&<div className="lesson-video-preview"><p className="hint">Original video · local MP4</p><video controls playsInline preload="none" aria-label={`Video preview for ${item.title}`}><source src={`/api/local/lessons/${item.id}/video`} type="video/mp4"/>{item.hasCaptions&&<track kind="captions" srcLang="en" label="English captions" src={`/api/local/lessons/${item.id}/video/captions`} default/>}Your browser cannot play this video.</video></div>}
  {['draft','rejected'].includes(item.status)&&<div className="media-form"><label htmlFor={`price-${item.id}`}>Viewer access price (₦; 0 means free)</label><input id={`price-${item.id}`} type="number" min="0" max="10000000" step="1" value={priceInputs[item.id]??String((item.priceKobo??0)/100)} disabled={busy} onChange={e=>setPriceInputs(v=>({...v,[item.id]:e.target.value}))}/><button className="secondary-link" type="button" disabled={busy} onClick={()=>setAccessPrice(item)}>Save access price</button><p className="hint">Current price: {item.priceKobo>0?'₦'+(item.priceKobo/100).toLocaleString('en-NG'):'Free'} · this locks on publication.</p></div>}
- {['draft','rejected'].includes(item.status)&&<div className="media-form"><label htmlFor={`video-${item.id}`}>Upload {item.hasVideo?'a replacement':'an original'} MP4 video (max 25 MiB)</label><input id={`video-${item.id}`} type="file" accept="video/mp4,.mp4" disabled={busy} onChange={e=>setVideoFiles(v=>({...v,[item.id]:e.target.files?.[0]||null}))}/><button className="secondary-link" type="button" disabled={busy||!videoFiles[item.id]} onClick={()=>uploadVideo(item.id)}>Upload video</button><p className="hint">Private until a separate administrator approves this lesson. Do not upload confidential or unlicensed materials.</p></div>}{['draft','rejected'].includes(item.status)&&<div className="button-row"><button className="secondary-link" disabled={busy} onClick={()=>{setEditingId(item.id);setForm({courseId:item.courseId,topicId:item.topicId||'',title:item.title,description:item.description,previewText:item.previewText,lessonText:item.lessonText,rightsAttested:true,creationKey:globalThis.crypto?.randomUUID?.()||'edit-lesson-unique-12345'});window.scrollTo({top:0,behavior:'smooth'});}}>Edit</button><button className="primary-link" disabled={busy} onClick={()=>send(item.id)}>Submit for review</button></div>}{item.status==='published'&&<Link className="secondary-link" href={`/lessons/${item.id}`}>Read published lesson</Link>}</li>)}</ul>}</section></div>}
+ {['draft','rejected'].includes(item.status)&&<div className="media-form"><label htmlFor={`video-${item.id}`}>Upload {item.hasVideo?'a replacement':'an original'} MP4 video (max 25 MiB)</label><input id={`video-${item.id}`} type="file" accept="video/mp4,.mp4" disabled={busy} onChange={e=>setVideoFiles(v=>({...v,[item.id]:e.target.files?.[0]||null}))}/><button className="secondary-link" type="button" disabled={busy||!videoFiles[item.id]} onClick={()=>uploadVideo(item.id)}>Upload video</button><p className="hint">Private until a separate administrator approves this lesson. Do not upload confidential or unlicensed materials.</p></div>}{['draft','rejected'].includes(item.status)&&item.hasVideo&&<div className="media-form">
+ <label htmlFor={`captions-${item.id}`}>Optional English captions (.vtt, max 128 KiB)</label>
+ <input id={`captions-${item.id}`} type="file" accept=".vtt,text/vtt" disabled={busy}
+   onChange={e=>setCaptionFiles(v=>({...v,[item.id]:e.target.files?.[0]||null}))}/>
+ <button className="secondary-link" type="button" disabled={busy||!captionFiles[item.id]} onClick={()=>uploadCaptions(item.id)}>
+  {item.hasCaptions?'Replace captions':'Upload captions'}
+ </button>
+ <p className="hint">{item.hasCaptions?'Captions saved for this video.':'Captions can help students learn with sound off.'} Use WebVTT timing and original, rights-cleared text. Replacing the MP4 clears its previous captions.</p>
+ </div>}{['draft','rejected'].includes(item.status)&&<div className="button-row"><button className="secondary-link" disabled={busy} onClick={()=>{setEditingId(item.id);setForm({courseId:item.courseId,topicId:item.topicId||'',title:item.title,description:item.description,previewText:item.previewText,lessonText:item.lessonText,rightsAttested:true,creationKey:globalThis.crypto?.randomUUID?.()||'edit-lesson-unique-12345'});window.scrollTo({top:0,behavior:'smooth'});}}>Edit</button><button className="primary-link" disabled={busy} onClick={()=>send(item.id)}>Submit for review</button></div>}{item.status==='published'&&<Link className="secondary-link" href={`/lessons/${item.id}`}>Read published lesson</Link>}</li>)}</ul>}</section></div>}
  {error&&<p role="alert" className="form-error">{error}</p>}{message&&<p role="status" className="form-success">{message}</p>}
  </>}
  </main>;
