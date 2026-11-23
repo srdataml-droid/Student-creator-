@@ -46,7 +46,7 @@ export default function PurchasePanel({lessonId,priceKobo}){
   }catch(e){setError(friendlyError(e));}
   finally{setBusy(false);}
  }
- return <section className="panel" aria-label="Paid creator access">
+ return <section className="panel paid-access-card" aria-label="Paid creator access">
   <p className="eyebrow">PAID CREATOR WORK · TEST MODE ONLY</p>
   <h2>Unlock access for ₦{naira}</h2>
   <p>Buying access lets you view this creator’s original work. The creator retains the copyright. Republishing or sharing source files is not included.</p>
