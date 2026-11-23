@@ -2,6 +2,7 @@
 import Link from 'next/link';
 import {useEffect,useState} from 'react';
 import {api,friendlyError} from '../../lib/local-client.js';
+import CreatorRestrictions from './CreatorRestrictions.jsx';
 const fresh=()=>({courseId:'',topicId:'',title:'',description:'',previewText:'',lessonText:'',rightsAttested:false,creationKey:globalThis.crypto?.randomUUID?.()||'local-unique-creation-12345'});
 export default function Studio(){
  const [user,setUser]=useState(null),[courses,setCourses]=useState([]),[topics,setTopics]=useState([]),[items,setItems]=useState([]),[inbox,setInbox]=useState([]),[state,setState]=useState('loading'),[form,setForm]=useState(fresh),[error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false),[editingId,setEditingId]=useState(null),[videoFiles,setVideoFiles]=useState({}),[profile,setProfile]=useState({handle:'',displayName:'',bio:''}),[profileBusy,setProfileBusy]=useState(false),[profileError,setProfileError]=useState(''),[profileSaved,setProfileSaved]=useState('');
@@ -50,6 +51,7 @@ export default function Studio(){
   {profileSaved&&<p role="status" className="form-success">{profileSaved}</p>}
   <button type="submit" className="primary-link" disabled={profileBusy||busy}>{profileBusy?'Saving profile…':'Save public profile'}</button>
  </form><p className="hint">Your public profile becomes discoverable only once a separate reviewer approves one of your lessons. <Link href={`/creators/${user.id}`}>Preview your creator page</Link> once published.</p></section>}
+ {user.role==='student'&&user.verifiedAt&&<CreatorRestrictions creatorId={user.id} inbox={inbox}/>}
  {user.verifiedAt&&<section className="message-settings"><div><h2>Peer questions & messages</h2><p className="hint">You control whether new students may contact you about approved lessons. Existing conversations stay available unless you block a contact.</p><p className="hint">{inbox.length} conversations <Link href="/messages">Open inbox</Link></p></div><button className="secondary-link" type="button" disabled={busy} onClick={toggleMessages}>{user.allowMessages?'Disable new inquiries':'Allow new inquiries'}</button></section>}
  {!user.verifiedAt?<p className="status" role="status">Your campus membership is waiting for an administrator to verify it. Publishing is disabled until approval.</p>:<div className="studio-grid"><section className="panel"><h2>{editingId?'Edit lesson draft':'New lesson draft'}</h2><p className="hint">Write an original accessible text explanation first, then attach an optional original MP4 video (up to 25 MiB) to the saved draft. Approved lessons remain free; paid access is not connected.</p>
  <form className="form-stack" onSubmit={submit}><label htmlFor="course">Course</label><select id="course" required value={form.courseId} onChange={e=>setForm({...form,courseId:e.target.value,topicId:''})}><option value="">Choose a course</option>{courses.filter(c=>c.institutionId===user.institutionId).map(c=><option key={c.id} value={c.id}>{c.code} — {c.title}</option>)}</select>
