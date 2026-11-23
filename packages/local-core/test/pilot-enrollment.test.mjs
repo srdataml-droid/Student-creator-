@@ -107,3 +107,26 @@ test('server environment settings apply the invite-only gate to getLocalStore',a
     rmSync(dir,{recursive:true,force:true});
   }
 });
+
+
+test('an account created before private invite mode cannot take the one-person pilot slot',()=>{
+ const dir=mkdtempSync(join(tmpdir(),'preexisting-invite-')),file=join(dir,'legacy.sqlite');
+ let store=openLocalStore(file);
+ try{
+  store.bootstrapAdmin('moderator@alpha.invalid','Synthetic Moderator Password 2026');
+  const admin=store.login('moderator@alpha.invalid','Synthetic Moderator Password 2026');
+  const campus=store.createInstitution(admin.user,'Pre-existing Synthetic Campus');
+  const legacy=store.register({email:invited,password:secret,institutionId:campus.id});
+  store.verifyStudent(admin.user,legacy.id);
+  const priorSession=store.login(invited,secret);
+  assert.ok(priorSession?.token);
+  store.close();
+  store=openLocalStore(file,{pilotStudentCap:1,pilotAllowedEmail:invited,pilotInviteToken:privateCode});
+  assert.equal(store.getSession(priorSession.token),null);
+  assert.equal(store.login(invited,secret),null);
+  assert.equal(store.pilotInviteOnly(),true);
+  // Intentionally fail closed. Founder must reset a disposable pilot database,
+  // not silently grandfather this account into a consented private alpha.
+  assert.throws(()=>store.register({email:invited,password:secret,institutionId:campus.id,inviteCode:privateCode}),{code:'PILOT_CAP_REACHED'});
+ }finally{store.close();rmSync(dir,{recursive:true,force:true});}
+});
