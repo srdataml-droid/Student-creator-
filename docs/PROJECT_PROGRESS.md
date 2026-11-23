@@ -2,7 +2,7 @@
 
 **Repository:** `srdataml-droid/Student-creator-` (this repository, not the older school-learning-platform)
 **Execution mode:** in-session engineering with GitHub commits/checkpoints; no unsupported background agent.
-**Current stage:** mobile creator feed and persistent social follow system. Review GitHub Actions at the exact commit before merging/deploying.
+**Current stage:** local creator-first feed, verified-student content access and creator-owned restrictions. Exact-main CI has passed; browser, hosted security and paid access remain unverified.
 
 | Stage | Feature | Status | Evidence / gap |
 |---|---|---|---|
@@ -14,9 +14,9 @@
 | 6 | Upload/publish original text and MP4, moderator review | SQLite implemented, tested | Local API, 25 MiB limit; not virus-scanned or transcoded |
 | 7 | DMs, blocks/reports, course communities | SQLite implemented, tested | Private APIs and tests; live realtime absent |
 | 8 | Search, saved posts, study sessions | SQLite implemented, tested | Local integration tests |
-| 9 | Creator follows and Following feed | Implemented, current CI check pending | `creator_follows`, follow API, profile button, new tests |
+| 9 | Creator follows and Following feed | Locally implemented; CI verified | `creator_follows`, follow API, profile button and Node tests; fresh-main CI 45225768951 |
 | 10 | Post likes, comments, follow notifications | **Likes + moderated comments merged/tested locally** | [PR #2](https://github.com/srdataml-droid/Student-creator-/pull/2) + [PR #4](https://github.com/srdataml-droid/Student-creator-/pull/4), main `338b1457`; authenticated replay-safe likes, comment removal/report review, synthetic HTTP + disposable PG CI success. Follow notifications remain planned; nothing deployed. |
-| 11 | Creator profile names, photos, original-work type and pricing controls | **Public name/handle in review; media and pricing planned** | Local verified student alias edit with reserved-identity checks, handle uniqueness, public-only-after-approval, PostgreSQL RLS migration and tests on this branch. Never expose legal ID/email. Photos, original-work classification and prices remain unimplemented. |
+| 11 | Creator profile names, photos, original-work type and pricing controls | **Public name/handle implemented locally; media and pricing planned** | Owner-scoped alias API/UI, public-only-after-approval behavior, SQLite and draft PostgreSQL RLS contracts tested in CI. Never expose legal ID/email. Photos, original-work classification and pricing remain unimplemented. |
 | 12 | Premium posts/subscriptions and entitlement access | Planned/blocked | Dedicated managed DB and PSP sandbox required |
 | 13 | Creator bank setup and PSP settlement split | Blocked | Provider eligibility, user approval, finance/legal review |
 | 14 | Creator sales dashboard, refunds/reconciliation | Planned | Transactional ledger + actual provider evidence |
@@ -27,8 +27,8 @@
 ## Exact continuation
 1. Inspect latest `main` commit and its GitHub Actions test, web-build and disposable DB job conclusions.
 2. If any CI failed, inspect first failed step and fix before feature work.
-3. Likes and comments already merged with exact-main CI. Verify this public-alias branch's fresh test, web-build, database-contract and post-merge main before marking it done. Follow notifications and hosted persistence remain next work after identifying the app-specific database.
-4. Complete and verify creator alias privacy and cross-school public rules; photos, original-work classification and pricing/entitlements remain separately gated.
+3. Likes, comments and public creator aliases are on `main`; preserve them while adding follow notifications and hosted persistence. Check exact-main CI after every commit.
+4. Preserve verified creator-alias privacy and cross-school access checks in future changes; photos, original-work classification and pricing/entitlements remain separately gated.
 5. Separate accepted data model for paid posts and subscriptions from free content, then integrate with dedicated Supabase and PSP sandbox only when available.
 
 **Security:** The app is not deployed. SQLite is only a development store. Do not unlock paid media on browser return; only trusted verified server-side payment and atomic entitlement updates may grant access. Provider secrets stay server-side. No school IDs, fake creator earnings or seed-user credentials in Git.
@@ -82,3 +82,15 @@
 **Operational risks:** GitHub reports this repository as public; keep secrets, student ID evidence and financial identifiers out of Git. A later security/privacy review should evaluate the proposed PostgreSQL public-metadata column exposures before applying hosted RLS. Do not enable live payment/withdrawals or production database changes. PR #28 remains unmerged; it is research guidance, not shipped product behavior.
 
 **Effort accounting:** 183–364 AI-assisted founder hours remains a *planning range*. No verified founder time entries were supplied, so actual founder-hours cannot be truthfully reported.
+
+## 23 November 2026 — W00 fresh-main source and CI audit (#9)
+
+**Source revision audited:** `main` `5718f32e4bca06674e24fbfdd5ebe9d9491c4f23` (commit at 2026-11-23 17:15:58 UTC). [Exact-commit GitHub Actions run 45225768951](https://github.com/srdataml-droid/Student-creator-/actions/runs/45225768951) completed successfully: `test` (171/171 Node tests, zero failures, tracked-secret-file guard), `web-build` (`npm ci --no-audit --no-fund`, `npm run build`, Next.js 16.4.6 compiled), and `database-contract` (ephemeral PostgreSQL 17, `db/tests/bootstrap.sql`, migrations `0001`–`0004`, four SQL contract files). This is remote CI evidence, not a local checkout run or hosted-production acceptance. The remote GitHub commit does not expose an editable working-tree status; a separate local clone was unavailable in this audit environment.
+
+**Actual API and user-flow inventory:** `apps/web/app/api/local/[...segments]/route.js` handles GET/POST/HEAD through `packages/local-core/src/http.mjs`: local registration/login/session, admin institutions/course creation and student verification, draft submission/review, creator follow and restrictions, bookmarks, likes, comments, notes and authorized video GET/HEAD/range, DMs, communities and study sessions. Distinct Next API route files also exist for `/api/courses`, `/api/lessons`, `/api/lessons/drafts`, `/api/lessons/[id]/submit` and `/api/lessons/[id]/moderate`. UI route files include feed, sign-in/join, creator studio/profile, lessons, search, saved posts, messages, course communities, study sessions and admin manage. This inventories existing paths; it does not claim browser end-to-end tests were executed.
+
+**Actual data mapping:** `packages/local-core/src/store.mjs` initializes 24 SQLite development tables: `institutions`, `users`, `sessions`, `courses`, `lessons`, `topics`, `lesson_videos`, `creator_follows`, `creator_public_profiles`, `lesson_bookmarks`, `lesson_likes`, `lesson_comments`, `lesson_comment_reports`, `messages`, `user_blocks`, `creator_restrictions`, `message_reports`, `community_members`, `community_posts`, `community_reports`, `study_sessions`, `study_attendees`, `study_session_requests`, and `audit_events`. Future-hosted Postgres definitions are separate drafts in `db/migrations/0001_proposed_core.sql` to `0004_creator_restrictions.sql`; successful ephemeral SQL checks do not mean deployed Supabase RLS.
+
+**Access and privacy boundaries inspected:** `apps/web/lib/feed-preview.mjs` explicitly selects public preview fields (not full lesson text, school-ID evidence or review records). `packages/local-core/src/store.mjs` implements `viewableLesson` with authenticated, verified creator view permission; `getVideoFile` checks publication/reviewer visibility and view permission per request. The `FeedExperience.jsx` play-button state is only a UI hint, not access control; the video and content endpoints are the real local enforcement boundary. Negative Node tests include `packages/local-core/test/creator-restrictions.test.mjs`, `local-flow.test.mjs` and `video-ci.test.mjs`. Local SQLite/media backup-and-restore helpers and tests exist; no independent real-data restore rehearsal or hosted backup was performed.
+
+**Acceptance still open:** no real browser/Playwright signup -> verification -> draft -> moderation -> playback -> follow/comment journey on this audited SHA; no Android/mobile acceptance, live Supabase Auth/RLS, protected paid-media entitlement and PSP sandbox fulfillment, hosted staging or disaster-restore drill. Issue #9 remains open. No private ID documents, credentials, live money, deployment, schema activation or new branch was involved in this audit.
