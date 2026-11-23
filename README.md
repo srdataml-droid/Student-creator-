@@ -60,7 +60,7 @@ GitHub Actions runs unit/SQLite integration tests, a disposable PostgreSQL schem
 ## What is not live
 - Supabase authentication, hosted Postgres, storage and production access policies.
 - Paystack checkout, creator bank verification/subaccounts, payment splitting, paid content unlocks, recurring subscriptions, refunds or settlements.
-- Creator-set paid price display, verified bank payout setup, real earnings balances. Granular creator restriction APIs are implemented in local mode, but settings UI, hosted RLS and paid entitlements remain incomplete.
+- Creator-set paid price display, verified bank payout setup, real earnings balances. Creator restriction API and Studio settings UI are implemented in local mode; hosted Auth/RLS, private streaming and paid entitlements remain incomplete.
 - Mobile-native app, adaptive video transcoding, production moderation and platform deployment.
 
 The intended **core business model is paid creator content, subscriptions and permissible private tutoring/feedback**, with transparent creator/platform revenue sharing. Ads are **not** required. Payment-domain code exists, but no successful test transaction or production settlement is claimed.
@@ -103,3 +103,6 @@ This active repository uses **main** for the current founder-directed work; no a
 - [#12 — W10–W11: Creator-user alpha and controlled 80–100-student pilot](https://github.com/srdataml-droid/Student-creator-/issues/12)
 
 These issues are **open plans**; do not interpret their existence as completed features. Founder-approved small changes on main only, with exact-commit test evidence.
+
+### Local MP4 playback authorization checkpoint
+Published development MP4 requires a verified student's active session, permission from the creator and a short-lived, session-bound playback cookie issued after selecting **Enable playback**. The raw grant is not placed in a video URL. This is **not DRM**: an authorized student can still save video bytes or record the screen. Paid entitlements, hosted private storage and sandbox payment fulfillment are not implemented. See [engineering progress](docs/PROJECT_PROGRESS.md) and Issue #10.
