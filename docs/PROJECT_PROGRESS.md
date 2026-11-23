@@ -62,3 +62,23 @@
 **Next engineering step:** W00 fresh main CI/test/build and existing route/schema inventory; then W03/W04/W05 safe identity/media creator access restrictions before paid commerce W06/W07. No application source or deployed behavior changed by this architecture milestone.
 
 **Evidence discipline:** GitHub file-write success verifies documentation was committed, not that the full app passed tests. Check exact post-commit GitHub Actions or local runtime before making verification claims.
+
+## 23 November 2026 — implemented and verified access-control increment (#9, #10)
+
+**Exact application/database-contract baseline:** `d907694a9a320d1422a90d2315df971b3a782b37`. [GitHub Actions 45225243967](https://github.com/srdataml-droid/Student-creator-/actions/runs/45225243967): **171/171 Node tests passing**, Next.js locked production build **passed**, PostgreSQL 17 disposable RLS/contracts **passed**. These are CI results, **not** real Playwright/device tests, a staged Supabase migration or a deployed application.
+
+- `301afd3`: whitelisted browser feed preview fields so full text and editorial review records do not cross the Server Component boundary.
+- `6193d51`: owner-scoped persistent local creator restriction rules (view/comment/direct message), authenticated routes, audit and independent negative tests.
+- `63d2c63` + `b76dfeb`: require a verified student and creator view authorization for full lesson JSON, SSR lesson page, notes downloads, comment reads and video GET/HEAD/ranges. Repaired the pre-existing backup/video tests that relied on anonymous playback. Search no longer includes private lesson text.
+- `83dc10c`: Creator Studio panel to set, edit and clear independent student-account restrictions. UI passed Next production build but **manual browser acceptance has not occurred**.
+- `a55de71` + `f03279c` + `d907694`: disposable PostgreSQL draft migration `db/migrations/0004_creator_restrictions.sql`, owner-only restriction-row read policy, verified-creator viewing predicate and protected published-comment RLS. A failed initial SQL-test revision was fixed; final disposable contract passed. **Draft only: not applied to hosted Supabase.**
+
+**Issue gates:**
+- **#9 W00 — partly verified:** source/routes/CI inspected; real Playwright/browser, hosted staging, production audit and backup restore rehearsal remain unavailable.
+- **#10 W03–W05 — local first increment verified:** independent blocking and protected full-content retrieval; next gates are real Auth/RLS/staging, short-lived protected media grants, mobile playback, review/appeals and sign-off. Local rules and RLS draft are **not** a full paid-content or production authorization system.
+- **#11 W06–W07 — not yet integrated:** payment-core quote and Paystack adapter tests already existed but no persisted purchase orders, provider-verified sandbox fulfillment, balanced journal, refunds or entitlements are connected to the application. Fee bearer, commission and access duration require founder sign-off before real charges.
+- **#12 W10–W11 — not started:** no real 5–10-student alpha or 80–100 pilot, no fabricated user feedback.
+
+**Operational risks:** GitHub reports this repository as public; keep secrets, student ID evidence and financial identifiers out of Git. A later security/privacy review should evaluate the proposed PostgreSQL public-metadata column exposures before applying hosted RLS. Do not enable live payment/withdrawals or production database changes. PR #28 remains unmerged; it is research guidance, not shipped product behavior.
+
+**Effort accounting:** 183–364 AI-assisted founder hours remains a *planning range*. No verified founder time entries were supplied, so actual founder-hours cannot be truthfully reported.
