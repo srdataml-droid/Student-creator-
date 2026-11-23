@@ -6,10 +6,11 @@ export function createLocalCommerce({db,transaction,audit,error,requireVerified,
  'CREATE TABLE IF NOT EXISTS lesson_prices(lesson_id TEXT PRIMARY KEY REFERENCES lessons(id) ON DELETE CASCADE,amount_kobo INTEGER NOT NULL CHECK(amount_kobo>=20000));',
  "CREATE TABLE IF NOT EXISTS purchase_orders(reference TEXT PRIMARY KEY,buyer_id TEXT NOT NULL REFERENCES users(id),creator_id TEXT NOT NULL REFERENCES users(id),lesson_id TEXT NOT NULL REFERENCES lessons(id),buyer_email TEXT NOT NULL,amount_kobo INTEGER NOT NULL CHECK(amount_kobo>=20000),creator_share_kobo INTEGER NOT NULL CHECK(creator_share_kobo>=0),status TEXT NOT NULL CHECK(status IN ('pending','paid')),request_key TEXT NOT NULL,provider_transaction_id TEXT UNIQUE,created_at TEXT NOT NULL,paid_at TEXT,UNIQUE(buyer_id,request_key),UNIQUE(buyer_id,lesson_id));",
  'CREATE TABLE IF NOT EXISTS content_entitlements(buyer_id TEXT NOT NULL REFERENCES users(id),lesson_id TEXT NOT NULL REFERENCES lessons(id),order_reference TEXT NOT NULL UNIQUE REFERENCES purchase_orders(reference),granted_at TEXT NOT NULL,PRIMARY KEY(buyer_id,lesson_id));',
- "CREATE TABLE IF NOT EXISTS commerce_journal(order_reference TEXT NOT NULL REFERENCES purchase_orders(reference),line_no INTEGER NOT NULL,account TEXT NOT NULL CHECK(account IN ('processor_clearing','creator_payable')),debit_kobo INTEGER NOT NULL DEFAULT 0 CHECK(debit_kobo>=0),credit_kobo INTEGER NOT NULL DEFAULT 0 CHECK(credit_kobo>=0),created_at TEXT NOT NULL,PRIMARY KEY(order_reference,line_no),CHECK((debit_kobo>0 AND credit_kobo=0) OR (credit_kobo>0 AND debit_kobo=0)));"
+ "CREATE TABLE IF NOT EXISTS commerce_journal(order_reference TEXT NOT NULL REFERENCES purchase_orders(reference),line_no INTEGER NOT NULL,account TEXT NOT NULL CHECK(account IN ('processor_clearing','creator_payable')),debit_kobo INTEGER NOT NULL DEFAULT 0 CHECK(debit_kobo>=0),credit_kobo INTEGER NOT NULL DEFAULT 0 CHECK(credit_kobo>=0),created_at TEXT NOT NULL,PRIMARY KEY(order_reference,line_no),CHECK((debit_kobo>0 AND credit_kobo=0) OR (credit_kobo>0 AND debit_kobo=0)));",
+ "CREATE TABLE IF NOT EXISTS synthetic_refunds(order_reference TEXT PRIMARY KEY REFERENCES purchase_orders(reference),refund_reference TEXT NOT NULL UNIQUE,original_provider_transaction_id TEXT NOT NULL,created_at TEXT NOT NULL);"
  ].join('\n'));
  const price=id=>db.prepare('SELECT amount_kobo FROM lesson_prices WHERE lesson_id=?').get(id)?.amount_kobo??0;
- const snapshot=r=>({reference:r.reference,lessonId:r.lesson_id,amountKobo:r.amount_kobo,currency:'NGN',status:r.status,creatorShareKobo:r.creator_share_kobo,createdAt:r.created_at,paidAt:r.paid_at});
+ const snapshot=r=>({reference:r.reference,lessonId:r.lesson_id,amountKobo:r.amount_kobo,currency:'NGN',status:db.prepare('SELECT 1 FROM synthetic_refunds WHERE order_reference=?').get(r.reference)?'refunded':r.status,creatorShareKobo:r.creator_share_kobo,createdAt:r.created_at,paidAt:r.paid_at});
  const published=id=>db.prepare("SELECT l.id,l.creator_id,l.status,c.active AS active FROM lessons l JOIN courses c ON c.id=l.course_id WHERE l.id=?").get(id);
  function setPrice(actor,id,amountKobo){
   requireVerified(actor);
@@ -112,10 +113,40 @@ export function createLocalCommerce({db,transaction,audit,error,requireVerified,
   const verified=await gateway.verify({reference:row.reference,buyerEmail:row.buyer_email,amountKobo:row.amount_kobo,domain:'test'});
   return applyTrustedCharge(reference,verified);
  }
+ /** Synthetic reversal only; NEVER call this as a response to user input/webhooks.
+  * Real refunds require a provider-verified status and a reviewed hosted ledger.
+  */
+ function applySyntheticRefund(reference,{refundReference,providerTransactionId}={}){
+  if(process.env.NODE_ENV==='production')throw error('TEST_REFUND_DISABLED',403);
+  if(typeof refundReference!=='string'||!/^[A-Za-z0-9._-]{8,160}$/.test(refundReference))
+   throw error('INVALID_REFUND_EVIDENCE',422);
+  return transaction(()=>{
+   const order=db.prepare('SELECT * FROM purchase_orders WHERE reference=?').get(reference);
+   if(!order)throw error('ORDER_NOT_FOUND',404);
+   if(order.status!=='paid'||typeof providerTransactionId!=='string'||
+      order.provider_transaction_id!==providerTransactionId)throw error('INVALID_REFUND_EVIDENCE',422);
+   const old=db.prepare('SELECT * FROM synthetic_refunds WHERE order_reference=?').get(reference);
+   if(old){
+    if(old.refund_reference!==refundReference)throw error('REFUND_CONFLICT',409);
+    return {...snapshot(order),replayed:true};
+   }
+   const now=new Date().toISOString();
+   db.prepare('INSERT INTO synthetic_refunds(order_reference,refund_reference,original_provider_transaction_id,created_at) VALUES(?,?,?,?)')
+    .run(reference,refundReference,providerTransactionId,now);
+   // Delete the entitlement; do not delete the historical order or journal.
+   db.prepare('DELETE FROM content_entitlements WHERE order_reference=?').run(reference);
+   db.prepare('INSERT INTO commerce_journal(order_reference,line_no,account,debit_kobo,credit_kobo,created_at) VALUES(?,?,?,?,?,?)')
+    .run(reference,3,'creator_payable',order.creator_share_kobo,0,now);
+   db.prepare('INSERT INTO commerce_journal(order_reference,line_no,account,debit_kobo,credit_kobo,created_at) VALUES(?,?,?,?,?,?)')
+    .run(reference,4,'processor_clearing',0,order.amount_kobo,now);
+   audit(order.buyer_id,'purchase.synthetic_refund.recorded',reference);
+   return {...snapshot(order),replayed:false};
+  });
+ }
  function ownOrders(actor){requireVerified(actor);return db.prepare('SELECT * FROM purchase_orders WHERE buyer_id=? ORDER BY created_at DESC LIMIT 100').all(actor.id).map(snapshot);}
  function creatorEarnings(actor){
   requireVerified(actor);
-  const r=db.prepare("SELECT COALESCE(SUM(creator_share_kobo),0) AS pending,COUNT(*) AS count FROM purchase_orders WHERE creator_id=? AND status='paid'").get(actor.id);
+  const r=db.prepare("SELECT COALESCE(SUM(creator_share_kobo),0) AS pending,COUNT(*) AS count FROM purchase_orders o WHERE o.creator_id=? AND o.status='paid' AND NOT EXISTS(SELECT 1 FROM synthetic_refunds f WHERE f.order_reference=o.reference)").get(actor.id);
   return {currency:'NGN',creatorPendingKobo:r.pending,paidOrders:r.count,payoutEnabled:false,commissionApproved:false};
  }
  function lessonAccess(actor,id){
@@ -127,5 +158,5 @@ export function createLocalCommerce({db,transaction,audit,error,requireVerified,
    entitled:owned||!amountKobo||Boolean(db.prepare('SELECT 1 FROM content_entitlements WHERE buyer_id=? AND lesson_id=?').get(actor.id,id)),
    creatorOwned:owned,checkoutEnabled:false};
  }
- return Object.freeze({price,setPrice,requireAccess,createOrder,applyVerifiedTestCharge:testVerification,ownOrders,creatorEarnings,lessonAccess,orderStatus,sandboxCheckout,confirmSandboxOrder});
+ return Object.freeze({price,setPrice,requireAccess,createOrder,applyVerifiedTestCharge:testVerification,applySyntheticRefund,ownOrders,creatorEarnings,lessonAccess,orderStatus,sandboxCheckout,confirmSandboxOrder});
 }
