@@ -17,7 +17,7 @@ Verified tertiary students are creators and viewers in a social-video marketplac
 
 ## Working with role-specific skills
 Use targeted .agents/skills subdirectories when the task matches:
-product-discovery, architecture-lead, ux-creator-flows, secure-content-access, payments-ledger, media-upload, qa-release, team-leadership.
+product-discovery, architecture-lead, ux-creator-flows, secure-content-access, payments-ledger, media-upload, qa-release, team-leadership, analytics-growth, trust-compliance-operations.
 Each skill produces a small source-grounded deliverable and reports gaps. Loaded skills do not grant external credentials or special deployment privileges.
 
 ## Delivery note template
