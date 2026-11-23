@@ -2,15 +2,21 @@ import {test, expect} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import {randomUUID, randomBytes} from 'node:crypto';
 
-const BASE='http://127.0.0.1:3000';
+const BASE='http://localhost:3000';
 const syntheticVideo=Buffer.from(readFileSync(new URL('../../../packages/local-core/test/fixtures/synthetic-1s.mp4.base64',import.meta.url),'utf8'),'base64');
 
 async function login(page,email,password){
   await page.goto('/sign-in');
   await page.locator('#email').fill(email);
   await page.locator('#password').fill(password);
+  const loginResponse=page.waitForResponse(response=>response.url().endsWith('/api/local/auth/login')&&response.request().method()==='POST');
   await page.getByRole('button',{name:'Sign in'}).click();
-  await expect(page).toHaveURL(/\/(manage|studio)$/);
+  const response=await loginResponse;
+  if(!response.ok()){
+    const result=await response.json().catch(()=>({error:'INVALID_SERVER_RESPONSE'}));
+    throw new Error(`Synthetic account login returned HTTP ${response.status()}: ${result.error||'UNKNOWN_ERROR'}`);
+  }
+  await expect(page).toHaveURL(/\/(manage|studio)$/, {timeout:10000});
 }
 async function join(page,schoolId,email,password){
   await page.goto('/join');
