@@ -135,9 +135,9 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     const privateVideo=await request.get(`${BASE}/api/local/lessons/${lessonId}/video`);
     expect([401,403,404]).toContain(privateVideo.status());
     // No full-text, download or comments leakage to visitors via direct API requests.
-    expect((await request.get(`${BASE}/api/local/lessons/${lessonId}`)).status()).toBe(403);
-    expect((await request.get(`${BASE}/api/local/lessons/${lessonId}/notes`)).status()).toBe(403);
-    expect((await request.get(`${BASE}/api/local/lessons/${lessonId}/comments`)).status()).toBe(403);
+    expect((await request.get(`${BASE}/api/local/lessons/${lessonId}`)).status()).toBe(401);
+    expect((await request.get(`${BASE}/api/local/lessons/${lessonId}/notes`)).status()).toBe(401);
+    expect((await request.get(`${BASE}/api/local/lessons/${lessonId}/comments`)).status()).toBe(401);
     const range=await viewer.request.get(`/api/local/lessons/${lessonId}/video`,{headers:{range:'bytes=0-4'}});
     expect(range.status()).toBe(206);
     expect(await range.body()).toEqual(syntheticVideo.subarray(0,5));
