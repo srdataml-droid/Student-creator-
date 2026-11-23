@@ -9,6 +9,7 @@ import {openLocalStore} from '../src/store.mjs';
 
 const cli=fileURLToPath(new URL('../../../scripts/local-backup.mjs',import.meta.url));
 const video=Buffer.from(readFileSync(new URL('./fixtures/synthetic-1s.mp4.base64',import.meta.url),'utf8'),'base64');
+const pilotCode='synthetic_backup_pilot_token_abcdefghijklmnop';
 const note='An original synthetic teacher walkthrough: begin with the independent question, explain the assumptions, use a small example, explain the method, and show how to verify the conclusion without publishing private student work.';
 
 function exec(args,expectSuccess=true){
@@ -26,13 +27,13 @@ function exec(args,expectSuccess=true){
 test('operator CLI independently snapshots, verifies, restores media and revokes browser sessions',async()=>{
   const dir=mkdtempSync(join(tmpdir(),'one-student-cli-rehearsal-'));
   const database=join(dir,'source.sqlite'),snapshot=join(dir,'offline-snapshot'),recovered=join(dir,'restore','campus.sqlite');
-  const store=openLocalStore(database,{pilotStudentCap:1,pilotAllowedEmail:'author@alpha.invalid'});
+  const store=openLocalStore(database,{pilotStudentCap:1,pilotAllowedEmail:'author@alpha.invalid',pilotInviteToken:pilotCode});
   try{
     store.bootstrapAdmin('operator@alpha.invalid','Private Synthetic Operator Password 2026');
     const administrator=store.login('operator@alpha.invalid','Private Synthetic Operator Password 2026');
     const school=store.createInstitution(administrator.user,'Single Person University');
     const course=store.createCourse(administrator.user,{institutionId:school.id,code:'RES101',title:'Recovery Engineering'});
-    const user=store.register({email:'author@alpha.invalid',password:'Private Synthetic Creator Password 2026',institutionId:school.id});
+    const user=store.register({email:'author@alpha.invalid',password:'Private Synthetic Creator Password 2026',institutionId:school.id,inviteCode:pilotCode});
     store.verifyStudent(administrator.user,user.id);
     const creator=store.login('author@alpha.invalid','Private Synthetic Creator Password 2026');
     const draft=store.createDraft(creator.user,{courseId:course.id,title:'Synthetic source video backup',description:'Original creator work',previewText:'Teaching introduction',lessonText:note,rightsAttested:true,creationKey:'one-student-recovery-2026'});
@@ -47,7 +48,7 @@ test('operator CLI independently snapshots, verifies, restores media and revokes
     assert.equal(verified.valid,true);assert.equal(verified.mediaCount,1);
     const restored=exec(['restore','--database',recovered,'--snapshot',snapshot]);
     assert.equal(restored.sessionsRevoked,true);
-    const fresh=openLocalStore(recovered,{pilotStudentCap:1,pilotAllowedEmail:'author@alpha.invalid'});
+    const fresh=openLocalStore(recovered,{pilotStudentCap:1,pilotAllowedEmail:'author@alpha.invalid',pilotInviteToken:pilotCode});
     try{
       assert.equal(fresh.getSession(creator.token),null);
       assert.equal(fresh.getSession(administrator.token),null);
