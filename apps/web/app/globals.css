@@ -261,3 +261,70 @@ button:disabled{opacity:.55;cursor:not-allowed}
   scroll-behavior:auto!important;animation-duration:.01ms!important;transition-duration:.01ms!important
  }
 }
+
+
+/* Immersive protected viewer from the dark vertical video reference. */
+.watch-page{max-width:1120px;margin:0 auto;padding:20px 20px 105px;min-width:0}
+.watch-header{display:flex;justify-content:space-between;align-items:center;gap:18px;
+ margin:8px 0 19px;font-size:.75rem;font-weight:800;letter-spacing:.03em}
+.watch-header a{text-decoration:none;color:#087b59}
+.watch-label{color:#6d8176;font-size:.7rem;letter-spacing:.1em}
+.watch-layout{display:grid;grid-template-columns:minmax(300px,540px) minmax(225px,1fr);
+ gap:21px;align-items:stretch;max-width:1050px;margin:0 auto}
+.watch-stage{position:relative;background:#0e1514;color:#f3fbf6;min-height:660px;
+ border-radius:20px;overflow:hidden;display:flex;flex-direction:column;
+ border:1px solid #31483d;box-shadow:0 16px 40px #172b1c1a}
+.watch-stage-top{display:flex;gap:10px;justify-content:space-between;align-items:center;
+ padding:19px;font-size:.65rem;font-weight:850;letter-spacing:.09em;color:#b0cabe}
+.watch-paid-chip,.watch-free-chip{padding:7px 8px;background:#dba94d;color:#17241b;border-radius:14px}
+.watch-free-chip{background:#145f45;color:#e8fff3}
+.watch-video-frame{flex:1;display:grid;align-content:center;min-height:280px;position:relative;
+ background:radial-gradient(circle at 50% 48%,#172e28,#0c1512 80%)}
+.watch-video-frame>div{width:100%;min-width:0;position:relative}
+.watch-video-frame video{display:block;width:100%;max-height:500px;object-fit:contain;background:#111c18}
+.watch-video-frame button.creator-btn.outlined{display:flex;margin:10px auto;padding:15px 20px;
+ background:#07946a;color:#fafffa;border:1px solid #24bd89}
+.watch-video-frame button.quiet-button{display:flex;margin:9px auto;color:#d5e7dc;
+ border-color:#617869;background:#172820}
+.watch-video-frame .hint{color:#d5cbaa;padding:0 22px;text-align:center}
+.watch-stage-caption{padding:18px 23px 25px;background:linear-gradient(180deg,#111d19,#0e1514)}
+.watch-stage-creator{color:#80deb0;font-size:.77rem;font-weight:850;margin:0 0 8px}
+.watch-stage-caption h1{color:#fff;font-size:clamp(1.35rem,2.8vw,1.8rem);
+ line-height:1.15;letter-spacing:-.035em;margin:0 0 8px}
+.watch-stage-caption p:last-child{color:#b5c8bc;font-size:.82rem;line-height:1.55;margin:0}
+.watch-info{background:#fff;border:1px solid #e1ebe5;border-radius:20px;
+ padding:clamp(18px,3vw,30px);min-width:0;align-self:stretch}
+.watch-eyebrow{font-weight:850;color:#087b59;letter-spacing:.12em;font-size:.7rem;margin:0 0 15px}
+.watch-info h2{font-size:clamp(1.35rem,2.7vw,1.95rem);line-height:1.18;margin:0 0 13px}
+.watch-summary{line-height:1.65;color:#687a70;font-size:.91rem;margin:0 0 24px}
+.watch-creator-link{display:flex;align-items:center;gap:12px;text-decoration:none;
+ border:1px solid #dcece1;padding:14px;border-radius:14px;max-width:100%;min-width:0}
+.watch-creator-avatar{width:45px;height:45px;display:grid;place-items:center;
+ color:#eafff5;background:#0b7d5a;border-radius:50%;flex-shrink:0}
+.watch-creator-link span:last-child{min-width:0}
+.watch-creator-link strong{display:block;color:#163c2d;font-size:.88rem;overflow-wrap:anywhere}
+.watch-creator-link small{color:#688477;font-size:.71rem;display:block;margin-top:4px}
+.watch-utility{margin:24px 0;display:flex;flex-direction:column;align-items:stretch;gap:3px}
+.watch-utility .bookmark-action{margin:4px 0;display:flex;gap:10px}
+.watch-utility .bookmark-action>.hint{font-size:.73rem}
+.watch-utility .secondary-link{font-size:.78rem;padding:11px}
+.watch-utility .bookmark-action>a{font-size:.75rem;color:#08694d}
+.watch-nav-actions{display:grid;gap:10px}
+.watch-nav-actions a{width:100%;text-align:center}
+.watch-rights{margin-top:25px;border-top:1px solid #e1ece5;padding-top:18px;
+ color:#65766c;font-size:.76rem;line-height:1.55}
+@media(max-width:830px){
+ .watch-layout{grid-template-columns:minmax(0,1fr);max-width:600px}
+ .watch-stage{min-height:620px}
+ .watch-info{margin:0}
+}
+@media(max-width:480px){
+ .watch-page{padding:9px 10px 120px}
+ .watch-header{margin:9px 4px 14px}
+ .watch-label{display:none}
+ .watch-stage{min-height:min(78svh,720px);border-radius:15px}
+ .watch-stage-caption{padding:13px 19px 18px}
+ .watch-stage-top{padding:14px;font-size:.6rem}
+ .watch-video-frame{min-height:260px}
+ .watch-info{padding:21px}
+}
