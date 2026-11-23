@@ -53,10 +53,20 @@ test('playback grants bind user, session, lesson and a five-minute expiry withou
    assert.throws(()=>store.verifyPlaybackGrant(viewer.user,lesson,token+'x',viewer.token),/PLAYBACK_GRANT_REQUIRED/);
    const secondSession=store.login('buyer@grant.test',pw);
    assert.throws(()=>store.verifyPlaybackGrant(secondSession.user,lesson,token,secondSession.token),/PLAYBACK_GRANT_REQUIRED/);
+   store.setCreatorRestrictions(author.user,author.user.id,viewer.user.id,{view:true,comment:false,message:false});
+   assert.throws(()=>store.getVideoFile(viewer.user,lesson,token,viewer.token),/CREATOR_ACCESS_RESTRICTED/);
    const {DatabaseSync}=await import('node:sqlite');
    const db=new DatabaseSync(join(dir,'campus.sqlite'));
-   try{db.prepare('UPDATE playback_grants SET expires_at=0').run();}finally{db.close();}
+   try{
+     assert.equal(db.prepare('SELECT count(*) AS n FROM playback_grants WHERE user_id=?').get(viewer.user.id).n,0);
+   }finally{db.close();}
+   store.setCreatorRestrictions(author.user,author.user.id,viewer.user.id,{view:false,comment:false,message:false});
    assert.throws(()=>store.getVideoFile(viewer.user,lesson,token,viewer.token),/PLAYBACK_GRANT_REQUIRED/);
+   const renewed=store.issuePlaybackGrant(viewer.user,lesson,viewer.token);
+   assert.equal(store.getVideoFile(viewer.user,lesson,renewed.token,viewer.token).sizeBytes,media.length);
+   const expiredDb=new DatabaseSync(join(dir,'campus.sqlite'));
+   try{expiredDb.prepare('UPDATE playback_grants SET expires_at=0').run();}finally{expiredDb.close();}
+   assert.throws(()=>store.getVideoFile(viewer.user,lesson,renewed.token,viewer.token),/PLAYBACK_GRANT_REQUIRED/);
    store.logout(viewer.token);
    assert.throws(()=>store.verifyPlaybackGrant(secondSession.user,lesson,token,secondSession.token),/PLAYBACK_GRANT_REQUIRED/);
  }finally{store.close();rmSync(dir,{recursive:true,force:true});}

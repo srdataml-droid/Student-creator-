@@ -699,6 +699,13 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
               deny_message=excluded.deny_message,updated_at=excluded.updated_at`)
               .run(creatorId,viewerId,Number(input.view),Number(input.comment),Number(input.message),stamp());
           }
+          // A newly issued viewing block permanently invalidates earlier media grants.
+          // Unblocking requires a fresh authorization, not resurrection of an old cookie.
+          if(input.view&&!old.view){
+            const revoked=db.prepare(`DELETE FROM playback_grants WHERE user_id=? AND lesson_id IN
+              (SELECT id FROM lessons WHERE creator_id=?)`).run(viewerId,creatorId).changes;
+            audit(actor.id,'video.playback.revoked',viewerId,{creatorId,revoked});
+          }
           audit(actor.id,'creator.restriction.changed',viewerId,{previous:old,current:input});
         }
         return {viewerId,...input,replayed:unchanged};
