@@ -33,7 +33,7 @@
 
 **Security:** The app is not deployed. SQLite is only a development store. Do not unlock paid media on browser return; only trusted verified server-side payment and atomic entitlement updates may grant access. Provider secrets stay server-side. No school IDs, fake creator earnings or seed-user credentials in Git.
 
-**Review boundary:** changes are committed directly to the previously empty `main` branch at the owner's explicit request to populate it. Future significant changes should use team-reviewed PRs.
+**Review boundary (historical):** earlier workflow used team-reviewed PRs. **Superseded for current founder-directed architecture phase:** use only this repository and direct, small, tested commits to `main` (see latest update below).
 
 ## New comment workflow — 22 November 2026
 - Existing PR #2 on main already implements likes: this branch deliberately **does not** replace, duplicate or reset that code.
@@ -47,3 +47,18 @@
 - **UI:** `/studio` self-editable public profile and `/creators/[creatorId]` display self-chosen aliases only after independently reviewed publication. Student verification is not permission to impersonate school administration.
 - **Tests:** pure alias-validation tests, synthetic HTTP integration tests for failed auth, unauthorised claims, duplicate handles, persistence and public visibility; disposable PostgreSQL 17 migration/contract `0003_creator_public_profiles.sql` + `creator_public_profiles.sql` with RLS, revoked/suspended/denied-published access and no browser mutation privileges. Test results must be bound to final head SHA; writing test files does not prove success.
 - **Still blocked externally:** dedicated hosted Supabase project and verified Auth/write service, real public browser/mobile checks, production security operations and any paid content/PSP settlement. SQLite is temporary development/rollback only.
+
+## 23 November 2026 — founder-directed single-main architecture update
+
+**Current instruction superseding older branch advice in this tracker:** use **only** `srdataml-droid/Student-creator-` and commit architecture work directly to `main` unless the founder explicitly changes that rule. Do not transfer/recreate app in the old school-learning-platform repository. Keep commits small and verify each resulting main SHA.
+
+**New documents (documentation/architecture only):**
+- `docs/architecture/01_SYSTEM_CONTEXT_AND_CONTAINERS.md`: current vs target component/system context and deployment boundary.
+- `docs/architecture/02_DOMAIN_DATA_AND_SECURITY_CONTRACTS.md`: conceptual ERD, state machines, authorization/entitlement decisions, API sketches and financial invariants.
+- `docs/architecture/03_ROLES_WORKSTREAMS_AND_RELEASE_PLAN.md`: 18 functional responsibilities (which can overlap), work IDs W00–W14, owner approvals and pilot acceptance.
+
+**Specific source findings:** existing `apps/web/app/FeedExperience.jsx` embeds local MP4 URL `/api/local/lessons/{id}/video`; the current backend includes a Paystack adapter and local money validation but no verified live paid entitlement. Paid-media authorization, verified webhook settlement, live Supabase/Auth/RLS, hosted video/CDN and pilot readiness remain NOT IMPLEMENTED/UNVERIFIED. No secrets, personal details of volunteers, student ID evidence or live transactions were changed here.
+
+**Next engineering step:** W00 fresh main CI/test/build and existing route/schema inventory; then W03/W04/W05 safe identity/media creator access restrictions before paid commerce W06/W07. No application source or deployed behavior changed by this architecture milestone.
+
+**Evidence discipline:** GitHub file-write success verifies documentation was committed, not that the full app passed tests. Check exact post-commit GitHub Actions or local runtime before making verification claims.
