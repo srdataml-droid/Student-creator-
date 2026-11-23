@@ -10,7 +10,7 @@ export default function Manage(){
  useEffect(()=>{refresh();},[]);
  async function doAction(job,success){setBusy(true);setError('');setMessage('');try{await job();setMessage(success);await refresh();}catch(e){setError(friendlyError(e));}finally{setBusy(false);}}
  async function signOut(){await api('auth/logout',{method:'POST',body:{}});window.location.assign('/');}
- return <main id="main" className="main"><section className="hero compact"><p className="eyebrow">Content operations</p><h1>Protect the learning community.</h1><p className="intro">Set up campuses and courses, review student membership, and approve or reject lessons with recorded reasons.</p></section>
+ return <main id="main" className="main admin-console"><section className="hero compact"><p className="eyebrow">Content operations</p><h1>Protect the learning community.</h1><p className="intro">Set up campuses and courses, review student membership, and approve or reject lessons with recorded reasons.</p></section>
  {state==='loading'?<p role="status">Loading local administration…</p>:state==='signed-out'?<div className="status">Administrator sign-in is required. <Link href="/sign-in">Sign in</Link>.</div>:state==='forbidden'?<p role="alert" className="status">Your account is not an administrator. <Link href="/studio">Go to your studio</Link>.</p>:state==='unavailable'?<p role="alert" className="status">Local administration could not load. Check your SQLite configuration.</p>:<>
  <div className="studio-meta"><p>Signed in as <strong>{user.email}</strong> · Local administrator</p><button className="quiet-button" onClick={signOut}>Sign out</button></div>
  {message&&<p role="status" className="form-success">{message}</p>}{error&&<p role="alert" className="form-error">{error}</p>}
