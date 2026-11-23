@@ -12,6 +12,7 @@ import { join } from 'node:path';
 import { validateMp4 } from './video.mjs';
 import { creatorProfileInput } from './creator-profile.mjs';
 import { createLocalCommerce } from './commerce.mjs';
+import { validateWebVtt } from './captions.mjs';
 
 export const SESSION_COOKIE='campus_local_session';
 const SESSION_TTL=7*24*60*60;
@@ -71,6 +72,12 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       bytes INTEGER NOT NULL CHECK(bytes BETWEEN 32 AND 26214400),created_at TEXT NOT NULL
     );
     -- Ephemeral playback grants bound to a real login session; raw secrets never persist.
+    -- Creator-authored captions must use the same viewer grant as MP4.
+    CREATE TABLE IF NOT EXISTS lesson_captions(
+      lesson_id TEXT PRIMARY KEY REFERENCES lessons(id) ON DELETE CASCADE,
+      language TEXT NOT NULL DEFAULT 'en' CHECK(language='en'),
+      text_vtt TEXT NOT NULL,content_hash TEXT NOT NULL,updated_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS playback_grants(
       token_hash TEXT PRIMARY KEY,
       session_hash TEXT NOT NULL REFERENCES sessions(token_hash) ON DELETE CASCADE,
@@ -215,7 +222,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     if(current.institutionId!==actor.institutionId)throw error('VERIFICATION_REQUIRED',403);
   }
   const commerce=createLocalCommerce({db,transaction,audit,error,requireVerified,requireCreatorAction});
-  const withVideo=(row)=>row?{...lesson(row),priceKobo:commerce.price(row.id),hasVideo:Boolean(db.prepare('SELECT 1 FROM lesson_videos WHERE lesson_id=?').get(row.id)),likeCount:db.prepare('SELECT COUNT(*) AS n FROM lesson_likes WHERE lesson_id=?').get(row.id).n}:null;
+  const withVideo=(row)=>row?{...lesson(row),priceKobo:commerce.price(row.id),hasVideo:Boolean(db.prepare('SELECT 1 FROM lesson_videos WHERE lesson_id=?').get(row.id)),hasCaptions:Boolean(db.prepare('SELECT 1 FROM lesson_captions WHERE lesson_id=?').get(row.id)),likeCount:db.prepare('SELECT COUNT(*) AS n FROM lesson_likes WHERE lesson_id=?').get(row.id).n}:null;
   function editableVideoLesson(actor,id){
     requireVerified(actor);
     const row=db.prepare('SELECT id,creator_id,institution_id,status FROM lessons WHERE id=?').get(id);
@@ -246,6 +253,8 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
           if(previous?.content_hash===contentHash){replayed=true;return;}
           checkVideoQuota(actor);
           previousId=previous?.file_id??null;
+          // Replacing a video invalidates its old timing and captions.
+          db.prepare('DELETE FROM lesson_captions WHERE lesson_id=?').run(id);
           db.prepare(`INSERT INTO lesson_videos(lesson_id,file_id,content_hash,bytes,created_at) VALUES(?,?,?,?,?)
             ON CONFLICT(lesson_id) DO UPDATE SET file_id=excluded.file_id,content_hash=excluded.content_hash,bytes=excluded.bytes,created_at=excluded.created_at`)
             .run(id,fileId,contentHash,bytes.length,stamp());
@@ -255,6 +264,31 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       if(replayed){try{unlinkSync(file);}catch{}return {hasVideo:true,replayed:true};}
       if(previousId)try{unlinkSync(join(mediaDir,`${previousId}.mp4`));}catch{}
       return {hasVideo:true,replayed:false,sizeBytes:bytes.length};
+    },
+    saveCaptions(actor,id,text){
+      editableVideoLesson(actor,id);
+      const vtt=validateWebVtt(text);
+      return transaction(()=>{
+        editableVideoLesson(actor,id);
+        if(!db.prepare('SELECT 1 FROM lesson_videos WHERE lesson_id=?').get(id))throw error('VIDEO_NOT_FOUND',404);
+        const digest=sha(vtt);
+        const previous=db.prepare('SELECT content_hash FROM lesson_captions WHERE lesson_id=?').get(id);
+        if(previous?.content_hash===digest)return {hasCaptions:true,replayed:true,language:'en'};
+        const recent=db.prepare("SELECT count(*) AS n FROM audit_events WHERE actor_id=? AND action='lesson.captions.saved' AND created_at>=?")
+          .get(actor.id,new Date(Date.now()-3600000).toISOString()).n;
+        if(recent>=8)throw error('CAPTION_RATE_LIMIT',429);
+        db.prepare("INSERT INTO lesson_captions(lesson_id,language,text_vtt,content_hash,updated_at) VALUES(?,'en',?,?,?) ON CONFLICT(lesson_id) DO UPDATE SET text_vtt=excluded.text_vtt,content_hash=excluded.content_hash,updated_at=excluded.updated_at")
+          .run(id,vtt,digest,stamp());
+        audit(actor.id,'lesson.captions.saved',id,{sha256:digest,language:'en',bytes:Buffer.byteLength(vtt)});
+        return {hasCaptions:true,replayed:false,language:'en'};
+      });
+    },
+    getCaptions(actor,id,grantToken=null,sessionToken=null){
+      // One authorization source of truth: no separate public transcript route.
+      store.getVideoFile(actor,id,grantToken,sessionToken);
+      const row=db.prepare('SELECT text_vtt FROM lesson_captions WHERE lesson_id=?').get(id);
+      if(!row)throw error('CAPTIONS_NOT_FOUND',404);
+      return row.text_vtt;
     },
     issuePlaybackGrant(actor,id,sessionToken){
       return transaction(()=>{
