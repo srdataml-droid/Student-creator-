@@ -39,6 +39,8 @@ test('₦200 synthetic purchase gates access, resists retries, balances journal 
   assert.equal((await req('lessons/'+id+'/price','POST',{amountKobo:0},creator.token)).status,409);
   assert.equal((await req('lessons/'+id,'GET',undefined,buyer.token)).status,402);
   assert.equal((await req('lessons/'+id+'/notes','GET',undefined,buyer.token)).status,402);
+  const commentBody={text:'A private original paid lesson discussion',creationKey:'paid-comment-unique-0001'};
+  assert.equal((await req('lessons/'+id+'/comments','POST',commentBody,buyer.token)).status,402);
   assert.equal((await req('lessons/'+id+'/playback-grant','POST',{},buyer.token)).status,402);
   assert.equal((await req('lessons/'+id+'/orders','POST',{requestKey:'long-request-key-0001'})).status,401);
   assert.equal((await req('lessons/'+id+'/orders','POST',{requestKey:'long-request-key-0001'},creator.token)).status,403);
@@ -85,6 +87,10 @@ test('₦200 synthetic purchase gates access, resists retries, balances journal 
   assert.equal(store.applyVerifiedTestCharge(reference,payment('tr_test_01')).replayed,true);
   assert.throws(()=>store.applyVerifiedTestCharge(reference,payment('tr_test_02')),{code:'PAYMENT_CONFLICT'});
   assert.equal((await req('lessons/'+id,'GET',undefined,buyer.token)).status,200);
+  const posted=await req('lessons/'+id+'/comments','POST',commentBody,buyer.token);
+  assert.equal(posted.status,201);
+  const commentId=posted.data.comment.id;
+  assert.equal((await req('lesson-comments/'+commentId+'/report','POST',{reason:'Synthetic paid-work moderation test'},other.token)).status,402);
   assert.equal((await req('lessons/'+id,'GET',undefined,other.token)).status,402);
   assert.equal((await req('lessons/'+id+'/access','GET',undefined,other.token)).data.access.entitled,false);
   assert.equal((await req('lessons/'+id+'/access','GET',undefined,buyer.token)).data.access.entitled,true);
@@ -112,6 +118,8 @@ test('₦200 synthetic purchase gates access, resists retries, balances journal 
   assert.equal(store.applySyntheticRefund(reference,{refundReference:'rf_test_001',providerTransactionId:'tr_test_01'}).replayed,true);
   assert.throws(()=>store.applySyntheticRefund(reference,{refundReference:'rf_test_002',providerTransactionId:'tr_test_01'}),{code:'REFUND_CONFLICT'});
   assert.equal((await req('lessons/'+id,'GET',undefined,buyer.token)).status,402);
+  assert.equal((await req('lessons/'+id+'/comments','POST',commentBody,buyer.token)).status,402);
+  assert.equal((await req('lessons/'+id+'/comments','POST',{...commentBody,creationKey:'paid-comment-new-0002'},buyer.token)).status,402);
   assert.equal((await req('lessons/'+id+'/access','GET',undefined,buyer.token)).data.access.entitled,false);
   assert.equal((await req('orders/'+reference+'/confirm','POST',{},buyer.token)).data.order.status,'refunded');
   assert.equal((await req('orders/'+reference+'/checkout','POST',{},buyer.token)).status,409);
