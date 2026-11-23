@@ -1,0 +1,46 @@
+name: Learn and Apply — Specialist Skill
+description: Learn one expert practice and demonstrate it on a small relevant task.
+title: "[Learn] "
+body:
+  - type: markdown
+    attributes:
+      value: "Learning is not complete when an article is opened; include a short explanation and reproducible experiment. Cite the original publication and distinguish its claims from our proposed application."
+  - type: input
+    id: role
+    attributes:
+      label: Role / competency
+      placeholder: "Product discovery / backend correctness"
+    validations:
+      required: true
+  - type: input
+    id: source
+    attributes:
+      label: Primary article, talk or source code URL
+    validations:
+      required: true
+  - type: input
+    id: estimate
+    attributes:
+      label: Focused study and practice effort
+      placeholder: "3–5h"
+    validations:
+      required: true
+  - type: textarea
+    id: lesson
+    attributes:
+      label: What does the expert actually say or demonstrate?
+      description: Preserve source claims and give your own short explanation.
+    validations:
+      required: true
+  - type: textarea
+    id: exercise
+    attributes:
+      label: Small exercise in Student Creators
+      description: Identify the code/diagram/test experiment.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Finished artifact, test, source commit and next task
+      description: Mark proposed before executed; provide exact proof when done.
