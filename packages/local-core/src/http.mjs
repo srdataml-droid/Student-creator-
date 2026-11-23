@@ -112,7 +112,7 @@ export function createLocalHandler(store,{sandboxGateway,payments=null}={}){
       }
       if(method==='HEAD')return fail('METHOD_NOT_ALLOWED',405);
       if(method==='GET'){
-        if(path==='health')return responses({state:'local',database:'sqlite',providerPayments:false,sandboxCheckoutEnabled:Boolean(gateway)});
+        if(path==='health')return responses({state:'local',database:'sqlite',providerPayments:false,sandboxCheckoutEnabled:Boolean(gateway),pilotInviteOnly:store.pilotInviteOnly()});
         if(path==='me')return actor?responses({user:actor}):fail('AUTH_REQUIRED',401);
         if(path==='following'){if(!actor)return unauthorized();return responses({creators:store.followingCreators(actor)});}
         if(segments.length===3&&segments[0]==='creators'&&segments[2]==='follow'){
