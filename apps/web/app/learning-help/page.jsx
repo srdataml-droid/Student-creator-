@@ -13,6 +13,7 @@ export default function PersonalizedHelpPage(){
  const [quotes,setQuotes]=useState({}),[reasons,setReasons]=useState({}),[cancellations,setCancellations]=useState({});
  const [slots,setSlots]=useState([]),[day,setDay]=useState('1'),[from,setFrom]=useState('19:00'),[until,setUntil]=useState('21:00');
  const [error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
+ const [emailPrefs,setEmailPrefs]=useState({emailOptIn:false,emailVerified:false});
  async function reload(){
    const [items,alerts]=await Promise.all([api('me/learning-requests'),api('me/learning-notifications')]);
    setRequests(items.requests||[]);setNotifications(alerts.notifications||[]);
@@ -26,7 +27,9 @@ export default function PersonalizedHelpPage(){
      setMe(account.user);
      const avail=await api('creators/'+account.user.id+'/availability');
      if(active)setSlots(avail.availability?.slots||[]);
-     await reload();if(active)setStatus('ready');
+     await reload();
+     const preferences=await api('me/learning-email-preferences');
+     if(active){setEmailPrefs(preferences.preferences||{emailOptIn:false,emailVerified:false});setStatus('ready');}
    }).catch(e=>{if(active)setStatus(e.status===401?'signed-out':'unavailable');});
    return()=>{active=false;};
  },[]);
@@ -143,6 +146,21 @@ export default function PersonalizedHelpPage(){
          <label htmlFor="slot-until">Until</label><input id="slot-until" type="time" required value={until} onChange={e=>setUntil(e.target.value)}/>
          <button type="submit" className="secondary-link" disabled={busy}>Add time</button>
        </form>
+     </section>
+     <section className="course-section"><h2>Learning email reminders</h2>
+       <p className="hint">In-app updates work without email. Email reminders are optional and only sent to your account's verified email address.</p>
+       <label>
+         <input type="checkbox" disabled={busy||!emailPrefs.emailVerified}
+           checked={Boolean(emailPrefs.emailOptIn)} onChange={event=>{
+           const enabled=event.target.checked;
+           act(async()=>{
+             const response=await api('me/learning-email-preferences',{method:'POST',body:{emailOptIn:enabled}});
+             setEmailPrefs(p=>({...p,...response.preferences}));
+           },enabled?'Email reminders enabled.':'Email reminders disabled.');
+         }}/>
+         Receive email reminders for my classes and tutoring
+       </label>
+       {!emailPrefs.emailVerified&&<p className="hint">Verify your account email under <Link href="/verification">Membership and verification</Link> before turning this on.</p>}
      </section>
      <section className="course-section"><h2>Updates and reminders</h2>
        {notifications.length?<ul className="lesson-list">{notifications.slice(0,20).map(n=><li key={n.id} className="lesson">
