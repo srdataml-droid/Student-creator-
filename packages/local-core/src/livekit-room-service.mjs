@@ -37,14 +37,13 @@ export function createLiveKitRoomService({url,apiKey,apiSecret,clock=()=>Date.no
   }
   async function rpc(action,body,video,{allowMissing=false}={}){
     const target=base+'/twirp/livekit.RoomService/'+action;
-    const controller=new AbortController();
-    // Network timeout is enforced by AbortSignal.timeout where supported,
-    // and no arbitrary host/URL from a browser is ever accepted.
+    // No caller-controlled redirects or unbounded external requests.
+    const signal=AbortSignal.timeout(8000);
     let response;
     try{
       response=await fetchImpl(target,{method:'POST',
         headers:{'content-type':'application/json','authorization':'Bearer '+token(video)},
-        body:JSON.stringify(body),signal:controller.signal});
+        body:JSON.stringify(body),signal,redirect:'error'});
     }catch{throw fail('LIVEKIT_PROVIDER_UNAVAILABLE');}
     if(allowMissing&&response.status===404)return {alreadyGone:true};
     if(!response.ok)throw fail('LIVEKIT_PROVIDER_UNAVAILABLE');
