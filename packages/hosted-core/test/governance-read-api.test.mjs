@@ -150,5 +150,5 @@ test('hosted operator changes only via scoped atomic RPC with verified actor ID'
  assert.equal((await post(['incidents'],{category:'other',severity:'low',
   summary:'Cross-site submission must fail before RPC.'},{origin:'https://evil.invalid'})).status,403);
  const allRpc=x.calls.filter(v=>v.url.includes('/rpc/'));
- assert.equal(allRpc.length,5);
+ assert.equal(allRpc.length,6);
 });
