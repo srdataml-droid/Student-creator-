@@ -52,7 +52,7 @@ BEGIN
  SELECT count(*) INTO n FROM public.interactive_class_enrollments;
  IF n<>1 THEN RAISE EXCEPTION 'Student enrollment not visible: %',n;END IF;
  SELECT count(*) INTO n FROM public.creator_availability;
- IF n<>1 THEN RAISE EXCEPTION 'Creator availability not visible to same campus: %',n;END IF;
+ IF n<>0 THEN RAISE EXCEPTION 'Non-owner read creator slots directly despite private profile gate: %',n;END IF;
  SELECT count(*) INTO n FROM public.personal_learning_requests;
  IF n<>1 THEN RAISE EXCEPTION 'Requester cannot see own tutoring request: %',n;END IF;
  SELECT count(*) INTO n FROM public.learning_notifications;
@@ -78,6 +78,8 @@ SET request.jwt.claim.sub='11111111-1111-4111-8111-111111111111';
 SET ROLE authenticated;
 DO $$ DECLARE n integer;
 BEGIN
+ SELECT count(*) INTO n FROM public.creator_availability;
+ IF n<>1 THEN RAISE EXCEPTION 'Creator cannot read own availability: %',n;END IF;
  SELECT count(*) INTO n FROM public.personal_learning_requests;
  IF n<>1 THEN RAISE EXCEPTION 'Creator cannot see assigned request: %',n;END IF;
  SELECT count(*) INTO n FROM public.learning_notifications;
