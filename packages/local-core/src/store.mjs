@@ -561,7 +561,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       });
     },
     reviewQueue(actor){requireAdmin(actor);return db.prepare("SELECT * FROM lessons WHERE status='in_review' ORDER BY created_at LIMIT 100").all().map(withVideo);},
-    review(actor,id,{decision,reason}){requireAdmin(actor);
+    review(actor,id,{decision,reason}){requireAdmin(actor);governance.requireCapability(actor,'content.moderate');
       if(!['approve','reject'].includes(decision)||typeof reason!=='string'||reason.trim().length<5||reason.trim().length>1000)throw error('INVALID_DECISION',422);
       return transaction(()=>{
         const row=db.prepare('SELECT * FROM lessons WHERE id=?').get(id);
