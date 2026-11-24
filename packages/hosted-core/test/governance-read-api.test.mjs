@@ -54,7 +54,7 @@ test('disabled hosted governance does not contact Supabase at all',async()=>{
 test('authenticated active staff gets only stored role capabilities; metadata has no effect',async()=>{
  const {handler,calls}=simulate({roles:['verification_reviewer']});
  const response=await handler(request('permissions'),{segments:['permissions']});
- assert.equal(response.status,200);
+ assert.equal(response.status,200,JSON.stringify({error:(await response.clone().json()).error,paths:calls.map(x=>new URL(x.url).pathname)}));
  const body=await response.json();
  assert.deepEqual(body.capabilities,['dashboard.read','verification.review']);
  assert.equal((await handler(request('incidents'),{segments:['incidents']})).status,403);
@@ -79,7 +79,7 @@ test('anonymous, unconfirmed and inactive staff are rejected with zero governanc
 test('owner can see role-scoped metadata, incident queue and audit history without evidence payloads',async()=>{
  const x=simulate();
  const roles=await x.handler(request('roles'),{segments:['roles']});
- assert.equal(roles.status,200);
+ assert.equal(roles.status,200,JSON.stringify({error:(await roles.clone().json()).error,paths:x.calls.map(y=>new URL(y.url).pathname)}));
  assert.equal((await roles.json()).roles[0].role,'verification_reviewer');
  const rights=await x.handler(request('incidents'),{segments:['incidents']});
  assert.equal(rights.status,200);
