@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import {useEffect,useState} from 'react';
 import {api,friendlyError} from '../../lib/local-client.js';
-const titles={message:'New private message',follow:'A student followed you',like:'A student liked your work',comment:'New comment on your work',community_reply:'New reply to your discussion'};
+const titles={message:'New private message',follow:'A student followed you',like:'A student liked your work',comment:'New lesson comment or reply',community_reply:'New reply to your discussion'};
 const groups={messages:'Direct messages',social:'Follows, likes and comments',community:'Community replies'};
 function destination(n){
  if(n.kind==='message')return '/messages/'+n.targetId;

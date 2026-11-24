@@ -93,3 +93,26 @@ test('comments can be reported by others and hidden only through administrator r
  assert.equal((await req(path,'GET',undefined,reader.token)).data.comments.length,1);
  assert.equal((await req('admin/comment-reports','GET',undefined,admin)).data.reports.length,0);
 }));
+
+test('lesson replies are same-thread, one-level, idempotent and hidden with their parent',()=>withCampus(async({req,lesson,draft,reader,creator,other,pending,reopen})=>{
+ const path='lessons/'+lesson+'/comments';
+ const parent=(await req(path,'POST',{text:'Original student question',creationKey:'lesson-reply-parent-01'},reader.token)).data.comment;
+ const input={text:'Answer to the original question',creationKey:'lesson-reply-child-001',replyTo:parent.id};
+ const made=await req(path,'POST',input,creator.token);assert.equal(made.status,201);
+ assert.equal(made.data.comment.parentId,parent.id);
+ assert.equal((await req(path,'POST',input,creator.token)).status,200);
+ assert.equal((await req(path,'POST',{...input,replyTo:null},creator.token)).status,409);
+ assert.equal((await req(path,'POST',{...input,creationKey:'lesson-reply-nested-01',replyTo:made.data.comment.id},other.token)).status,422);
+ assert.equal((await req('lessons/'+draft+'/comments','POST',input,creator.token)).status,404);
+ assert.equal((await req(path,'POST',{...input,creationKey:'lesson-reply-bad-id-01',replyTo:'00000000-0000-4000-8000-000000000000'},other.token)).status,422);
+ assert.equal((await req(path,'POST',input,pending.token)).status,403);
+ const notice=(await req('notifications','GET',undefined,reader.token)).data.notifications;
+ assert.ok(notice.some(n=>n.kind==='comment'&&n.targetId===lesson));
+ reopen();
+ const list=(await req(path,'GET',undefined,reader.token)).data.comments;
+ assert.equal(list.find(c=>c.id===made.data.comment.id).parentId,parent.id);
+ assert.equal((await req('lesson-comments/'+parent.id+'/remove','POST',{},reader.token)).status,201);
+ assert.equal((await req(path,'GET',undefined,other.token)).data.comments.length,0);
+ assert.equal((await req(path,'POST',input,creator.token)).status,422);
+ assert.equal((await req('lesson-comments/'+made.data.comment.id+'/report','POST',{reason:'This reply is no longer visible'},other.token)).status,404);
+}));

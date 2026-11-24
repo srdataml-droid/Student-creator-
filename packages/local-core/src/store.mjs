@@ -216,6 +216,9 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
   // Additive local migration preserves databases created by earlier revisions.
   if(!db.prepare('PRAGMA table_info(lessons)').all().some(col=>col.name==='topic_id')) db.exec('ALTER TABLE lessons ADD COLUMN topic_id TEXT REFERENCES topics(id)');
   if(!db.prepare('PRAGMA table_info(users)').all().some(col=>col.name==='allow_messages')) db.exec('ALTER TABLE users ADD COLUMN allow_messages INTEGER NOT NULL DEFAULT 0');
+  if(!db.prepare('PRAGMA table_info(lesson_comments)').all().some(col=>col.name==='parent_id'))
+    db.exec('ALTER TABLE lesson_comments ADD COLUMN parent_id TEXT REFERENCES lesson_comments(id)');
+  db.exec('CREATE INDEX IF NOT EXISTS lesson_comments_parent ON lesson_comments(parent_id)');
   const reportColumns=new Set(db.prepare('PRAGMA table_info(message_reports)').all().map(x=>x.name));
   if(!reportColumns.has('status')) db.exec("ALTER TABLE message_reports ADD COLUMN status TEXT NOT NULL DEFAULT 'open'");
   if(!reportColumns.has('resolved_by')) db.exec('ALTER TABLE message_reports ADD COLUMN resolved_by TEXT REFERENCES users(id)');
@@ -715,12 +718,17 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     },
     lessonComments(id){
       if(!store.publicLesson(id))throw error('LESSON_NOT_FOUND',404);
-      return db.prepare(`SELECT c.id,c.lesson_id AS lessonId,c.author_id AS authorId,c.body,c.created_at AS createdAt
+      return db.prepare(`SELECT c.id,c.lesson_id AS lessonId,c.author_id AS authorId,c.parent_id AS parentId,c.body,c.created_at AS createdAt
         FROM lesson_comments c JOIN users u ON u.id=c.author_id
         WHERE c.lesson_id=? AND c.hidden_at IS NULL AND u.verified_at IS NOT NULL AND u.suspended=0
+        AND (c.parent_id IS NULL OR EXISTS(SELECT 1 FROM lesson_comments parent JOIN users pu ON pu.id=parent.author_id
+          WHERE parent.id=c.parent_id AND parent.lesson_id=c.lesson_id AND parent.hidden_at IS NULL AND pu.verified_at IS NOT NULL AND pu.suspended=0))
         ORDER BY c.created_at DESC,c.id DESC LIMIT 50`).all(id).reverse();
     },
-    createLessonComment(actor,id,{text,creationKey}={}){
+    createLessonComment(actor,id,input={}){
+      if(!input||Object.keys(input).some(k=>!['text','creationKey','replyTo'].includes(k)))throw error('INVALID_COMMENT',422);
+      const {text,creationKey,replyTo=null}=input;
+      if(replyTo!==null&&(typeof replyTo!=='string'||replyTo.length!==36))throw error('INVALID_REPLY',422);
       requireVerified(actor);
       // A comment is part of the paid work, not a public preview action.
       const target=store.viewableLesson(actor,id);
@@ -728,7 +736,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       if(typeof text!=='string'||text.trim().length<3||text.trim().length>800||/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(text))
         throw error('INVALID_COMMENT',422);
       if(typeof creationKey!=='string'||!/^[A-Za-z0-9_-]{16,128}$/.test(creationKey))throw error('INVALID_IDEMPOTENCY_KEY',422);
-      const body=text.trim(),hash=sha(body);
+      const body=text.trim(),hash=sha(replyTo===null?body:JSON.stringify({body,replyTo}));
       return transaction(()=>{
         // Recheck with the write lock held: refund/block and comment revocation
         // must win over retries, including an old idempotency key.
@@ -736,18 +744,27 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         requireCreatorAction(actor,target.creatorId,'comment');
         const old=db.prepare('SELECT * FROM lesson_comments WHERE author_id=? AND lesson_id=? AND creation_key=?').get(actor.id,id,creationKey);
         if(old){
-          if(old.creation_hash!==hash)throw error('IDEMPOTENCY_CONFLICT',409);
+          if(old.creation_hash!==hash||old.parent_id!==replyTo)throw error('IDEMPOTENCY_CONFLICT',409);
           if(old.hidden_at)throw error('COMMENT_UNAVAILABLE',409);
-          return {comment:{id:old.id,lessonId:id,authorId:actor.id,body:old.body,createdAt:old.created_at},replayed:true};
         }
+        const parent=replyTo===null?null:db.prepare(`SELECT p.id,p.author_id FROM lesson_comments p JOIN users u ON u.id=p.author_id
+          WHERE p.id=? AND p.lesson_id=? AND p.parent_id IS NULL AND p.hidden_at IS NULL AND u.verified_at IS NOT NULL AND u.suspended=0`).get(replyTo,id);
+        if(replyTo!==null&&(!parent||!affiliations.eligible(parent.author_id)))throw error('INVALID_REPLY',422);
+        if(old)return {comment:{id:old.id,lessonId:id,authorId:actor.id,parentId:old.parent_id,body:old.body,createdAt:old.created_at},replayed:true};
         const recent=db.prepare('SELECT count(*) AS n FROM lesson_comments WHERE author_id=? AND created_at>=?').get(actor.id,new Date(Date.now()-3600000).toISOString()).n;
         if(recent>=20)throw error('COMMENT_RATE_LIMIT',429);
         const commentId=randomUUID(),createdAt=stamp();
-        db.prepare('INSERT INTO lesson_comments(id,lesson_id,author_id,body,creation_key,creation_hash,created_at) VALUES(?,?,?,?,?,?,?)')
-          .run(commentId,id,actor.id,body,creationKey,hash,createdAt);
-        audit(actor.id,'lesson.comment.created',commentId,{lessonId:id});
+        db.prepare('INSERT INTO lesson_comments(id,lesson_id,author_id,body,creation_key,creation_hash,created_at,parent_id) VALUES(?,?,?,?,?,?,?,?)')
+          .run(commentId,id,actor.id,body,creationKey,hash,createdAt,replyTo);
+        audit(actor.id,'lesson.comment.created',commentId,{lessonId:id,replyTo});
         notify(target.creatorId,actor.id,'comment',commentId,id);
-        return {comment:{id:commentId,lessonId:id,authorId:actor.id,body,createdAt},replayed:false};
+        if(parent&&parent.author_id!==target.creatorId&&parent.author_id!==actor.id){
+          const recipient=human(db.prepare('SELECT * FROM users WHERE id=?').get(parent.author_id));
+          let allowed=false;
+          try{store.viewableLesson(recipient,id);allowed=true;}catch(e){if(!e?.status||e.status>=500)throw e;}
+          if(allowed)notify(parent.author_id,actor.id,'comment',commentId,id);
+        }
+        return {comment:{id:commentId,lessonId:id,authorId:actor.id,parentId:replyTo,body,createdAt},replayed:false};
       });
     },
     removeLessonComment(actor,id){
@@ -767,7 +784,8 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       return transaction(()=>{
         const row=db.prepare(`SELECT lc.id,lc.author_id,lc.lesson_id AS lessonId FROM lesson_comments lc
           JOIN lessons l ON l.id=lc.lesson_id JOIN courses c ON c.id=l.course_id
-          WHERE lc.id=? AND lc.hidden_at IS NULL AND l.status='published' AND c.active=1`).get(id);
+          WHERE lc.id=? AND lc.hidden_at IS NULL AND l.status='published' AND c.active=1
+          AND (lc.parent_id IS NULL OR EXISTS(SELECT 1 FROM lesson_comments p WHERE p.id=lc.parent_id AND p.lesson_id=lc.lesson_id AND p.hidden_at IS NULL))`).get(id);
         if(!row)throw error('COMMENT_NOT_FOUND',404);
         // Reports are accepted only from a viewer allowed to read that thread.
         store.viewableLesson(actor,row.lessonId);

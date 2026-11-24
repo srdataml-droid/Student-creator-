@@ -23,3 +23,6 @@ Transactional events for messages, follows, likes, lesson comments and community
 
 ## Fifth increment: course moderator permissions
 Platform admin assigns/revokes a verified joined student's limited per-course moderation role; membership FK automatically revokes on leave. Moderators may hide another member's contribution with recorded reason but cannot access platform report queues, assign roles, change membership, or moderate across courses. Hidden parent/child content cannot be returned via old idempotency keys. UI role controls and negative tests added. Reviewed Discourse GPL-2.0 license and category moderator lockout test at 7c5f9696a4bce4ff48603192ca9d40fcd979dfa3; no source imported or executed. Exact-head CI pending.
+
+## Sixth increment: lesson replies
+Additive nullable parent reference preserves existing comment hashes. One-level replies must target a visible root in the same entitled lesson, retain independent creator view/comment checks and rate limits, and disappear when the root is removed. Existing community reply code served as internal reference; no external dependencies. Reply UI, recipient notification and restart/replay/hidden-parent tests added. Exact-head CI pending. Hosted comment schema remains unchanged pending integration.
