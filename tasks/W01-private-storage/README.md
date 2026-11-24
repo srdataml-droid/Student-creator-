@@ -24,10 +24,16 @@ provider calls, service changes or data spending.
    locked-down defaults, two distinct bucket names, MIME allowlists and 5 MiB
    identity / 100 MiB media file limits.
 4. Confirm no object uploads, identity evidence or fee-bearing requests.
-5. After exact-head CI and independent review, apply on isolated staging only
-   and run `db/tests/private_storage_buckets_hosted.sql`.
-6. Record hosted SQL results, migration version, number of objects remaining,
-   permission check, and blockers in Issue #34. Run Supabase security advisor.
+5. After 5/5 exact-head CI and a successful transaction-rolled-back
+   migration+RLS dry run, apply only to authorized isolated staging.
+   **Executed on 24 Nov 2026:** migration version `20261124214412`
+   (`student_creators_private_storage_staging_0009`) succeeded.
+   The exact `db/tests/private_storage_buckets_hosted.sql` passed there.
+   Both buckets are private with 0 objects.
+6. Independent code/security reviewer approval remains REQUIRED before merging
+   this pull request into main; do not count a self-review as independent.
+   Preserve exact CI, hosted tests, migration version and unresolved lints
+   in Issue #34.
 7. Do **not** expose browser upload, list or download permissions yet.
    A future server route must enforce Auth, institution, scan/quarantine and
    paid-view rights before granting limited upload/playback access.
