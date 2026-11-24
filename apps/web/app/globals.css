@@ -412,3 +412,15 @@ button:disabled{opacity:.55;cursor:not-allowed}
   .verification-grid{grid-template-columns:minmax(0,1fr);gap:12px}
   .verification-grid .panel:last-child{grid-column:1}
 }
+
+
+/* Week 8: preserve the existing visual system; keep keyboard destinations visible. */
+.creator-body .skip{z-index:100}
+.creator-body #main{scroll-margin-top:82px}
+@media(max-width:760px){
+  .creator-body #main{scroll-margin-top:74px}
+  .mobile-creator-tabs a{min-height:44px}
+  .creator-body :is(a,button,input,select,textarea):focus-visible{
+    scroll-margin-block:78px 90px;
+  }
+}
