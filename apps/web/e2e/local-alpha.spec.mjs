@@ -241,7 +241,7 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     expect((await viewer.request.get('/api/local/lessons/'+paidId)).status()).toBe(402);
     expect((await viewer.request.post('/api/local/orders/'+orderData.order.reference+'/confirm',{data:{}})).status()).toBe(503);
     await viewerPage.goto('/purchases');
-    await expect(viewerPage.getByText('Awaiting sandbox verification')).toBeVisible();
+    await expect(viewerPage.getByText('Awaiting confirmation')).toBeVisible();
     expect((await request.get(BASE+'/api/local/my/purchases')).status()).toBe(401);
     await viewerPage.setViewportSize({width:1280,height:800});
 
