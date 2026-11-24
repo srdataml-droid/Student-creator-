@@ -428,3 +428,16 @@ button:disabled{opacity:.55;cursor:not-allowed}
 /* Keep the founder's palette; indicate the current mobile destination using existing colors. */
 .mobile-creator-tabs a[aria-current]{color:var(--brand-strong);background:var(--brand-soft);}
 .mobile-creator-tabs a[aria-current] small{text-decoration:underline;text-underline-offset:3px;}
+
+/* Narrow viewport reflow: shrink intrinsic form/grid widths rather than clip the page. */
+.search-filters{grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr))}
+.search-filters>div,.form-stack,.panel,.form-stack select{min-width:0;max-width:100%}
+@media(max-width:360px){
+  .nav-inner{gap:8px;padding-inline:10px}
+  .creator-logo{gap:6px;font-size:1rem}
+  .logo-glyph{width:30px;height:30px;flex-shrink:0}
+  .nav-join{gap:5px;padding-inline:9px;white-space:nowrap}
+  .creator-body .main{padding-inline:12px}
+  .creator-body .panel{padding-inline:15px}
+  .creator-body h1,.creator-body h2,.creator-body .status{overflow-wrap:anywhere}
+}
