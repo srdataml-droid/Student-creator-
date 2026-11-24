@@ -190,3 +190,104 @@ test('free guidance progresses through student confirmation; unexpected fields a
     assert.equal((await x.call('classes/'+cls.body.class.id+'/room-token','POST',{role:'host'},a.viewer.cookie)).status,400);
   }finally{x.close();}
 });
+
+
+test('paid room grants are revoked by creator blocks and entitlement reversal; reconnect issues unique IDs',async()=>{
+  const x=fixture();
+  try{
+    const a=await x.prepare();
+    const created=await x.call('courses/'+a.course+'/classes','POST',x.schedule(a.course,'revocation',22000),a.host.cookie);
+    assert.equal(created.status,201);
+    const id=created.body.class.id;
+    assert.equal((await x.call('classes/'+id+'/enroll','POST',{},a.viewer.cookie)).status,200);
+    x.clock.ms+=4*60000;
+    assert.equal((await x.call('classes/'+id+'/open','POST',{},a.host.cookie)).status,200);
+    assert.equal((await x.call('classes/'+id+'/room-token','POST',{},a.viewer.cookie)).status,402);
+    const paidKey=a.viewer.id+':class:'+id;
+    x.entitlements.add(paidKey);
+    const first=await x.call('classes/'+id+'/room-token','POST',{},a.viewer.cookie);
+    const second=await x.call('classes/'+id+'/room-token','POST',{},a.viewer.cookie);
+    assert.equal(first.status,200);
+    assert.equal(second.status,200);
+    assert.notEqual(claims(first.body.room.token,x.secret).jti,claims(second.body.room.token,x.secret).jti);
+    assert.equal(claims(first.body.room.token,x.secret).video.roomJoin,true);
+    assert.equal(claims(first.body.room.token,x.secret).video.canPublish,false);
+    x.store.setCreatorRestrictions({id:a.host.id,role:'student',verifiedAt:new Date().toISOString(),institutionId:a.school},
+      a.host.id,a.viewer.id,{view:true,comment:false,message:false});
+    assert.equal((await x.call('classes/'+id+'/room-token','POST',{},a.viewer.cookie)).status,403);
+    x.store.setCreatorRestrictions({id:a.host.id,role:'student',verifiedAt:new Date().toISOString(),institutionId:a.school},
+      a.host.id,a.viewer.id,{view:false,comment:false,message:false});
+    x.entitlements.delete(paidKey);
+    assert.equal((await x.call('classes/'+id+'/room-token','POST',{},a.viewer.cookie)).status,402);
+    x.entitlements.add(paidKey);
+    assert.equal((await x.call('classes/'+id+'/room-token','POST',{},a.viewer.cookie)).status,200);
+    x.clock.ms+=70*60000;
+    assert.equal((await x.call('classes/'+id+'/room-token','POST',{},a.viewer.cookie)).status,409);
+  }finally{x.close();}
+});
+
+test('room deletion worker retries provider errors and only administrators can drain outbox',async()=>{
+  const x=fixture();
+  try{
+    const a=await x.prepare();
+    const created=await x.call('courses/'+a.course+'/classes','POST',x.schedule(a.course,'closedroom'),a.host.cookie);
+    const id=created.body.class.id;
+    assert.equal(created.status,201);
+    x.clock.ms+=4*60000;
+    assert.equal((await x.call('classes/'+id+'/open','POST',{},a.host.cookie)).status,200);
+    assert.equal((await x.call('classes/'+id+'/cancel','POST',{reason:'Creator unavailable for a live lesson'},a.host.cookie)).status,200);
+    assert.equal((await x.call('classes/'+id+'/room-token','POST',{},a.host.cookie)).status,409);
+    const student={id:a.viewer.id,role:'student',verifiedAt:new Date().toISOString(),institutionId:a.school};
+    assert.equal(await x.store.drainRoomClosures(student,{deleteRoom:async()=>{}}).catch(e=>e.status),403);
+    const admin={id:'admin-placeholder',role:'admin',suspended:false};
+    assert.equal(await x.store.drainRoomClosures(admin,null).catch(e=>e.status),503);
+    let failedOnce=true,callCount=0;
+    const provider={async deleteRoom(name){
+      assert.equal(name,'wk-class-'+id);callCount++;
+      if(failedOnce){failedOnce=false;throw Error('transient provider timeout');}
+    }};
+    const first=await x.store.drainRoomClosures(admin,provider);
+    assert.deepEqual({completed:first.completed,failed:first.failed,remaining:first.remaining},{completed:0,failed:1,remaining:1});
+    const next=await x.store.drainRoomClosures(admin,provider);
+    assert.deepEqual({completed:next.completed,failed:next.failed,remaining:next.remaining},{completed:1,failed:0,remaining:0});
+    assert.equal((await x.store.drainRoomClosures(admin,provider)).completed,0);
+    assert.equal(callCount,2);
+  }finally{x.close();}
+});
+
+test('cancellation, refused service progress after entitlement reversal, and reminder deduplication',async()=>{
+  const x=fixture();
+  try{
+    const a=await x.prepare();
+    const request={
+      creatorId:a.host.id,kind:'tutoring',description:'Please explain how to reason about these original mathematical examples, without completing any assessment.',
+      integrityAttested:true,creationKey:'wk06-reminder-help-unique-01'
+    };
+    const created=await x.call('learning-requests','POST',request,a.viewer.cookie);
+    const id=created.body.request.id;
+    assert.equal(created.status,201);
+    assert.equal((await x.call('learning-requests/'+id+'/quote','POST',{quoteKobo:24000},a.host.cookie)).status,200);
+    assert.equal((await x.call('learning-requests/'+id+'/accept','POST',{expectedQuoteKobo:24000},a.viewer.cookie)).status,200);
+    x.entitlements.add(a.viewer.id+':service:'+id);
+    assert.equal((await x.call('learning-requests/'+id+'/start','POST',{},a.host.cookie)).status,200);
+    x.entitlements.delete(a.viewer.id+':service:'+id);
+    assert.equal((await x.call('learning-requests/'+id+'/submit','POST',{},a.host.cookie)).status,402);
+    assert.equal((await x.call('learning-requests/'+id+'/cancel','POST',{reason:'Unable to provide the agreed explanation'},a.host.cookie)).status,200);
+    assert.equal((await x.call('learning-requests/'+id+'/cancel','POST',{reason:'Unable to provide the agreed explanation'},a.host.cookie)).body.request.replayed,true);
+    const reviews=await x.call('admin/learning-refund-reviews','GET',undefined,a.admin);
+    assert.equal(reviews.status,200);
+    assert.equal(reviews.body.reviews.filter(x=>x.resourceId===id).length,1);
+    assert.equal((await x.call('learning-requests/'+id+'/submit','POST',{},a.host.cookie)).status,409);
+
+    const cls=await x.call('courses/'+a.course+'/classes','POST',x.schedule(a.course,'reminder'),a.host.cookie);
+    const classId=cls.body.class.id;
+    assert.equal((await x.call('classes/'+classId+'/enroll','POST',{},a.viewer.cookie)).status,200);
+    assert.equal((await x.call('admin/learning-reminders/queue','POST',{},a.viewer.cookie)).status,403);
+    const one=await x.call('admin/learning-reminders/queue','POST',{},a.admin);
+    const two=await x.call('admin/learning-reminders/queue','POST',{},a.admin);
+    assert.equal(one.status,200);
+    assert.equal(two.status,200);
+    const notifications=await x.call('me/learning-notifications','GET',undefined,a.viewer.cookie);
+    assert.equal(notifications.body.notifications.filter(x=>x.kind==='class_reminder'&&x.resourceId===classId).length,1);
+  }finally{x.close();}
+});
