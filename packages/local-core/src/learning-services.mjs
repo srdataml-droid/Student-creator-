@@ -367,6 +367,22 @@ export function createLearningServices({db,transaction,audit,error,requireVerifi
         return {...rowService({...r,status:'completed'}),replayed:false};
       });
     },
+    cancelHelp(actor,id,reason){
+      const row=requestRow(actor,id),explanation=valText(reason,8,500,error,'INVALID_REASON');
+      return transaction(()=>{
+        const current=db.prepare('SELECT * FROM learning_requests WHERE id=?').get(id);
+        if(current.status==='cancelled')return {...rowService(current),replayed:true};
+        if(['completed','disputed','rejected'].includes(current.status))throw error('HELP_CLOSED',409);
+        if(!['requested','quoted','accepted','in_progress','submitted'].includes(current.status))throw error('HELP_CLOSED',409);
+        db.prepare("UPDATE learning_requests SET status='cancelled',updated_at=? WHERE id=?").run(timestamp(),id);
+        const other=row.student_id===actor.id?row.creator_id:row.student_id;
+        notice(other,'help_cancelled',id,'The personalized learning service was cancelled.');
+        if(current.quote_kobo>0&&['accepted','in_progress','submitted'].includes(current.status))
+          refund('service',id,row.student_id,'Cancelled accepted paid service: financial operator review required.');
+        audit(actor.id,'help.cancelled',id,{reason:explanation});
+        return {...rowService({...current,status:'cancelled'}),replayed:false,refundReviewRequested:current.quote_kobo>0&&['accepted','in_progress','submitted'].includes(current.status)};
+      });
+    },
     disputeHelp(actor,id,reason){
       const row=requestRow(actor,id);
       const explanation=valText(reason,10,1000,error,'INVALID_REASON');
