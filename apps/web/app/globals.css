@@ -441,3 +441,19 @@ button:disabled{opacity:.55;cursor:not-allowed}
   .creator-body .panel{padding-inline:15px}
   .creator-body h1,.creator-body h2,.creator-body .status{overflow-wrap:anywhere}
 }
+
+/* Reflow for all existing panels and lists, without masking overflowing content. */
+.creator-body .app-content,.creator-body .main,.creator-body .panel{min-width:0}
+.creator-body :is(.studio-grid,.manage-grid,.auth-shell,.verification-grid,.search-filters)>*{min-width:0}
+.creator-body :is(.lesson-list,.review-list,.form-stack,.studio-meta,.post-content,.status,.hint){overflow-wrap:anywhere}
+.creator-body :is(input,select,textarea,video,img){max-width:100%}
+.creator-body :is(input,select,textarea){min-width:0}
+@media(max-width:760px){
+  .creator-body .main{padding-bottom:96px}
+  .creator-body .course-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,235px),1fr))}
+  .creator-body :is(.studio-grid,.manage-grid,.auth-shell,.campus-onboarding .auth-shell){grid-template-columns:minmax(0,1fr)}
+  .creator-body :is(.heading-row,.studio-meta,.button-row){flex-wrap:wrap}
+  .creator-body .form-stack :is(button,input:not([type=checkbox]):not([type=radio]),select){min-height:44px}
+}
+/* Native focus indicator for all interactive controls, including custom form buttons. */
+.creator-body :is(button,a,input,select,textarea,summary):focus-visible{outline:3px solid #047b5d;outline-offset:3px}
