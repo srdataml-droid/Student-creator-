@@ -16,10 +16,10 @@ export default async function SearchPage({searchParams}){
    courses=getLocalPublicCourses();
    if(courseId)topics=getLocalTopics(courseId);
    if(q)results=searchLocalPublishedLessons({q,institutionId:institutionId||null,courseId:courseId||null,topicId:topicId||null});
- }catch(e){error=['INVALID_SEARCH','INVALID_SEARCH_FILTER','INVALID_SEARCH_LIMIT'].includes(e?.code)?'Invalid search or mismatched filters. Enter 2–80 characters.':'Search is unavailable. Check the local server and retry.';}
+ }catch(e){error=['INVALID_SEARCH','INVALID_SEARCH_FILTER','INVALID_SEARCH_LIMIT'].includes(e?.code)?'Invalid search or mismatched filters. Enter 2–80 characters.':'Search is temporarily unavailable. Please try again.';}
  return <main id="main" className="main">
   <section className="hero compact"><p className="eyebrow">Learn through original explanations</p><h1>Search approved lessons.</h1><p className="intro">Find student-created learning resources across universities, courses and topics. Drafts and rejected materials never appear here.</p></section>
-  {!enabled?<p className="status" role="status">Local SQLite search is available when APP_DATA_MODE=local.</p>:<>
+  {!enabled?<p className="status" role="status">Search is temporarily unavailable.</p>:<>
    <section className="panel search-panel"><h2>Find a lesson</h2><form className="form-stack" action="/search" method="GET">
     <label htmlFor="search-keywords">Keywords</label><input id="search-keywords" type="search" name="q" placeholder="Calculus, MTH 101, study skills" required minLength={2} maxLength={80} defaultValue={q}/>
     <div className="search-filters"><div><label htmlFor="search-school">University</label><select id="search-school" name="institutionId" defaultValue={institutionId}><option value="">All universities</option>{schools.map(x=><option key={x.id} value={x.id}>{x.name}</option>)}</select></div>

@@ -227,7 +227,7 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     await viewerPage.goto('/lessons/'+paidId);
     await expect(viewerPage.getByRole('heading',{name:paidTitle})).toBeVisible();
     await expect(viewerPage.getByRole('heading',{name:'Unlock access for ₦200'})).toBeVisible();
-    await expect(viewerPage.getByText('Sandbox checkout is not configured.',{exact:false})).toBeVisible();
+    await expect(viewerPage.getByText('Checkout is currently unavailable.',{exact:false})).toBeVisible();
     const viewport=await viewerPage.evaluate(()=>({body:document.documentElement.scrollWidth,width:window.innerWidth}));
     expect(viewport.body,'Mobile paywall horizontal overflow').toBeLessThanOrEqual(viewport.width+1);
     console.log('browser-alpha: paid lesson paywall and mobile viewport passed');
@@ -241,7 +241,7 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     expect((await viewer.request.get('/api/local/lessons/'+paidId)).status()).toBe(402);
     expect((await viewer.request.post('/api/local/orders/'+orderData.order.reference+'/confirm',{data:{}})).status()).toBe(503);
     await viewerPage.goto('/purchases');
-    await expect(viewerPage.getByText('Awaiting sandbox verification')).toBeVisible();
+    await expect(viewerPage.getByText('Awaiting confirmation')).toBeVisible();
     expect((await request.get(BASE+'/api/local/my/purchases')).status()).toBe(401);
     await viewerPage.setViewportSize({width:1280,height:800});
 

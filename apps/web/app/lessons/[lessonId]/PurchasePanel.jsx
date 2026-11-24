@@ -42,20 +42,20 @@ export default function PurchasePanel({lessonId,priceKobo}){
    const result=await api('orders/'+order.reference+'/confirm',{method:'POST',body:{}});
    setOrder(result.order);
    if(result.order.status==='paid'){window.location.reload();return;}
-   setMessage('Your sandbox payment is not confirmed yet.');
+   setMessage('Your order has not been confirmed yet.');
   }catch(e){setError(friendlyError(e));}
   finally{setBusy(false);}
  }
  return <section className="panel paid-access-card" aria-label="Paid creator access">
-  <p className="eyebrow">PAID CREATOR WORK · TEST MODE ONLY</p>
+  <p className="eyebrow">PAID CREATOR WORK</p>
   <h2>Unlock access for ₦{naira}</h2>
   <p>Buying access lets you view this creator’s original work. The creator retains the copyright. Republishing or sharing source files is not included.</p>
-  <p className="hint">No real purchases or payouts are enabled. The checkout below uses Paystack test credentials only when configured by the developer.</p>
-  {order?.status==='refunded'?<p role="status" className="hint">This synthetic order was refunded and its viewing access was revoked. Re-purchase is disabled during the one-student technical pilot.</p>:checkoutAvailable?<div className="button-row">
-   <button className="primary-link" type="button" disabled={busy} onClick={checkout}>{busy?'Checking…':'Open Paystack test checkout'}</button>
-   {order?.status==='pending'&&<button className="secondary-link" type="button" disabled={busy} onClick={verify}>Verify sandbox payment</button>}
-  </div>:<p role="status" className="hint">Sandbox checkout is not configured. The lesson remains locked until a verified test payment is recorded.</p>}
-  {order&&<p className="hint">Order status: {order.status}. Confirming this on the website never overrides Paystack’s server-side verification.</p>}
+  <p className="hint">{checkoutAvailable?'No real payment will be collected.':'Checkout is currently unavailable.'}</p>
+  {order?.status==='refunded'?<p role="status" className="hint">This order was reversed and viewing access was revoked. Repurchase is currently unavailable.</p>:checkoutAvailable?<div className="button-row">
+   <button className="primary-link" type="button" disabled={busy} onClick={checkout}>{busy?'Checking…':'Open checkout'}</button>
+   {order?.status==='pending'&&<button className="secondary-link" type="button" disabled={busy} onClick={verify}>Check order status</button>}
+  </div>:<p role="status" className="hint">Access is not available until your order is confirmed.</p>}
+  {order&&<p className="hint">Order status: {order.status}. </p>}
   {error&&<p role="alert" className="form-error">{error}</p>}
   {message&&<p role="status">{message}</p>}
  </section>;
