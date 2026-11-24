@@ -31,7 +31,7 @@ export default function Home(){
         {courses.length?<ul className="aside-course-list">{courses.slice(0,6).map((c,i)=><li key={c.id}><Link href={`/courses/${c.id}`}><span className={`course-color course-color-${i%4}`}>{c.code?.slice(0,2)||'SC'}</span><span><strong>{c.code}</strong><small>{c.title}</small></span><span aria-hidden="true" className="aside-chevron">↗</span></Link></li>)}</ul>:<p className="aside-empty">The first courses appear here when an administrator sets up your campus.</p>}
       </div>
       <div className="aside-panel safety-panel"><span className="safety-emoji" aria-hidden="true">✺</span><div><h2>Original work matters.</h2><p>Share work you created and have permission to publish. Use examples to learn—not submit someone else's work.</p></div></div>
-      <p className="rail-note">Student Creators is being built. Paid posts, subscriptions and bank settlement will launch only after secure payment verification.</p>
+      
     </aside>
   </main>;
 }
