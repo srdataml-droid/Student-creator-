@@ -227,6 +227,15 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     if(requireMembership&&!joined)throw error('MEMBERSHIP_REQUIRED',403);
     return {target,joined};
   }
+  // Discovery metadata follows the same creator eligibility and account-scoped viewing restriction.
+  // Anonymous previews remain public by the existing catalog contract; never include full lesson text.
+  function discoveryScope(actor,alias='l'){
+    return {sql:`EXISTS(SELECT 1 FROM users du WHERE du.id=${alias}.creator_id AND du.role='student' AND du.verified_at IS NOT NULL AND du.suspended=0
+      AND NOT EXISTS(SELECT 1 FROM institution_affiliations da LEFT JOIN institution_integrations di ON di.provider_id=da.provider_id
+        WHERE da.user_id=du.id AND (da.role<>'student' OR da.state<>'active' OR COALESCE(di.enabled,0)<>1 OR da.valid_until<=?)))
+      AND NOT EXISTS(SELECT 1 FROM creator_restrictions dr WHERE dr.creator_id=${alias}.creator_id AND dr.viewer_id=? AND dr.deny_view=1)`,
+      args:[Math.floor(Date.now()/1000),actor?.id??null]};
+  }
   function requireCreatorAction(actor,creatorId,kind){
     if(!actor)throw error('AUTH_REQUIRED',401);
     requireVerified(actor);
@@ -578,7 +587,28 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       });
     },
 
-    searchLessons({q,institutionId=null,courseId=null,topicId=null,limit=25}={}){
+    discoverFeed(actor,{mode='all',limit=60}={}){
+      if(!['all','following'].includes(mode)||!Number.isSafeInteger(limit)||limit<1||limit>100)throw error('INVALID_FEED',422);
+      if(mode==='following')requireVerified(actor);
+      const eligible=actor?.role==='student'&&actor.verifiedAt&&!actor.suspended&&affiliations.eligible(actor.id);
+      const scope=discoveryScope(actor);
+      const follow="EXISTS(SELECT 1 FROM creator_follows f WHERE f.follower_id=? AND f.creator_id=l.creator_id)";
+      const where=mode==='following'?' AND '+follow:'';
+      const rows=db.prepare(`SELECT l.id,l.creator_id AS creatorId,l.course_id AS courseId,l.topic_id AS topicId,
+        l.title,l.description,l.preview_text AS previewText,l.published_at AS publishedAt,c.code AS courseCode,c.title AS courseTitle,
+        i.name AS institutionName, l.institution_id AS institutionId,
+        EXISTS(SELECT 1 FROM lesson_videos v WHERE v.lesson_id=l.id) AS hasVideo,
+        EXISTS(SELECT 1 FROM lesson_captions cp WHERE cp.lesson_id=l.id) AS hasCaptions,
+        p.display_name AS displayName,p.handle
+        FROM lessons l JOIN courses c ON c.id=l.course_id JOIN institutions i ON i.id=l.institution_id
+        LEFT JOIN creator_public_profiles p ON p.user_id=l.creator_id
+        WHERE l.status='published' AND c.active=1 AND ${scope.sql}${where}
+        ORDER BY CASE WHEN l.institution_id=? THEN 0 ELSE 1 END,
+        CASE WHEN ${follow} THEN 0 ELSE 1 END,l.published_at DESC,l.id DESC LIMIT ?`)
+        .all(...scope.args,...(mode==='following'?[actor.id]:[]),eligible?actor.institutionId:null,eligible?actor.id:null,limit);
+      return rows.map(row=>({...row,hasVideo:Boolean(row.hasVideo),hasCaptions:Boolean(row.hasCaptions),priceKobo:commerce.price(row.id)}));
+    },
+    searchLessons({q,institutionId=null,courseId=null,topicId=null,limit=25}={},actor=null){
       if(typeof q!=='string'||q.trim().length<2||q.trim().length>80||/[\x00-\x1f\x7f]/.test(q))throw error('INVALID_SEARCH',422);
       if(!Number.isSafeInteger(limit)||limit<1||limit>50)throw error('INVALID_SEARCH_LIMIT',422);
       const term=q.trim();
@@ -590,7 +620,9 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       if(topicId){const topic=store.getTopic(topicId);if(!topic||(courseId&&topic.courseId!==courseId))throw error('INVALID_SEARCH_FILTER',422);if(institutionId&&store.getCourse(topic.courseId)?.institutionId!==institutionId)throw error('INVALID_SEARCH_FILTER',422);}
       const fields=['l.title','l.description','l.preview_text','c.code','c.title','i.name'];
       const where=["l.status='published'",'c.active=1','('+fields.map(f=>'instr(lower('+f+'),lower(?))>0').join(' OR ')+')'];
-      const values=fields.map(()=>term);
+      const scope=discoveryScope(actor);
+      where.push(scope.sql);
+      const values=[...fields.map(()=>term),...scope.args];
       if(institutionId){where.push('l.institution_id=?');values.push(institutionId);}
       if(courseId){where.push('l.course_id=?');values.push(courseId);}
       if(topicId){where.push('l.topic_id=?');values.push(topicId);}
@@ -600,7 +632,8 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
 
     myBookmarks(actor){
       requireVerified(actor);
-      return db.prepare("SELECT l.id,l.title,l.description,l.preview_text AS previewText,l.course_id AS courseId,c.code AS courseCode,i.name AS institutionName,b.created_at AS savedAt,EXISTS(SELECT 1 FROM lesson_videos v WHERE v.lesson_id=l.id) AS hasVideo FROM lesson_bookmarks b JOIN lessons l ON l.id=b.lesson_id JOIN courses c ON c.id=l.course_id JOIN institutions i ON i.id=l.institution_id WHERE b.user_id=? AND l.status='published' AND c.active=1 ORDER BY b.created_at DESC,l.id DESC LIMIT 250").all(actor.id).map(x=>({...x,hasVideo:Boolean(x.hasVideo)}));
+      const scope=discoveryScope(actor);
+      return db.prepare("SELECT l.id,l.title,l.description,l.preview_text AS previewText,l.course_id AS courseId,c.code AS courseCode,i.name AS institutionName,b.created_at AS savedAt,EXISTS(SELECT 1 FROM lesson_videos v WHERE v.lesson_id=l.id) AS hasVideo FROM lesson_bookmarks b JOIN lessons l ON l.id=b.lesson_id JOIN courses c ON c.id=l.course_id JOIN institutions i ON i.id=l.institution_id WHERE b.user_id=? AND l.status='published' AND c.active=1 AND "+scope.sql+" ORDER BY b.created_at DESC,l.id DESC LIMIT 250").all(actor.id,...scope.args).map(x=>({...x,hasVideo:Boolean(x.hasVideo)}));
     },
     saveBookmark(actor,lessonId){
       requireVerified(actor);
@@ -740,7 +773,11 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         return {id,status:decision==='hide'?'hidden':'dismissed'};
       });
     },
-    publicLessons(courseId,topicId=null){if(!store.getCourse(courseId))return [];return (topicId?db.prepare("SELECT * FROM lessons WHERE course_id=? AND topic_id=? AND status='published' ORDER BY published_at DESC LIMIT 100").all(courseId,topicId):db.prepare("SELECT * FROM lessons WHERE course_id=? AND status='published' ORDER BY published_at DESC LIMIT 100").all(courseId)).map(withVideo);},
+    publicLessons(courseId,topicId=null,actor=null){
+      if(!store.getCourse(courseId))return [];
+      const scope=discoveryScope(actor);
+      return db.prepare("SELECT l.* FROM lessons l WHERE l.course_id=? AND l.status='published' AND "+scope.sql+(topicId?' AND l.topic_id=?':'')+" ORDER BY l.published_at DESC,l.id DESC LIMIT 100").all(courseId,...scope.args,...(topicId?[topicId]:[])).map(withVideo);
+    },
     viewableLesson(actor,id){
       const item=store.publicLesson(id);
       if(!item)throw error('LESSON_NOT_FOUND',404);

@@ -1,6 +1,6 @@
 
 import Link from 'next/link';
-import {isLocalMode,getLocalPublicCourses,getLocalPublicInstitutions,getLocalTopics,searchLocalPublishedLessons} from '../../lib/local-public.mjs';
+import {isLocalMode,getLocalPublicCourses,getLocalPublicInstitutions,getLocalTopics,searchLocalPublishedLessons,getLocalDiscoveryActor} from '../../lib/local-public.mjs';
 export const dynamic='force-dynamic';
 export const metadata={title:'Find lessons | Campus Learning'};
 export default async function SearchPage({searchParams}){
@@ -15,7 +15,7 @@ export default async function SearchPage({searchParams}){
    schools=getLocalPublicInstitutions();
    courses=getLocalPublicCourses();
    if(courseId)topics=getLocalTopics(courseId);
-   if(q)results=searchLocalPublishedLessons({q,institutionId:institutionId||null,courseId:courseId||null,topicId:topicId||null});
+   if(q)results=searchLocalPublishedLessons({q,institutionId:institutionId||null,courseId:courseId||null,topicId:topicId||null},await getLocalDiscoveryActor());
  }catch(e){error=['INVALID_SEARCH','INVALID_SEARCH_FILTER','INVALID_SEARCH_LIMIT'].includes(e?.code)?'Invalid search or mismatched filters. Enter 2–80 characters.':'Search is temporarily unavailable. Please try again.';}
  return <main id="main" className="main">
   <section className="hero compact"><p className="eyebrow">Learn through original explanations</p><h1>Search approved lessons.</h1><p className="intro">Find student-created learning resources across universities, courses and topics. Drafts and rejected materials never appear here.</p></section>

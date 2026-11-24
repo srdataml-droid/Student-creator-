@@ -143,11 +143,18 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
           return responses({restrictions:store.creatorRestrictions(actor,segments[1])});
         }
         if(path==='institutions')return responses({institutions:store.listInstitutions()});
+        if(path==='feed'){
+          const q=new URL(request.url).searchParams;
+          if(q.getAll('mode').length>1||q.getAll('limit').length>1)return fail('INVALID_FEED',422);
+          const mode=q.get('mode')??'all';
+          if(mode==='following'&&!actor)return unauthorized();
+          return responses({posts:store.discoverFeed(actor,{mode,limit:q.has('limit')?Number(q.get('limit')):60})});
+        }
         if(path==='search'){
           const query=new URL(request.url).searchParams;
           const limit=query.has('limit')?Number(query.get('limit')):25;
           const value=(key)=>query.get(key)||null;
-          return responses({results:store.searchLessons({q:query.get('q'),institutionId:value('institutionId'),courseId:value('courseId'),topicId:value('topicId'),limit})});
+          return responses({results:store.searchLessons({q:query.get('q'),institutionId:value('institutionId'),courseId:value('courseId'),topicId:value('topicId'),limit},actor)});
         }
         if(path==='courses')return responses({courses:store.listCourses()});
         if(segments.length===3&&segments[0]==='courses'&&segments[2]==='topics'){const parent=store.getCourse(segments[1]);return parent?responses({topics:store.listTopics(parent.id)}):fail('COURSE_NOT_FOUND',404);}
@@ -156,7 +163,7 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
           const topicId=new URL(request.url).searchParams.get('topicId');
           const topics=store.listTopics(item.id);
           if(topicId&&!topics.some(t=>t.id===topicId))return fail('INVALID_TOPIC',422);
-          return responses({course:item,topics,lessons:store.publicLessons(item.id,topicId).map(l=>({id:l.id,title:l.title,topicId:l.topicId,description:l.description,previewText:l.previewText,publishedAt:l.publishedAt,hasVideo:l.hasVideo}))});
+          return responses({course:item,topics,lessons:store.publicLessons(item.id,topicId,actor).map(l=>({id:l.id,title:l.title,topicId:l.topicId,description:l.description,previewText:l.previewText,publishedAt:l.publishedAt,hasVideo:l.hasVideo}))});
         }
         if(segments.length===3&&segments[0]==='lessons'&&segments[2]==='comments'){
           store.viewableLesson(actor,segments[1]);

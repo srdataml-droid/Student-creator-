@@ -1,14 +1,14 @@
 import Link from 'next/link';
 import {notFound} from 'next/navigation';
 import {getPublicCourse} from '../../../lib/public-courses.mjs';
-import {getLocalCourse,getLocalTopics,getLocalCourseLessons,isLocalMode} from '../../../lib/local-public.mjs';
+import {getLocalCourse,getLocalTopics,getLocalCourseLessons,isLocalMode,getLocalDiscoveryActor} from '../../../lib/local-public.mjs';
 import {createSupabaseCatalogStore} from '../../../../../packages/content-core/src/catalog-api.mjs';
 export const dynamic='force-dynamic';
 export default async function CoursePage({params,searchParams}){
  const {courseId}=await params;const query=await searchParams;
  let course;let entries=[];let topics=[];let selectedTopic=null;let unavailable=false;
  try {
-  if(isLocalMode()){course=getLocalCourse(courseId);if(course){topics=getLocalTopics(courseId);selectedTopic=topics.find(t=>t.id===query?.topic)?.id||null;entries=getLocalCourseLessons(courseId,selectedTopic);}}
+  if(isLocalMode()){course=getLocalCourse(courseId);if(course){topics=getLocalTopics(courseId);selectedTopic=topics.find(t=>t.id===query?.topic)?.id||null;entries=getLocalCourseLessons(courseId,selectedTopic,await getLocalDiscoveryActor());}}
   else{course=await getPublicCourse({id:courseId});if(course){const store=createSupabaseCatalogStore({url:process.env.SUPABASE_URL,publicKey:process.env.SUPABASE_PUBLISHABLE_KEY});entries=await store.listPublished({courseId,topicId:null,limit:20,offset:0});}}
  }catch{unavailable=true;}
  if(unavailable)return <main className="main" id="main"><p role="status">The course directory is temporarily unavailable. Please try again.</p></main>;

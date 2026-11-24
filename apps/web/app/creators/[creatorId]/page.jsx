@@ -1,7 +1,7 @@
 import Link from 'next/link';
 import {notFound} from 'next/navigation';
 import FollowButton from './FollowButton.jsx';
-import {getLocalPublicCreator,getLocalPublicCourses,getLocalCourseLessons,isLocalMode} from '../../../lib/local-public.mjs';
+import {getLocalPublicCreator,getLocalPublicCourses,getLocalCourseLessons,isLocalMode,getLocalDiscoveryActor} from '../../../lib/local-public.mjs';
 export const dynamic='force-dynamic';
 export async function generateMetadata({params}){
  const {creatorId}=await params;
@@ -14,7 +14,8 @@ export default async function CreatorProfile({params}){
  try{
   creator=getLocalPublicCreator(creatorId);
   if(!creator)return notFound();
-  posts=getLocalPublicCourses().flatMap(course=>getLocalCourseLessons(course.id).filter(lesson=>lesson.creatorId===creatorId).map(lesson=>({...lesson,courseCode:course.code}))).sort((a,b)=>String(b.publishedAt||b.createdAt).localeCompare(String(a.publishedAt||a.createdAt))).slice(0,80);
+  const actor=await getLocalDiscoveryActor();
+  posts=getLocalPublicCourses().flatMap(course=>getLocalCourseLessons(course.id,null,actor).filter(lesson=>lesson.creatorId===creatorId).map(lesson=>({...lesson,courseCode:course.code}))).sort((a,b)=>String(b.publishedAt||b.createdAt).localeCompare(String(a.publishedAt||a.createdAt))).slice(0,80);
  }catch{return <main id="main" className="main"><p role="status">This creator profile is unavailable right now.</p></main>}
  return <main id="main" className="main creator-profile-shell">
    <Link className="back" href="/">← Discover creators</Link>
