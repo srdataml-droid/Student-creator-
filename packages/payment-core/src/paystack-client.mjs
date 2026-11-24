@@ -1,3 +1,4 @@
+import { readBoundedGatewayResponse } from './bounded-response.mjs';
 import { PaymentValidationError, validateVerifiedCharge } from './payments.mjs';
 
 const PAYSTACK_API_ORIGIN = 'https://api.paystack.co';
@@ -52,8 +53,8 @@ export function createPaystackClient({ secretKey, environment, fetchImpl = fetch
         throw new PaystackGatewayError('BAD_GATEWAY_RESPONSE', 'Invalid payment provider response');
       }
       // Read one text response; never print it to logs because it may contain PII.
-      const raw = await res.text();
-      if (raw.length > MAX_GATEWAY_RESPONSE_BYTES) throw new PaystackGatewayError('BAD_GATEWAY_RESPONSE', 'Unexpected large provider response');
+      const raw = await readBoundedGatewayResponse(res, MAX_GATEWAY_RESPONSE_BYTES,
+        () => new PaystackGatewayError('BAD_GATEWAY_RESPONSE', 'Invalid or oversized provider response'));
       let parsed;
       try { parsed = JSON.parse(raw); }
       catch { throw new PaystackGatewayError('BAD_GATEWAY_RESPONSE', 'Payment provider returned invalid JSON'); }
