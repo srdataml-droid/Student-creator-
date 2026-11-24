@@ -55,6 +55,9 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       created_at TEXT NOT NULL
     );
     CREATE TABLE IF NOT EXISTS sessions(token_hash TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,expires_at INTEGER NOT NULL);
+    CREATE TABLE IF NOT EXISTS auth_throttle_secret(id INTEGER PRIMARY KEY CHECK(id=1),secret TEXT NOT NULL);
+    CREATE TABLE IF NOT EXISTS auth_failed_logins(email_digest TEXT NOT NULL,occurred_at INTEGER NOT NULL);
+    CREATE INDEX IF NOT EXISTS auth_failed_recent ON auth_failed_logins(email_digest,occurred_at);
     -- A pre-existing same-email account cannot bypass the new one-student code gate.
     CREATE TABLE IF NOT EXISTS pilot_invitation_claims(user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,redeemed_at TEXT NOT NULL);
     CREATE TABLE IF NOT EXISTS courses(
@@ -192,6 +195,13 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
   if(!reportColumns.has('status')) db.exec("ALTER TABLE message_reports ADD COLUMN status TEXT NOT NULL DEFAULT 'open'");
   if(!reportColumns.has('resolved_by')) db.exec('ALTER TABLE message_reports ADD COLUMN resolved_by TEXT REFERENCES users(id)');
   if(!reportColumns.has('resolution')) db.exec('ALTER TABLE message_reports ADD COLUMN resolution TEXT');
+  // Private database-local pepper avoids storing guessable unsalted email
+  // hashes in login throttling records. Persist it across server restarts.
+  db.prepare('INSERT OR IGNORE INTO auth_throttle_secret(id,secret) VALUES(1,?)')
+    .run(randomBytes(32).toString('hex'));
+  const throttlePepper=Buffer.from(db.prepare('SELECT secret FROM auth_throttle_secret WHERE id=1').get().secret,'hex');
+  const loginDigest=(email)=>createHmac('sha256',throttlePepper).update('login:'+email).digest('hex');
+  const MAX_FAILED_LOGINS=8,FAILED_LOGIN_WINDOW=15*60;
   // Synchronous transactions are enough for this single-process local adapter.
   // SQLite BEGIN IMMEDIATE plus compare-and-swap updates guard concurrent requests.
   function transaction(fn){
@@ -412,12 +422,26 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     login(email,password){
       const normalized=validateEmail(email);
       if(typeof password!=='string'||password.length>1024)return null;
+      const key=loginDigest(normalized),since=Math.floor(Date.now()/1000)-FAILED_LOGIN_WINDOW;
+      if(db.prepare('SELECT count(*) AS n FROM auth_failed_logins WHERE email_digest=? AND occurred_at>?').get(key,since).n>=MAX_FAILED_LOGINS)
+        return null;
       const row=db.prepare('SELECT * FROM users WHERE email=?').get(normalized);
       // Always run a scrypt check even for unknown users (limit enumeration/timing).
       const salt=row?.salt??'f'.repeat(32),check=scryptSync(password,salt,64);
       const valid=timingSafeEqual(check,Buffer.from(row?.password_hash??'0'.repeat(128),'hex'));
-      if(!valid||!row||row.suspended||(pilotEmail!==null&&row.role==='student'&&row.email!==pilotEmail))return null;
-      if(pilotInvite!==null&&row.role==='student'&&!db.prepare('SELECT 1 FROM pilot_invitation_claims WHERE user_id=?').get(row.id))return null;
+      const permitted=valid&&row&&!row.suspended&&
+        !(pilotEmail!==null&&row.role==='student'&&row.email!==pilotEmail)&&
+        !(pilotInvite!==null&&row.role==='student'&&!db.prepare('SELECT 1 FROM pilot_invitation_claims WHERE user_id=?').get(row.id));
+      if(!permitted){
+        transaction(()=>{
+          db.prepare('DELETE FROM auth_failed_logins WHERE occurred_at<=?').run(Math.floor(Date.now()/1000)-86400);
+          db.prepare('INSERT INTO auth_failed_logins(email_digest,occurred_at) VALUES(?,?)').run(key,Math.floor(Date.now()/1000));
+          // Keep the ephemeral login-failure table bounded for local disk safety.
+          db.prepare('DELETE FROM auth_failed_logins WHERE rowid IN (SELECT rowid FROM auth_failed_logins ORDER BY occurred_at LIMIT (SELECT MAX(0,count(*)-20000) FROM auth_failed_logins))').run();
+        });
+        return null;
+      }
+      db.prepare('DELETE FROM auth_failed_logins WHERE email_digest=?').run(key);
       const token=randomBytes(32).toString('base64url');
       transaction(()=>{db.prepare('INSERT INTO sessions VALUES(?,?,?)').run(sha(token),row.id,Math.floor(Date.now()/1000)+SESSION_TTL);audit(row.id,'session.created',row.id);});
       return {token,user:row.role==='student'&&!affiliations.eligible(row.id)?{...human(row),verifiedAt:null}:human(row)};
