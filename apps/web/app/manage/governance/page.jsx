@@ -10,6 +10,8 @@ export default function GovernanceConsole(){
  const [state,setState]=useState('loading'),[user,setUser]=useState(null),[grants,setGrants]=useState([]),[cap,setCap]=useState([]),
  [dashboard,setDashboard]=useState(null),[incidents,setIncidents]=useState([]),[history,setHistory]=useState([]),[proposals,setProposals]=useState([]);
  const [error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
+ const [verificationAppeals,setVerificationAppeals]=useState([]),[copyrightCases,setCopyrightCases]=useState([]),
+ [copyrightAppeals,setCopyrightAppeals]=useState([]),[privacyCases,setPrivacyCases]=useState([]),[financeCases,setFinanceCases]=useState([]);
  const [staff,setStaff]=useState({userId:'',role:'verification_reviewer'});
  const [incident,setIncident]=useState({category:'unauthorized_access',severity:'medium',summary:''});
  const [notes,setNotes]=useState({}),[retention,setRetention]=useState({dataset:'verification_evidence',days:30,rationale:''});
@@ -18,15 +20,23 @@ export default function GovernanceConsole(){
    const [me,permissions]=await Promise.all([api('me'),api('admin/governance/permissions')]);
    setUser(me.user);setCap(permissions.capabilities);
    const may=s=>permissions.capabilities.includes(s);
-   const [d,i,h,r,g]=await Promise.all([
+   const [d,i,h,r,g,v,c,ca,p,fin]=await Promise.all([
     may('dashboard.read')?api('admin/governance/dashboard'):null,
     may('incident.read')?api('admin/governance/incidents'):null,
     may('audit.read')?api('admin/governance/history?limit=30'):null,
     may('retention.review')?api('admin/governance/retention'):null,
-    may('staff.assign')?api('admin/governance/roles'):null
+    may('staff.assign')?api('admin/governance/roles'):null,
+    may('verification.review')?api('admin/verification-appeals'):null,
+    may('copyright.review')?api('admin/copyright-claims'):null,
+    may('copyright.review')?api('admin/copyright-appeals'):null,
+    may('privacy.review')?api('admin/privacy-requests'):null,
+    may('finance.review')?api('admin/payment-disputes'):null
    ]);
    setDashboard(d?.dashboard??null);setIncidents(i?.incidents??[]);setHistory(h?.events??[]);
-   setProposals(r?.proposals??[]);setGrants(g?.roles??[]);setState('ready');
+   setProposals(r?.proposals??[]);setGrants(g?.roles??[]);
+   setVerificationAppeals(v?.appeals??[]);setCopyrightCases(c?.claims??[]);
+   setCopyrightAppeals(ca?.appeals??[]);setPrivacyCases(p?.requests??[]);setFinanceCases(fin?.cases??[]);
+   setState('ready');
   }catch(e){setState(e.status===401?'signed-out':e.status===403?'forbidden':'unavailable');}
  }
  useEffect(()=>{refresh();},[]);
@@ -107,6 +117,61 @@ export default function GovernanceConsole(){
    {may('audit.read')&&<section className="panel"><p className="eyebrow">Accountability</p><h2>Administrative action history</h2>
     <p className="hint">Audit metadata only. Raw private documents, messages, payment instruments and evidence are not included.</p>
     <ul className="small-list">{history.map(x=><li key={x.id}><strong>{x.action}</strong> · {x.createdAt} · <code>{x.actorId?.slice(0,8)||'system'}…</code></li>)}</ul>
+   </section>}
+
+   {may('verification.review')&&<section className="panel"><p className="eyebrow">Institutional identity</p><h2>Verification appeals</h2>
+    <p className="hint">Review appeals without automatically granting membership or changing the institution's evidence.</p>
+    {verificationAppeals.length===0?<p role="status">No pending institutional appeals.</p>:<ul className="review-list">{verificationAppeals.map(x=><li key={x.caseId}>
+     <h3>Appeal {x.caseId.slice(0,8)}…</h3><p>{x.reason}</p>
+     <label htmlFor={'verify-appeal-'+x.caseId}>Operator decision note</label>
+     <textarea id={'verify-appeal-'+x.caseId} rows={2} value={notes[x.caseId]||''} onChange={e=>setNotes(n=>({...n,[x.caseId]:e.target.value}))}/>
+     <div className="button-row">{['review_requested','rejected'].map(decision=><button key={decision} className="secondary-link"
+      disabled={busy||(notes[x.caseId]||'').trim().length<10}
+      onClick={()=>act(()=>api('admin/verification-appeals/'+x.caseId,{method:'POST',body:{decision,note:notes[x.caseId]}}),'Appeal decision audited. Membership not automatically changed.')}>{decision.replace('_',' ')}</button>)}</div>
+    </li>)}</ul>}
+   </section>}
+   {may('copyright.review')&&<section className="panel"><p className="eyebrow">Creator rights</p><h2>Copyright complaints</h2>
+    <p className="hint">A takedown blocks publication, but does not automatically refund purchases or decide copyright ownership.</p>
+    {copyrightCases.length===0?<p role="status">No open copyright complaints.</p>:<ul className="review-list">{copyrightCases.map(x=><li key={x.caseId}>
+     <h3>Complaint {x.caseId.slice(0,8)}…</h3><p>{x.reason}</p>
+     <label htmlFor={'rights-'+x.caseId}>Documented review reason</label>
+     <textarea id={'rights-'+x.caseId} rows={2} value={notes[x.caseId]||''} onChange={e=>setNotes(n=>({...n,[x.caseId]:e.target.value}))}/>
+     <div className="button-row">{['dismiss','take_down'].map(decision=><button key={decision} className="secondary-link"
+       disabled={busy||(notes[x.caseId]||'').trim().length<15}
+       onClick={()=>act(()=>api('admin/copyright-claims/'+x.caseId+'/resolve',{method:'POST',body:{decision,note:notes[x.caseId]}}),'Complaint decision recorded. Financial review remains separate.')}>{decision.replace('_',' ')}</button>)}</div>
+    </li>)}</ul>}
+    <h3>Creator takedown appeals</h3>
+    {copyrightAppeals.length===0?<p role="status">No creator appeals.</p>:<ul className="review-list">{copyrightAppeals.map(x=><li key={x.caseId}>
+     <h3>Appeal {x.caseId.slice(0,8)}…</h3><p>{x.reason}</p><p className="hint">Status: {x.status}</p>
+     {x.status==='open'&&<form className="form-stack" onSubmit={submit(()=>api('admin/copyright-appeals/'+x.caseId+'/triage',{method:'POST',body:{decision:'further_review',note:notes[x.caseId]}}),'Appeal escalated; content remains hidden.')}>
+      <label htmlFor={'copyright-appeal-'+x.caseId}>Independent review escalation note</label>
+      <textarea id={'copyright-appeal-'+x.caseId} rows={2} value={notes[x.caseId]||''} onChange={e=>setNotes(n=>({...n,[x.caseId]:e.target.value}))}/>
+      <button className="secondary-link" disabled={busy||(notes[x.caseId]||'').trim().length<15}>Escalate without restoring</button>
+     </form>}
+    </li>)}</ul>}
+   </section>}
+   {may('privacy.review')&&<section className="panel"><p className="eyebrow">Privacy</p><h2>Account and evidence requests</h2>
+    <p className="hint">These requests require identity validation and approved retention/legal-hold review. This screen never performs account deletion.</p>
+    {privacyCases.length===0?<p role="status">No privacy requests.</p>:<ul className="review-list">{privacyCases.map(x=><li key={x.requestId}>
+     <h3>{x.kind.replaceAll('_',' ')} · {x.status}</h3>
+     {x.status==='open'&&<form className="form-stack" onSubmit={submit(()=>api('admin/privacy-requests/'+x.requestId+'/triage',{method:'POST',body:{decision:'request_review',note:notes[x.requestId]}}),'Privacy request escalated; no data deleted.')}>
+      <label htmlFor={'privacy-'+x.requestId}>Review justification</label>
+      <textarea id={'privacy-'+x.requestId} rows={2} value={notes[x.requestId]||''} onChange={e=>setNotes(n=>({...n,[x.requestId]:e.target.value}))}/>
+      <button className="secondary-link" disabled={busy||(notes[x.requestId]||'').trim().length<15}>Require independent review</button>
+     </form>}
+    </li>)}</ul>}
+   </section>}
+   {may('finance.review')&&<section className="panel"><p className="eyebrow">Commerce integrity</p><h2>Financial dispute cases</h2>
+    <p className="hint">Only case references and categories appear. Resolving a case does not move funds, refund a purchase, or modify accounting records.</p>
+    {financeCases.length===0?<p role="status">No open financial disputes.</p>:<ul className="review-list">{financeCases.map(x=><li key={x.caseKey}>
+     <h3>{x.kind} · {x.caseKey.slice(0,12)}…</h3>
+     <p className="hint">Order reference: {x.reference.slice(0,12)}…</p>
+     <form className="form-stack" onSubmit={submit(()=>api('admin/payment-disputes/'+x.caseKey,{method:'POST',body:{resolution:notes[x.caseKey]}}),'Dispute review recorded, without financial settlement.')}>
+      <label htmlFor={'finance-'+x.caseKey}>Disposition and documented review</label>
+      <textarea id={'finance-'+x.caseKey} rows={2} value={notes[x.caseKey]||''} onChange={e=>setNotes(n=>({...n,[x.caseKey]:e.target.value}))}/>
+      <button className="secondary-link" disabled={busy||(notes[x.caseKey]||'').trim().length<10}>Record review</button>
+     </form>
+    </li>)}</ul>}
    </section>}
    </div></>}
  </main>;
