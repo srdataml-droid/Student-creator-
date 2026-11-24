@@ -14,6 +14,7 @@ import { creatorProfileInput } from './creator-profile.mjs';
 import { createLocalCommerce } from './commerce.mjs';
 import { validateWebVtt } from './captions.mjs';
 import { createLocalAffiliations } from './affiliations.mjs';
+import { createLocalRightsCases } from './rights-cases.mjs';
 
 export const SESSION_COOKIE='campus_local_session';
 const SESSION_TTL=7*24*60*60;
@@ -238,6 +239,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     if(current.institutionId!==actor.institutionId||!affiliations.eligible(actor.id))throw error('VERIFICATION_REQUIRED',403);
   }
   const affiliations=createLocalAffiliations({db,transaction,audit,error,requireAdmin});
+  const rightsCases=createLocalRightsCases({db,transaction,audit,error,requireAdmin,requireVerified});
   const commerce=createLocalCommerce({db,transaction,audit,error,requireVerified,requireCreatorAction});
   const withVideo=(row)=>row?{...lesson(row),priceKobo:commerce.price(row.id),hasVideo:Boolean(db.prepare('SELECT 1 FROM lesson_videos WHERE lesson_id=?').get(row.id)),hasCaptions:Boolean(db.prepare('SELECT 1 FROM lesson_captions WHERE lesson_id=?').get(row.id)),likeCount:db.prepare('SELECT COUNT(*) AS n FROM lesson_likes WHERE lesson_id=?').get(row.id).n}:null;
   function editableVideoLesson(actor,id){
@@ -1063,6 +1065,15 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         return {status:'completed',replayed:false};
       });
     },
+    // Case reports never mutate payment ledgers or settle financial disputes.
+    submitCopyrightClaim:rightsCases.copyrightClaim,
+    myCopyrightClaims:rightsCases.myClaims,
+    copyrightReviewQueue:rightsCases.queue,
+    resolveCopyrightClaim:rightsCases.resolve,
+    appealCopyrightTakedown:rightsCases.appeal,
+    requestPrivacyAction:rightsCases.requestPrivacyAction,
+    myPrivacyRequests:rightsCases.myPrivacyRequests,
+    privacyRequestQueue:rightsCases.privacyQueue,
     // Institution proofs can only be applied by trusted server code; no
     // endpoint accepts a browser-supplied verified=true claim or raw ID image.
     addInstitutionIntegration:affiliations.add,
