@@ -115,3 +115,39 @@ jobs:
           done
           curl -fsS http://localhost:3000/api/local/health >/dev/null || { cat "$RUNNER_TEMP/student-creators-browser.log"; exit 1; }
           (cd apps/web && npx playwright test e2e/local-alpha.spec.mjs --workers=1 --reporter=line --trace=retain-on-failure)
+
+  browser-paid-media:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install locked web dependencies and Chromium
+        working-directory: apps/web
+        run: |
+          npm ci --no-audit --no-fund
+          npm install --no-save --no-package-lock --no-audit --no-fund @playwright/test@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Run isolated synthetic paid playback and refund regression
+        env:
+          APP_DATA_MODE: local
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: |
+          set -euo pipefail
+          umask 077
+          export PAYMENT_FIXTURE_FILE="$RUNNER_TEMP/paid-browser-fixture.json"
+          node scripts/seed-payment-browser-fixture.mjs "$PAYMENT_FIXTURE_FILE"
+          export LOCAL_SQLITE_PATH="$(node -p 'JSON.parse(require("node:fs").readFileSync(process.env.PAYMENT_FIXTURE_FILE,"utf8")).path')"
+          npm run build --prefix apps/web
+          npm run start --prefix apps/web -- -p 3000 > "$RUNNER_TEMP/paid-browser.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true; rm -f "$PAYMENT_FIXTURE_FILE"' EXIT
+          for i in $(seq 1 45); do
+            if curl -fsS http://localhost:3000/api/local/health >/dev/null 2>&1; then break; fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then exit 1; fi
+            sleep 1
+          done
+          curl -fsS http://localhost:3000/api/local/health >/dev/null
+          (cd apps/web && npx playwright test --config=playwright.payment.config.mjs --workers=1 --reporter=line)
