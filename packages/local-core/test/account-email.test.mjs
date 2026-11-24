@@ -71,3 +71,39 @@ test('email ownership and recovery: purpose, ownership, expiry, replay, revocati
   finally{restored.close();}
  }finally{store.close();rmSync(dir,{recursive:true,force:true});}
 });
+
+test('account email request limits survive challenge cancellation and failed delivery never leaves a usable token',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'email-abuse-')),path=join(dir,'local.sqlite'),store=openLocalStore(path);
+ const pw='Synthetic Student Password 2026',email='student@abuse.test',sent=[];
+ const request=async(route,body,session,delivery)=>{
+  const req=new Request('http://localhost:3000/api/local/'+route,{method:'POST',headers:{origin:'http://localhost:3000','content-type':'application/json',...(session?{cookie:'campus_local_session='+session}:{})},body:JSON.stringify(body)});
+  const res=await createLocalHandler(store,{emailDelivery:delivery})(req,route.split('/'));
+  return {status:res.status,data:await res.json()};
+ };
+ const failing={environment:'synthetic',send:async challenge=>{sent.push(challenge);throw Error('Synthetic failure');}};
+ const good={environment:'synthetic',send:async challenge=>{sent.push(challenge);}};
+ try{
+  store.bootstrapAdmin('operator@abuse.test',pw);
+  const admin=store.login('operator@abuse.test',pw),campus=store.createInstitution(admin.user,'Synthetic Abuse Campus');
+  store.register({email,password:pw,institutionId:campus.id});
+  const session=store.login(email,pw);
+  for(let i=0;i<8;i++){
+   assert.deepEqual(await request('auth/email/verify/request',{},session.token,failing),{status:202,data:{accepted:true}});
+   assert.equal((await request('auth/email/verify/confirm',{token:sent.at(-1).token},session.token,good)).status,422);
+  }
+  assert.equal(sent.length,8);
+  assert.equal((await request('auth/email/verify/request',{},session.token,good)).status,202);
+  assert.equal(sent.length,8);
+  for(let i=0;i<9;i++)assert.deepEqual(await request('auth/password/recover',{email:'absent@abuse.test'},null,good),{status:202,data:{accepted:true}});
+  const db=new DatabaseSync(path);
+  try{
+   const rows=db.prepare('SELECT request_digest FROM account_email_requests').all();
+   assert.equal(rows.length,16);assert.ok(rows.every(r=>/^[a-f0-9]{64}$/.test(r.request_digest)));
+   assert.equal(db.prepare('SELECT count(*) AS n FROM account_email_challenges').get().n,0);
+   db.prepare('UPDATE account_email_requests SET requested_at=0').run();
+  }finally{db.close();}
+  assert.equal((await request('auth/email/verify/request',{},session.token,good)).status,202);
+  assert.equal(sent.length,9);
+  assert.equal((await request('auth/email/verify/confirm',{token:sent.at(-1).token},session.token,good)).status,200);
+ }finally{store.close();rmSync(dir,{recursive:true,force:true});}
+});
