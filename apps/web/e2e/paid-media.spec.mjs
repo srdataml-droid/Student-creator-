@@ -63,7 +63,7 @@ test('synthetic verified payment through protected playback and refund',async({b
   expect((await context.request.get(videoPath,{headers:{range:'bytes=0-4'}})).status()).toBe(403);
   await page.goto('/purchases');
   await expect(page.getByRole('heading',{name:'Access reviews'})).toBeVisible();
-  await expect(page.getByText('Ask the platform operator to review this case reference.',{exact:false})).toBeVisible();
+  await expect(page.getByText('Contact support with your case reference to request a review.',{exact:false})).toBeVisible();
   store.setCreatorRestrictions(f.creator.user,f.creator.user.id,f.buyer.user.id,{view:false,comment:false,message:false});
   store.simulatePaymentReversal(f.admin.user,f.order.reference,{kind:'refund',eventKey:'browser-refund-'+f.id,reason:'Synthetic browser refund test'});
   expect((await context.request.get(videoPath,{headers:{range:'bytes=0-4'}})).status()).toBe(402);
