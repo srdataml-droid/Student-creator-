@@ -457,3 +457,11 @@ button:disabled{opacity:.55;cursor:not-allowed}
 }
 /* Native focus indicator for all interactive controls, including custom form buttons. */
 .creator-body :is(button,a,input,select,textarea,summary):focus-visible{outline:3px solid #047b5d;outline-offset:3px}
+
+/* Secondary routes remain reachable when the desktop sidebar is hidden. */
+.footer-account-links{display:none}
+@media(max-width:760px){
+  .footer-account-links{display:flex;flex-wrap:wrap;gap:8px;width:100%;font-size:.85rem}
+  .footer-account-links a{display:inline-flex;align-items:center;min-height:44px;padding:0 8px;text-decoration:underline;text-underline-offset:3px}
+  .creator-footer{padding-bottom:calc(90px + env(safe-area-inset-bottom,0px))}
+}
