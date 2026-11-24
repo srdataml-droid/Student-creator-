@@ -1,15 +1,23 @@
--- Week 1: make already-RLS-protected reads usable through Supabase Data API.
--- Source of hosted staging equivalent: migration student_creators_rls_read_grants_staging_0003.
--- No client writes are added; table-level GRANTs do not override RLS row filters.
--- Apply only after 0001–0007 and validate cross-account isolation.
+-- Week 1: match hosted staging read grants, but restrict content columns.
+-- RLS filters rows; column GRANTs prevent leaking moderation and retry metadata.
+-- No browser writes. Keep staff, private media, PSP and audit internals inaccessible.
+-- Apply after core RLS policies and prerequisite schema migrations.
 GRANT SELECT ON TABLE
   public.institutions,
   public.departments,
   public.courses,
   public.course_topics,
-  public.content_items,
   public.listings
 TO anon, authenticated;
+
+-- Earlier hosted staging migration granted full-table SELECT. Revoke it before
+-- publishing this allowlist so a published record cannot expose creation_key,
+-- creation_hash, reviewer_id, review_reason or rights attestation internals.
+REVOKE SELECT ON TABLE public.content_items FROM anon, authenticated;
+GRANT SELECT (
+  id, creator_id, institution_id, course_id, topic_id, title,
+  description, preview_text, status, published_at, created_at
+) ON TABLE public.content_items TO anon, authenticated;
 
 GRANT SELECT ON TABLE
   public.student_profiles,
@@ -18,5 +26,4 @@ GRANT SELECT ON TABLE
   public.entitlements
 TO authenticated;
 
--- Intentional omissions: staff, private assets, payment attempts,
--- audit and ledgers are not given browser access.
+-- No UPDATE/INSERT/DELETE on browser-facing sensitive tables.
