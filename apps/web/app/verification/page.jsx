@@ -10,6 +10,12 @@ export default function StudentVerification(){
  const [appeals,setAppeals]=useState([]),[phase,setPhase]=useState('loading');
  const [reason,setReason]=useState(''),[busy,setBusy]=useState(false);
  const [error,setError]=useState(''),[success,setSuccess]=useState('');
+ const [signingOut,setSigningOut]=useState(false),[confirmSignOut,setConfirmSignOut]=useState(false),[securityError,setSecurityError]=useState('');
+ async function signOutEverywhere(){
+  setSigningOut(true);setSecurityError('');
+  try{await api('auth/logout-all',{method:'POST',body:{}});window.location.assign('/sign-in');}
+  catch(e){setSecurityError(friendlyError(e));setSigningOut(false);}
+ }
  async function load(){
   try{
    const [me,identity,cases]=await Promise.all([api('me'),api('me/institution-affiliation'),api('me/verification-appeals')]);
@@ -55,6 +61,11 @@ export default function StudentVerification(){
    </form>
    {success&&<p role="status" className="form-success">{success}</p>}
    {error&&<p role="alert" className="form-error">{error}</p>}
+  </section>
+  <section className="panel" aria-label="Account security"><h2>Account security</h2>
+   <p className="hint">Sign out on every device, including this one. Existing playback authorizations linked to those sessions are revoked. Your account and purchases are not deleted.</p>
+   {confirmSignOut?<div><p>Sign out everywhere now?</p><button className="primary-link" type="button" disabled={signingOut} onClick={signOutEverywhere}>{signingOut?'Signing out…':'Confirm sign out everywhere'}</button> <button type="button" disabled={signingOut} onClick={()=>setConfirmSignOut(false)}>Cancel</button></div>:<button className="primary-link" type="button" onClick={()=>setConfirmSignOut(true)}>Sign out everywhere</button>}
+   {securityError&&<p role="alert" className="form-error">{securityError}</p>}
   </section>
   <section className="panel"><h2>Your review history</h2>{appeals.length?
    <ul className="review-list">{appeals.map(item=><li key={item.caseId}>

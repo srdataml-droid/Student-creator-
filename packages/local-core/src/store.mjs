@@ -456,6 +456,16 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       return row?.role==='student'&&!affiliations.eligible(row.id)?{...human(row),verifiedAt:null}:human(row);
     },
     logout(token){if(token&&/^[A-Za-z0-9_-]{43}$/.test(token))db.prepare('DELETE FROM sessions WHERE token_hash=?').run(sha(token));},
+    revokeAllSessions(sessionToken){
+      return transaction(()=>{
+        const current=store.getSession(sessionToken);
+        if(!current)throw error('AUTH_REQUIRED',401);
+        // The account is derived exclusively from a current server session.
+        const count=db.prepare('DELETE FROM sessions WHERE user_id=?').run(current.id).changes;
+        audit(current.id,'session.all_revoked',current.id,{count});
+        return {revokedCount:Number(count)};
+      });
+    },
     listPendingUsers(actor){requireAdmin(actor);return db.prepare("SELECT id,email,institution_id,created_at FROM users WHERE role='student' AND verified_at IS NULL AND suspended=0 ORDER BY created_at LIMIT 100").all();},
     verifyStudent(actor,userId){requireAdmin(actor);if(!affiliations.eligible(userId))throw error('AFFILIATION_NOT_ELIGIBLE',403);const now=stamp();const count=transaction(()=>{const x=db.prepare("UPDATE users SET verified_at=? WHERE id=? AND role='student' AND verified_at IS NULL AND institution_id IS NOT NULL AND suspended=0").run(now,userId);if(x.changes===1)audit(actor.id,'student.verified',userId);return x.changes;});if(count!==1)throw error('VERIFICATION_CONFLICT',409);return {id:userId,verifiedAt:now};},
     createDraft(actor,{courseId,topicId=null,title,description,previewText,lessonText,rightsAttested,creationKey}){

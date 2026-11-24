@@ -210,6 +210,12 @@ export function createLocalHandler(store,{sandboxGateway,payments=null}={}){
         store.logout(cookie);return responses({ok:true},200,{'set-cookie':`${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${new URL(request.url).protocol==='https:'?'; Secure':''}`});
       }
       const body=await jsonBody(request);
+      if(path==='auth/logout-all'){
+        if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
+        if(!actor)return unauthorized();
+        const result=store.revokeAllSessions(cookie);
+        return responses({ok:true,...result},200,{'set-cookie':`${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${new URL(request.url).protocol==='https:'?'; Secure':''}`});
+      }
       if(path==='auth/register')return responses({user:store.register(body)},201);
       if(path==='auth/login'){
         const result=store.login(body.email,body.password);

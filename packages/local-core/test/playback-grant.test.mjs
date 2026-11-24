@@ -67,7 +67,20 @@ test('playback grants bind user, session, lesson and a five-minute expiry withou
    const expiredDb=new DatabaseSync(join(dir,'campus.sqlite'));
    try{expiredDb.prepare('UPDATE playback_grants SET expires_at=0').run();}finally{expiredDb.close();}
    assert.throws(()=>store.getVideoFile(viewer.user,lesson,renewed.token,viewer.token),/PLAYBACK_GRANT_REQUIRED/);
-   store.logout(viewer.token);
-   assert.throws(()=>store.verifyPlaybackGrant(secondSession.user,lesson,token,secondSession.token),/PLAYBACK_GRANT_REQUIRED/);
+   const live1=store.issuePlaybackGrant(viewer.user,lesson,viewer.token);
+   const live2=store.issuePlaybackGrant(secondSession.user,lesson,secondSession.token);
+   const authorGrant=store.issuePlaybackGrant(author.user,lesson,author.token);
+   assert.equal((await request('auth/logout-all','POST',{},undefined)).status,401);
+   assert.equal((await request('auth/logout-all','POST',{userId:author.user.id},viewer.token)).status,400);
+   assert.equal((await request('auth/logout-all','POST',{},viewer.token,{origin:'https://outside.test'})).status,403);
+   const revoked=await request('auth/logout-all','POST',{},viewer.token);
+   assert.equal(revoked.status,200);assert.equal(revoked.data.revokedCount,2);
+   assert.match(revoked.cookie,/Max-Age=0/);
+   assert.equal(store.getSession(viewer.token),null);
+   assert.equal(store.getSession(secondSession.token),null);
+   assert.throws(()=>store.verifyPlaybackGrant(viewer.user,lesson,live1.token,viewer.token),/PLAYBACK_GRANT_REQUIRED/);
+   assert.throws(()=>store.verifyPlaybackGrant(secondSession.user,lesson,live2.token,secondSession.token),/PLAYBACK_GRANT_REQUIRED/);
+   assert.equal(store.verifyPlaybackGrant(author.user,lesson,authorGrant.token,author.token),true);
+   assert.equal((await request('auth/logout-all','POST',{},viewer.token)).status,401);
  }finally{store.close();rmSync(dir,{recursive:true,force:true});}
 });
