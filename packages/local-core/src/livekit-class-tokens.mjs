@@ -4,7 +4,7 @@
  * Source references: docs.livekit.io/frontends/reference/tokens-grants and livekit/node-sdks (Apache-2.0).
  * Original implementation, no upstream code copied.
  */
-import {createHmac} from 'node:crypto';
+import {createHmac,randomUUID} from 'node:crypto';
 
 const invalid=(code,status=503)=>Object.assign(new Error(code),{code,status});
 const enc=value=>Buffer.from(JSON.stringify(value)).toString('base64url');
@@ -23,7 +23,7 @@ export function createClassTokenIssuer({url,apiKey,apiSecret,ttlSeconds=300,cloc
       const video={room,roomJoin:true,canSubscribe:true,canPublish:role==='host',
         canPublishData:false,canUpdateOwnMetadata:false,roomAdmin:false,roomCreate:false,roomList:false};
       if(role==='host')video.canPublishSources=['camera','microphone','screen_share'];
-      const payload={iss:apiKey,sub:identity,iat:now,nbf:now-3,exp:now+ttlSeconds,jti:room+'-'+identity+'-'+now,video};
+      const payload={iss:apiKey,sub:identity,iat:now,nbf:now-3,exp:now+ttlSeconds,jti:randomUUID(),video};
       const data=enc({alg:'HS256',typ:'JWT'})+'.'+enc(payload);
       const token=data+'.'+createHmac('sha256',apiSecret).update(data).digest('base64url');
       return {url,token,expiresAt:new Date((now+ttlSeconds)*1000).toISOString()};
