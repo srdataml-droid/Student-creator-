@@ -2,7 +2,7 @@ name: Unit and source guardrails
 on:
   pull_request:
   push:
-    branches: [main, 'feat/**']
+    branches: [main, 'feat/**', 'work/week-07']
 permissions:
   contents: read
 jobs:
