@@ -175,7 +175,8 @@ export function createLearningPayments({db,transaction,audit,error,requireVerifi
     return transaction(()=>{
       const r=db.prepare('SELECT * FROM learning_purchase_orders WHERE reference=?').get(reference);
       if(!r)throw error('ORDER_NOT_FOUND',404);
-      if(r.state===kind==='refund'?'refunded':'chargeback')return {...status(r),replayed:true};
+      const targetState=kind==='refund'?'refunded':'chargeback';
+      if(r.state===targetState)return {...status(r),replayed:true};
       if(r.state!=='paid')throw error('PAYMENT_CONFLICT',409);
       post(reference,'reverse:'+key,kind,[
         ['creator_payable',r.amount_kobo,0],['processor_clearing',0,r.amount_kobo]]);
