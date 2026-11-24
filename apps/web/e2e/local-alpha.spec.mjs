@@ -392,7 +392,7 @@ test('registration read failure can be retried without submitting registration',
       return route.abort('blockedbyclient');
     });
     await page.goto('/join');
-    await expect(page.getByRole('alert')).toContainText('Campus registration is temporarily unavailable');
+    await expect(page.getByRole('main').getByRole('alert')).toContainText('Campus registration is temporarily unavailable');
     await page.getByRole('button',{name:'Retry loading campuses'}).click();
     await expect(page.locator('#campus')).toBeVisible();
     expect(institutionReads).toBe(2);
