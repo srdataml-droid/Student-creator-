@@ -15,6 +15,7 @@ import { createLocalCommerce } from './commerce.mjs';
 import { validateWebVtt } from './captions.mjs';
 import { createLocalAffiliations } from './affiliations.mjs';
 import { createLocalRightsCases } from './rights-cases.mjs';
+import { createLocalGovernance } from './governance.mjs';
 import { createLocalAccountEmail } from './account-email.mjs';
 
 export const SESSION_COOKIE='campus_local_session';
@@ -243,6 +244,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
   const accountEmail=createLocalAccountEmail({db,transaction,audit,error,validatePassword,getSession:token=>store.getSession(token),studentAllowed:row=>
     (pilotEmail===null||row.email===pilotEmail)&&(pilotInvite===null||Boolean(db.prepare('SELECT 1 FROM pilot_invitation_claims WHERE user_id=?').get(row.id)))});
   const rightsCases=createLocalRightsCases({db,transaction,audit,error,requireAdmin,requireVerified});
+  const governance=createLocalGovernance({db,transaction,audit,error});
   const commerce=createLocalCommerce({db,transaction,audit,error,requireVerified,requireCreatorAction});
   const withVideo=(row)=>row?{...lesson(row),priceKobo:commerce.price(row.id),hasVideo:Boolean(db.prepare('SELECT 1 FROM lesson_videos WHERE lesson_id=?').get(row.id)),hasCaptions:Boolean(db.prepare('SELECT 1 FROM lesson_captions WHERE lesson_id=?').get(row.id)),likeCount:db.prepare('SELECT COUNT(*) AS n FROM lesson_likes WHERE lesson_id=?').get(row.id).n}:null;
   function editableVideoLesson(actor,id){
@@ -367,7 +369,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       if(existing)throw error('ADMIN_ALREADY_EXISTS',409);
       const validated=validateEmail(email);validatePassword(password);
       const salt=randomBytes(16).toString('hex');const pw=scryptSync(password,salt,64).toString('hex');const id=randomUUID();
-      transaction(()=>{db.prepare("INSERT INTO users(id,email,password_hash,salt,role,created_at) VALUES(?,?,?,?,'admin',?)").run(id,validated,pw,salt,stamp());audit(id,'admin.bootstrapped',id);});
+      transaction(()=>{db.prepare("INSERT INTO users(id,email,password_hash,salt,role,created_at) VALUES(?,?,?,?,'admin',?)").run(id,validated,pw,salt,stamp());governance.bootstrapOwner(id);audit(id,'admin.bootstrapped',id);});
       return id;
     },
     createInstitution(actor,name){
@@ -484,7 +486,9 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     resetPassword:accountEmail.resetPassword,
     cancelEmailChallenge:accountEmail.cancelChallenge,
     listStudentAccounts(sessionToken){
-      requireAdmin(store.getSession(sessionToken));
+      const currentOperator=store.getSession(sessionToken);
+      requireAdmin(currentOperator);
+      governance.requireCapability(currentOperator,'verification.review');
       // Minimal private operator view, bounded for the one-student alpha.
       return db.prepare("SELECT id,email,institution_id AS institutionId,verified_at AS verifiedAt,suspended FROM users WHERE role='student' ORDER BY created_at,id LIMIT 100").all()
         .map(row=>({...row,suspended:Boolean(row.suspended)}));
@@ -494,6 +498,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       return transaction(()=>{
         const operator=store.getSession(sessionToken);
         requireAdmin(operator);
+        governance.requireCapability(operator,'verification.review');
         if(typeof userId!=='string'||typeof suspended!=='boolean'||typeof reason!=='string'||reason.trim().length<5||reason.trim().length>1000)
           throw error('INVALID_SUSPENSION_DECISION',422);
         const target=db.prepare("SELECT id,suspended FROM users WHERE id=? AND role='student'").get(userId);
@@ -508,8 +513,8 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         return {id:userId,suspended,revokedSessions,revokedCreatorGrants};
       });
     },
-    listPendingUsers(actor){requireAdmin(actor);return db.prepare("SELECT id,email,institution_id,created_at FROM users WHERE role='student' AND verified_at IS NULL AND suspended=0 ORDER BY created_at LIMIT 100").all();},
-    verifyStudent(actor,userId){requireAdmin(actor);if(!affiliations.eligible(userId))throw error('AFFILIATION_NOT_ELIGIBLE',403);const now=stamp();const count=transaction(()=>{const x=db.prepare("UPDATE users SET verified_at=? WHERE id=? AND role='student' AND verified_at IS NULL AND institution_id IS NOT NULL AND suspended=0").run(now,userId);if(x.changes===1)audit(actor.id,'student.verified',userId);return x.changes;});if(count!==1)throw error('VERIFICATION_CONFLICT',409);return {id:userId,verifiedAt:now};},
+    listPendingUsers(actor){requireAdmin(actor);governance.requireCapability(actor,'verification.review');return db.prepare("SELECT id,email,institution_id,created_at FROM users WHERE role='student' AND verified_at IS NULL AND suspended=0 ORDER BY created_at LIMIT 100").all();},
+    verifyStudent(actor,userId){requireAdmin(actor);governance.requireCapability(actor,'verification.review');if(!affiliations.eligible(userId))throw error('AFFILIATION_NOT_ELIGIBLE',403);const now=stamp();const count=transaction(()=>{const x=db.prepare("UPDATE users SET verified_at=? WHERE id=? AND role='student' AND verified_at IS NULL AND institution_id IS NOT NULL AND suspended=0").run(now,userId);if(x.changes===1)audit(actor.id,'student.verified',userId);return x.changes;});if(count!==1)throw error('VERIFICATION_CONFLICT',409);return {id:userId,verifiedAt:now};},
     createDraft(actor,{courseId,topicId=null,title,description,previewText,lessonText,rightsAttested,creationKey}){
       requireVerified(actor);
       const parent=store.getCourse(courseId);
@@ -558,8 +563,8 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         audit(actor.id,'lesson.submitted',id);return lesson(db.prepare('SELECT * FROM lessons WHERE id=?').get(id));
       });
     },
-    reviewQueue(actor){requireAdmin(actor);return db.prepare("SELECT * FROM lessons WHERE status='in_review' ORDER BY created_at LIMIT 100").all().map(withVideo);},
-    review(actor,id,{decision,reason}){requireAdmin(actor);
+    reviewQueue(actor){requireAdmin(actor);governance.requireCapability(actor,'content.moderate');return db.prepare("SELECT * FROM lessons WHERE status='in_review' ORDER BY created_at LIMIT 100").all().map(withVideo);},
+    review(actor,id,{decision,reason}){requireAdmin(actor);governance.requireCapability(actor,'content.moderate');
       if(!['approve','reject'].includes(decision)||typeof reason!=='string'||reason.trim().length<5||reason.trim().length>1000)throw error('INVALID_DECISION',422);
       return transaction(()=>{
         const row=db.prepare('SELECT * FROM lessons WHERE id=?').get(id);
@@ -712,6 +717,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     },
     lessonCommentReportQueue(actor){
       requireAdmin(actor);
+      governance.requireCapability(actor,'content.moderate');
       return db.prepare(`SELECT r.id,r.comment_id AS commentId,r.reason,r.created_at AS createdAt,
           c.lesson_id AS lessonId,c.author_id AS authorId,c.body
         FROM lesson_comment_reports r JOIN lesson_comments c ON c.id=r.comment_id
@@ -719,6 +725,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     },
     resolveLessonCommentReport(actor,id,{decision,reason}={}){
       requireAdmin(actor);
+      governance.requireCapability(actor,'content.moderate');
       if(!['hide','dismiss'].includes(decision)||typeof reason!=='string'||reason.trim().length<5||reason.trim().length>1000)
         throw error('INVALID_DECISION',422);
       return transaction(()=>{
@@ -922,11 +929,13 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     },
     reportQueue(actor){
       requireAdmin(actor);
+      governance.requireCapability(actor,'content.moderate');
       return db.prepare(`SELECT r.id,r.message_id AS messageId,r.reason,r.created_at AS createdAt,m.sender_id AS senderId,m.recipient_id AS recipientId,m.body
         FROM message_reports r JOIN messages m ON m.id=r.message_id WHERE r.status='open' ORDER BY r.created_at LIMIT 100`).all();
     },
     resolveReport(actor,reportId,resolution){
       requireAdmin(actor);
+      governance.requireCapability(actor,'content.moderate');
       if(typeof resolution!=='string'||resolution.trim().length<5||resolution.trim().length>1000)throw error('INVALID_RESOLUTION',422);
       return transaction(()=>{
         const affected=db.prepare("UPDATE message_reports SET status='reviewed',resolved_by=?,resolution=? WHERE id=? AND status='open'").run(actor.id,resolution.trim(),reportId).changes;
@@ -1009,12 +1018,14 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     },
     communityReportQueue(actor){
       requireAdmin(actor);
+      governance.requireCapability(actor,'community.moderate');
       return db.prepare(`SELECT r.id,r.post_id AS postId,r.reason,r.created_at AS createdAt,
         p.course_id AS courseId,p.author_id AS authorId,p.body FROM community_reports r
         JOIN community_posts p ON p.id=r.post_id WHERE r.status='open' ORDER BY r.created_at LIMIT 100`).all();
     },
     resolveCommunityReport(actor,reportId,{decision,reason}={}){
       requireAdmin(actor);
+      governance.requireCapability(actor,'community.moderate');
       if(!['dismiss','hide'].includes(decision)||typeof reason!=='string'||reason.trim().length<5||reason.trim().length>1000)throw error('INVALID_DECISION',422);
       return transaction(()=>{
         const row=db.prepare("SELECT post_id FROM community_reports WHERE id=? AND status='open'").get(reportId);
@@ -1117,15 +1128,32 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         return {status:'completed',replayed:false};
       });
     },
+    // Week 7 governance is role-scoped. Financial and rights decisions remain with their domain owners.
+    governancePermission:governance.requireCapability,
+    governancePermissions:governance.permissions,
+    governanceRoles:governance.roles,
+    assignGovernanceRole:governance.assignRole,
+    revokeGovernanceRole:governance.revokeRole,
+    governanceDashboard:governance.dashboard,
+    governanceHistory:governance.history,
+    reportSecurityIncident:governance.reportIncident,
+    governanceIncidents:governance.incidents,
+    transitionSecurityIncident:governance.changeIncident,
+    proposeDataRetention:governance.proposeRetention,
+    retentionProposals:governance.retentionProposals,
+    rejectDataRetention:governance.rejectRetention,
     // Case reports never mutate payment ledgers or settle financial disputes.
     submitCopyrightClaim:rightsCases.copyrightClaim,
     myCopyrightClaims:rightsCases.myClaims,
-    copyrightReviewQueue:rightsCases.queue,
-    resolveCopyrightClaim:rightsCases.resolve,
+    copyrightReviewQueue:(actor)=>{governance.requireCapability(actor,'copyright.review');return rightsCases.queue(actor);},
+    resolveCopyrightClaim:(actor,id,decision)=>{governance.requireCapability(actor,'copyright.review');return rightsCases.resolve(actor,id,decision);},
     appealCopyrightTakedown:rightsCases.appeal,
+    copyrightAppealQueue:(actor)=>{governance.requireCapability(actor,'copyright.review');return rightsCases.appealQueue(actor);},
+    triageCopyrightAppeal:(actor,id,decision)=>{governance.requireCapability(actor,'copyright.review');return rightsCases.triageAppeal(actor,id,decision);},
     requestPrivacyAction:rightsCases.requestPrivacyAction,
     myPrivacyRequests:rightsCases.myPrivacyRequests,
-    privacyRequestQueue:rightsCases.privacyQueue,
+    privacyRequestQueue:(actor)=>{governance.requireCapability(actor,'privacy.review');return rightsCases.privacyQueue(actor);},
+    triagePrivacyRequest:(actor,id,decision)=>{governance.requireCapability(actor,'privacy.review');return rightsCases.reviewPrivacyRequest(actor,id,decision);},
     // Institution proofs can only be applied by trusted server code; no
     // endpoint accepts a browser-supplied verified=true claim or raw ID image.
     addInstitutionIntegration:affiliations.add,
@@ -1137,7 +1165,8 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     dueAffiliationRevalidations:affiliations.due,
     submitVerificationAppeal:affiliations.appeal,
     myVerificationAppeals:affiliations.appeals,
-    reviewVerificationAppeal:affiliations.reviewAppeal,
+    reviewVerificationAppeal:(actor,id,decision)=>{governance.requireCapability(actor,'verification.review');return affiliations.reviewAppeal(actor,id,decision);},
+    institutionalAppealsQueue:(actor)=>{governance.requireCapability(actor,'verification.review');return affiliations.appealReviewQueue(actor);},
     setLessonPrice:commerce.setPrice,
     createPurchaseOrder:commerce.createOrder,
     applyVerifiedTestCharge:commerce.applyVerifiedTestCharge,
@@ -1152,7 +1181,8 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     recoverPendingPayments:commerce.recoverPending,
     paymentReconciliation:commerce.reconciliation,
     myPaymentDisputes:commerce.disputes,
-    resolvePaymentDispute:commerce.resolveDispute,
+    resolvePaymentDispute:(actor,id,resolution)=>{governance.requireCapability(actor,'finance.review');return commerce.resolveDispute(actor,id,resolution);},
+    financialReviewQueue:(actor)=>{governance.requireCapability(actor,'finance.review');return commerce.financialReviewQueue(actor);},
     myPurchaseOrders:commerce.ownOrders,
     creatorEarnings:commerce.creatorEarnings,
     lessonAccess:commerce.lessonAccess,

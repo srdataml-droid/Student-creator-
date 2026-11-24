@@ -133,6 +133,10 @@ export function createLocalAffiliations({db,transaction,audit,error,requireAdmin
   if(!actor)throw error('AUTH_REQUIRED',401);
   return db.prepare('SELECT id AS caseId,status,created_at AS createdAt FROM verification_appeals WHERE user_id=? ORDER BY created_at DESC LIMIT 20').all(actor.id);
  }
+ function appealReviewQueue(actor){
+  requireAdmin(actor);
+  return db.prepare("SELECT id AS caseId,user_id AS userId,reason,status,created_at AS createdAt FROM verification_appeals WHERE status='open' ORDER BY created_at,id LIMIT 100").all();
+ }
  function reviewAppeal(actor,id,{decision,note}={}){
   requireAdmin(actor);
   if(!['review_requested','rejected'].includes(decision)||typeof note!=='string'||note.trim().length<10||note.length>500)
@@ -147,5 +151,5 @@ export function createLocalAffiliations({db,transaction,audit,error,requireAdmin
    return {caseId:id,status:decision,eligibilityUnchanged:true};
   });
  }
- return Object.freeze({add,getIntegration,activateSynthetic,disable,eligible,record,status,due,appeal,appeals,reviewAppeal});
+ return Object.freeze({add,getIntegration,activateSynthetic,disable,eligible,record,status,due,appeal,appeals,appealReviewQueue,reviewAppeal});
 }

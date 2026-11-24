@@ -49,6 +49,17 @@ function checkOrigin(request){
 }
 const unauthorized=()=>{throw Object.assign(Error('AUTH_REQUIRED'),{status:401});};
 const allowed=(s)=>s&&typeof s==='string'&&s.length<100;
+/** Extra role boundary around the existing Week 2/3/5 local domain routes. */
+function adminCapability(path){
+  if(path.startsWith('admin/governance/'))return null;
+  if(/^admin\/(?:students|pending-users|verify|verification-appeals|identity\/)/.test(path))return 'verification.review';
+  if(/^admin\/(?:copyright-claims|copyright-appeals)(?:\/|$)/.test(path))return 'copyright.review';
+  if(/^admin\/privacy-requests(?:\/|$)/.test(path))return 'privacy.review';
+  if(/^admin\/payment-disputes(?:\/|$)/.test(path))return 'finance.review';
+  if(/^admin\/community-reports(?:\/|$)/.test(path))return 'community.moderate';
+  if(/^admin\/(?:comment-reports|reports|review-queue)(?:\/|$)/.test(path))return 'content.moderate';
+  return 'staff.assign'; // institution/course setup and other privileged operations
+}
 /**
  * Only standalone localhost use. No payment provider, no staging credentials.
  * @param {object} store - an open local SQLite store
@@ -83,6 +94,11 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
       const cookies=parseCookies(request.headers.get('cookie'));
       const cookie=cookies[SESSION_COOKIE];
       const actor=store.getSession(cookie);
+      if(path.startsWith('admin/')){
+        if(!actor)return unauthorized();
+        const scope=adminCapability(path);
+        if(scope)store.governancePermission(actor,scope);
+      }
       if(segments.length===4&&segments[0]==='lessons'&&segments[2]==='video'&&segments[3]==='captions'){
         const id=segments[1];
         if(method==='POST'){
@@ -128,7 +144,20 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
         if(path==='me/privacy-requests'){if(!actor)return unauthorized();return responses({requests:store.myPrivacyRequests(actor)});}
         if(path==='admin/copyright-claims'){if(!actor)return unauthorized();return responses({claims:store.copyrightReviewQueue(actor)});}
         if(path==='admin/privacy-requests'){if(!actor)return unauthorized();return responses({requests:store.privacyRequestQueue(actor)});}
+        if(path==='admin/copyright-appeals'){if(!actor)return unauthorized();return responses({appeals:store.copyrightAppealQueue(actor)});}
+        if(path==='admin/governance/dashboard')return responses({dashboard:store.governanceDashboard(actor)});
+        if(path==='admin/governance/permissions')return responses({capabilities:store.governancePermissions(actor)});
+        if(path==='admin/governance/roles')return responses({roles:store.governanceRoles(actor)});
+        if(path==='admin/governance/incidents')return responses({incidents:store.governanceIncidents(actor)});
+        if(path==='admin/governance/history'){
+          const raw=new URL(request.url).searchParams.get('limit');
+          const limit=raw===null?30:/^[1-9][0-9]{0,2}$/.test(raw)?Number(raw):NaN;
+          return responses({events:store.governanceHistory(actor,{limit})});
+        }
+        if(path==='admin/governance/retention')return responses({proposals:store.retentionProposals(actor)});
         if(path==='admin/identity/revalidation-due'){if(!actor)return unauthorized();return responses({due:store.dueAffiliationRevalidations(actor)});}
+        if(path==='admin/verification-appeals'){if(!actor)return unauthorized();return responses({appeals:store.institutionalAppealsQueue(actor)});}
+        if(path==='admin/payment-disputes'){if(!actor)return unauthorized();return responses({cases:store.financialReviewQueue(actor)});}
         if(segments.length===3&&segments[0]==='admin'&&segments[1]==='institution-integrations'){
           if(!actor)return unauthorized();const integration=store.getInstitutionIntegration(actor,segments[2]);
           return integration?responses({integration}):fail('INTEGRATION_NOT_FOUND',404);
@@ -255,6 +284,30 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
         return responses({user:result.user},200,{'set-cookie':`${SESSION_COOKIE}=${result.token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800${secure}`});
       }
       if(!actor)return unauthorized();
+      if(path==='admin/governance/roles/assign'){
+        if(Object.keys(body).some(k=>!['userId','role'].includes(k)))return fail('UNEXPECTED_BODY',400);
+        return responses({grant:store.assignGovernanceRole(actor,body.userId,body.role)});
+      }
+      if(path==='admin/governance/roles/revoke'){
+        if(Object.keys(body).some(k=>!['userId','role'].includes(k)))return fail('UNEXPECTED_BODY',400);
+        return responses({grant:store.revokeGovernanceRole(actor,body.userId,body.role)});
+      }
+      if(path==='admin/governance/incidents'){
+        if(Object.keys(body).some(k=>!['category','severity','summary'].includes(k)))return fail('UNEXPECTED_BODY',400);
+        return responses({incident:store.reportSecurityIncident(actor,body)},201);
+      }
+      if(segments.length===5&&segments[0]==='admin'&&segments[1]==='governance'&&segments[2]==='incidents'&&segments[4]==='state'){
+        if(Object.keys(body).some(k=>!['state','note'].includes(k)))return fail('UNEXPECTED_BODY',400);
+        return responses({incident:store.transitionSecurityIncident(actor,segments[3],body)});
+      }
+      if(path==='admin/governance/retention'){
+        if(Object.keys(body).some(k=>!['dataset','days','rationale'].includes(k)))return fail('UNEXPECTED_BODY',400);
+        return responses({proposal:store.proposeDataRetention(actor,body)},201);
+      }
+      if(segments.length===5&&segments[0]==='admin'&&segments[1]==='governance'&&segments[2]==='retention'&&segments[4]==='reject'){
+        if(Object.keys(body).some(k=>k!=='note'))return fail('UNEXPECTED_BODY',400);
+        return responses({proposal:store.rejectDataRetention(actor,segments[3],body.note)});
+      }
       if(segments.length===4&&segments[0]==='admin'&&segments[1]==='students'&&segments[3]==='suspension'){
         if(Object.keys(body).some(k=>!['suspended','reason'].includes(k)))return fail('UNEXPECTED_BODY',400);
         return responses({student:store.setStudentSuspension(cookie,segments[2],body)});
@@ -273,6 +326,14 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
          if(Object.keys(body).some(k=>k!=='reason'))return fail('UNEXPECTED_BODY',400);
          const claim=store.appealCopyrightTakedown(actor,segments[1],body.reason);
          return responses({claim},claim.replayed?200:201);
+       }
+       if(segments.length===4&&segments[0]==='admin'&&segments[1]==='copyright-appeals'&&segments[3]==='triage'){
+         if(Object.keys(body).some(k=>!['decision','note'].includes(k)))return fail('UNEXPECTED_BODY',400);
+         return responses({appeal:store.triageCopyrightAppeal(actor,segments[2],body)});
+       }
+       if(segments.length===4&&segments[0]==='admin'&&segments[1]==='privacy-requests'&&segments[3]==='triage'){
+         if(Object.keys(body).some(k=>!['decision','note'].includes(k)))return fail('UNEXPECTED_BODY',400);
+         return responses({request:store.triagePrivacyRequest(actor,segments[2],body)});
        }
        if(segments.length===4&&segments[0]==='admin'&&segments[1]==='copyright-claims'&&segments[3]==='resolve'){
          if(Object.keys(body).some(k=>!['decision','note'].includes(k)))return fail('UNEXPECTED_BODY',400);

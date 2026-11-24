@@ -57,13 +57,40 @@ test('copyright notice: verified reporter, independent admin takedown, creator a
   assert.equal((await request('copyright-claims/'+caseId+'/appeal','POST',appealBody,other.token)).status,404);
   assert.equal((await request('copyright-claims/'+caseId+'/appeal','POST',appealBody,creator.token)).status,201);
   assert.equal((await request('copyright-claims/'+caseId+'/appeal','POST',appealBody,creator.token)).status,200);
+  assert.equal((await request('admin/copyright-appeals','GET',undefined,reporter.token)).status,403);
+  const appealsQueue=await request('admin/copyright-appeals','GET',undefined,admin.token);
+  assert.equal(appealsQueue.status,200);
+  assert.equal(appealsQueue.data.appeals.length,1);
+  assert.equal(appealsQueue.data.appeals[0].caseId,caseId);
+  assert.equal((await request('admin/copyright-appeals/'+caseId+'/triage','POST',
+    {decision:'restore',note:'Unsupported automatic restoration'},admin.token)).status,422);
+  const rightsTriage=await request('admin/copyright-appeals/'+caseId+'/triage','POST',
+    {decision:'further_review',note:'Refer to independent copyright review; no restoration or payment decision.'},admin.token);
+  assert.equal(rightsTriage.status,200);
+  assert.equal(rightsTriage.data.appeal.status,'further_review');
+  assert.equal(rightsTriage.data.appeal.contentRestored,false);
+  assert.equal((await request('admin/copyright-appeals/'+caseId+'/triage','POST',
+    {decision:'further_review',note:'Duplicate safe retry with no restoration'},admin.token)).data.appeal.replayed,true);
   assert.equal((await request('lessons/'+lesson,'GET',undefined,reporter.token)).status,404);
   assert.equal((await request('me/privacy-requests','POST',{kind:'account_deletion'},creator.token)).status,201);
   assert.equal((await request('me/privacy-requests','POST',{kind:'account_deletion'},creator.token)).status,200);
   assert.equal((await request('me/privacy-requests','POST',{kind:'verification_evidence_deletion'},creator.token)).status,201);
   assert.equal((await request('me/privacy-requests','GET',undefined,other.token)).data.requests.length,0);
   assert.equal((await request('admin/privacy-requests','GET',undefined,reporter.token)).status,403);
-  assert.equal((await request('admin/privacy-requests','GET',undefined,admin.token)).data.requests.length,2);
+  const allPrivacy=await request('admin/privacy-requests','GET',undefined,admin.token);
+  assert.equal(allPrivacy.data.requests.length,2);
+  const privacyId=allPrivacy.data.requests.find(x=>x.kind==='account_deletion').requestId;
+  assert.equal((await request('admin/privacy-requests/'+privacyId+'/triage','POST',
+    {decision:'delete_now',note:'Unsupported browser deletion'},admin.token)).status,422);
+  assert.equal((await request('admin/privacy-requests/'+privacyId+'/triage','POST',
+    {decision:'request_review',note:'Verify ownership and lawful retention before any actual deletion.'},reporter.token)).status,403);
+  const privacyReview=await request('admin/privacy-requests/'+privacyId+'/triage','POST',
+    {decision:'request_review',note:'Verify account holder and pending legal holds before deletion approval.'},admin.token);
+  assert.equal(privacyReview.status,200);
+  assert.equal(privacyReview.data.request.status,'review_required');
+  assert.equal(privacyReview.data.request.automaticallyDeleted,false);
+  assert.equal((await request('admin/privacy-requests/'+privacyId+'/triage','POST',
+    {decision:'request_review',note:'Identical request is not an account deletion.'},admin.token)).data.request.replayed,true);
   // Requests never silently delete an account or change payment/entitlement records.
   assert.ok(store.getSession(creator.token));
   const db=new DatabaseSync(path);
