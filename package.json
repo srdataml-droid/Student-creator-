@@ -5,7 +5,7 @@
   "type": "module",
   "description": "Campus learning web platform — server-side SQLite development database; Supabase later",
   "scripts": {
-    "test": "node --test packages/payment-core/test/*.test.mjs packages/content-core/test/*.test.mjs packages/local-core/test/*.test.mjs apps/web/lib/*.test.mjs",
+    "test": "node --test packages/identity-core/test/*.test.mjs packages/payment-core/test/*.test.mjs packages/content-core/test/*.test.mjs packages/local-core/test/*.test.mjs apps/web/lib/*.test.mjs",
     "local:admin": "node scripts/local-admin.mjs",
     "local:backup": "node scripts/local-backup.mjs backup",
     "local:verify-backup": "node scripts/local-backup.mjs verify",
