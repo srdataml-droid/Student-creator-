@@ -102,7 +102,8 @@ export function createPaystackClient({ secretKey, environment, livePaymentsAppro
       let url;
       try { url = new URL(response.data.authorization_url); }
       catch { throw new PaystackGatewayError('BAD_GATEWAY_RESPONSE', 'Invalid checkout URL'); }
-      if (url.protocol !== 'https:' || url.username || url.password || url.port || !['checkout.paystack.com', 'paystack.com'].includes(url.hostname)) {
+      if (url.protocol !== 'https:' || !['checkout.paystack.com', 'paystack.com'].includes(url.hostname) ||
+          url.username || url.password || url.port || url.hash) {
         throw new PaystackGatewayError('BAD_GATEWAY_RESPONSE', 'Untrusted checkout destination');
       }
       return Object.freeze({ reference: order.reference, authorizationUrl: url.toString() });

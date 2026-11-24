@@ -32,6 +32,16 @@ test('rejects checkout URL redirect to attacker domain',async()=>{
   const api=createPaystackClient({secretKey:key,environment:'test',fetchImpl:async()=>ok(init('https://checkout.paystack.com.evil.example/abc'))});
   await code(()=>api.initialize(order),'BAD_GATEWAY_RESPONSE');
 });
+test('rejects Paystack checkout URLs with embedded credentials, nonstandard port or fragment',async()=>{
+  for(const checkoutUrl of [
+    'https://attacker:secret@checkout.paystack.com/abc',
+    'https://checkout.paystack.com:8443/abc',
+    'https://checkout.paystack.com/abc#unexpected'
+  ]){
+    const api=createPaystackClient({secretKey:key,environment:'test',fetchImpl:async()=>ok(init(checkoutUrl))});
+    await code(()=>api.initialize(order),'BAD_GATEWAY_RESPONSE');
+  }
+});
 test('rejects initialization reference substitution',async()=>{
   const api=createPaystackClient({secretKey:key,environment:'test',fetchImpl:async()=>ok({...init(),reference:'different'})});
   await code(()=>api.initialize(order),'BAD_GATEWAY_RESPONSE');
