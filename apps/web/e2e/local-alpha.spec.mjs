@@ -339,8 +339,8 @@ test('mobile navigation announces the current route and supports small screens',
     await expect(page).toHaveURL(/\/search$/);
     await expect(nav.getByRole('link',{name:'Explore'})).toHaveAttribute('aria-current','page');
     await expect(nav.locator('[aria-current]')).toHaveCount(1);
-    const sizes=await page.evaluate(()=>({viewport:innerWidth,document:document.documentElement.scrollWidth}));
-    expect(sizes.document).toBeLessThanOrEqual(sizes.viewport+1);
+    const sizes=await page.evaluate(()=>({viewport:innerWidth,document:document.documentElement.scrollWidth,offenders:[...document.querySelectorAll('body *')].filter(el=>{const r=el.getBoundingClientRect();return r.width>0&&r.right>innerWidth+1&&getComputedStyle(el).position!=='absolute';}).slice(0,10).map(el=>({tag:el.tagName,className:String(el.className),right:Math.round(el.getBoundingClientRect().right)}))}));
+    expect(sizes.document,JSON.stringify(sizes.offenders)).toBeLessThanOrEqual(sizes.viewport+1);
     await page.setViewportSize({width:1280,height:800});
     await expect(nav).not.toBeVisible();
   }finally{await context.close();}
