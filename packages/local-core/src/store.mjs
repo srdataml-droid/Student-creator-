@@ -15,6 +15,7 @@ import { createLocalCommerce } from './commerce.mjs';
 import { validateWebVtt } from './captions.mjs';
 import { createLocalAffiliations } from './affiliations.mjs';
 import { createLocalRightsCases } from './rights-cases.mjs';
+import { createLocalAccountEmail } from './account-email.mjs';
 
 export const SESSION_COOKIE='campus_local_session';
 const SESSION_TTL=7*24*60*60;
@@ -239,6 +240,8 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     if(current.institutionId!==actor.institutionId||!affiliations.eligible(actor.id))throw error('VERIFICATION_REQUIRED',403);
   }
   const affiliations=createLocalAffiliations({db,transaction,audit,error,requireAdmin});
+  const accountEmail=createLocalAccountEmail({db,transaction,audit,error,validatePassword,getSession:token=>store.getSession(token),studentAllowed:row=>
+    (pilotEmail===null||row.email===pilotEmail)&&(pilotInvite===null||Boolean(db.prepare('SELECT 1 FROM pilot_invitation_claims WHERE user_id=?').get(row.id)))});
   const rightsCases=createLocalRightsCases({db,transaction,audit,error,requireAdmin,requireVerified});
   const commerce=createLocalCommerce({db,transaction,audit,error,requireVerified,requireCreatorAction});
   const withVideo=(row)=>row?{...lesson(row),priceKobo:commerce.price(row.id),hasVideo:Boolean(db.prepare('SELECT 1 FROM lesson_videos WHERE lesson_id=?').get(row.id)),hasCaptions:Boolean(db.prepare('SELECT 1 FROM lesson_captions WHERE lesson_id=?').get(row.id)),likeCount:db.prepare('SELECT COUNT(*) AS n FROM lesson_likes WHERE lesson_id=?').get(row.id).n}:null;
@@ -474,6 +477,11 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         return {revokedCount:Number(count)};
       });
     },
+    emailStatus:accountEmail.status,
+    requestEmailVerification:accountEmail.requestVerification,
+    confirmEmailVerification:accountEmail.confirmVerification,
+    requestPasswordRecovery:accountEmail.requestRecovery,
+    resetPassword:accountEmail.resetPassword,
     listStudentAccounts(sessionToken){
       requireAdmin(store.getSession(sessionToken));
       // Minimal private operator view, bounded for the one-student alpha.
@@ -493,6 +501,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         db.prepare("UPDATE users SET suspended=? WHERE id=? AND role='student'").run(Number(suspended),userId);
         // Reinstatement must not resurrect a pre-suspension session or grant.
         const revokedSessions=Number(db.prepare('DELETE FROM sessions WHERE user_id=?').run(userId).changes);
+        accountEmail.revokeChallenges(userId);
         const revokedCreatorGrants=Number(db.prepare('DELETE FROM playback_grants WHERE lesson_id IN (SELECT id FROM lessons WHERE creator_id=?)').run(userId).changes);
         audit(operator.id,suspended?'student.suspended':'student.reinstated',userId,{reason:reason.trim(),revokedSessions,revokedCreatorGrants});
         return {id:userId,suspended,revokedSessions,revokedCreatorGrants};
