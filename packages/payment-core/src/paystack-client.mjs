@@ -27,7 +27,7 @@ function assertOrder(order) {
   }
 }
 
-export function createPaystackClient({ secretKey, environment, fetchImpl = fetch, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+export function createPaystackClient({ secretKey, environment, livePaymentsApproved = false, fetchImpl = fetch, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   if (typeof secretKey !== 'string' || !/^sk_(test|live)_[A-Za-z0-9]+$/.test(secretKey)) {
     throw new PaystackGatewayError('BAD_CONFIGURATION', 'Missing or invalid Paystack server secret');
   }
@@ -80,6 +80,11 @@ export function createPaystackClient({ secretKey, environment, fetchImpl = fetch
     async initialize(order) {
       assertOrder(order);
       if (order.domain !== environment) throw new PaystackGatewayError('BAD_ORDER', 'Order is in the wrong environment');
+      // Both inputs are trusted server configuration; never derive approval from request data.
+      // Verification stays available when this gate closes so prior charges can reconcile.
+      if (environment === 'live' && (livePaymentsApproved !== true || process.env.PAYSTACK_LIVE_PAYMENTS_ENABLED !== '1')) {
+        throw new PaystackGatewayError('LIVE_PAYMENTS_DISABLED', 'Live payment initialization is not approved');
+      }
       const response = await request('/transaction/initialize', {
         method: 'POST',
         body: {
@@ -97,7 +102,7 @@ export function createPaystackClient({ secretKey, environment, fetchImpl = fetch
       let url;
       try { url = new URL(response.data.authorization_url); }
       catch { throw new PaystackGatewayError('BAD_GATEWAY_RESPONSE', 'Invalid checkout URL'); }
-      if (url.protocol !== 'https:' || !['checkout.paystack.com', 'paystack.com'].includes(url.hostname)) {
+      if (url.protocol !== 'https:' || url.username || url.password || url.port || !['checkout.paystack.com', 'paystack.com'].includes(url.hostname)) {
         throw new PaystackGatewayError('BAD_GATEWAY_RESPONSE', 'Untrusted checkout destination');
       }
       return Object.freeze({ reference: order.reference, authorizationUrl: url.toString() });

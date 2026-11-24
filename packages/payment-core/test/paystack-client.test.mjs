@@ -70,3 +70,37 @@ test('aborted provider request reports unknown state requiring reconciliation',a
   const api=createPaystackClient({secretKey:key,environment:'test',fetchImpl:async()=>{throw Object.assign(new Error('aborted'),{name:'AbortError'})}});
   await code(()=>api.verify(order),'GATEWAY_TIMEOUT');
 });
+
+test('live checkout requires both private founder configuration and server authorization before transport',async()=>{
+  const previous=process.env.PAYSTACK_LIVE_PAYMENTS_ENABLED;
+  const liveOrder={...order,domain:'live'};
+  let calls=0;
+  const live=approved=>createPaystackClient({secretKey:'sk_live_mockContractOnly',environment:'live',livePaymentsApproved:approved,fetchImpl:async()=>{calls++;return ok(init())}});
+  try{
+    delete process.env.PAYSTACK_LIVE_PAYMENTS_ENABLED;
+    await code(()=>live(true).initialize(liveOrder),'LIVE_PAYMENTS_DISABLED');
+    process.env.PAYSTACK_LIVE_PAYMENTS_ENABLED='1';
+    await code(()=>live(false).initialize(liveOrder),'LIVE_PAYMENTS_DISABLED');
+    await code(()=>live('true').initialize(liveOrder),'LIVE_PAYMENTS_DISABLED');
+    assert.equal(calls,0);
+    const approved=live(true);
+    await approved.initialize(liveOrder); // mocked transport only
+    assert.equal(calls,1);
+    process.env.PAYSTACK_LIVE_PAYMENTS_ENABLED='0';
+    await code(()=>approved.initialize(liveOrder),'LIVE_PAYMENTS_DISABLED');
+    assert.equal(calls,1);
+  }finally{
+    if(previous===undefined) delete process.env.PAYSTACK_LIVE_PAYMENTS_ENABLED;
+    else process.env.PAYSTACK_LIVE_PAYMENTS_ENABLED=previous;
+  }
+});
+test('live verification remains possible for reconciliation after checkout is disabled (mock only)',async()=>{
+  const api=createPaystackClient({secretKey:'sk_live_mockContractOnly',environment:'live',fetchImpl:async()=>ok({...verified(),domain:'live'})});
+  assert.equal((await api.verify({...order,domain:'live'})).domain,'live');
+});
+test('rejects fresh provider checkout URLs containing credentials or nonstandard HTTPS ports',async()=>{
+  for(const url of ['https://user:pass@checkout.paystack.com/abc','https://checkout.paystack.com:444/abc','https://user@paystack.com/abc']){
+    const api=createPaystackClient({secretKey:key,environment:'test',fetchImpl:async()=>ok(init(url))});
+    await code(()=>api.initialize(order),'BAD_GATEWAY_RESPONSE');
+  }
+});
