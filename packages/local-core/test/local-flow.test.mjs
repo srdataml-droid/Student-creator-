@@ -265,3 +265,32 @@ test('in-app notifications are recipient-private, preference-aware, read-idempot
   assert.equal((await x.request(`messages/${readerId}`,'GET',undefined,s.student)).data.messages.length,2);
  }finally{x.close();}
 });
+
+test('account reports require an established contact or public profile and independent admin review',async()=>{
+ const x=setup();try{
+  const s=await begin(x);await x.request('admin/verify','POST',{userId:s.user},s.owner);
+  const email='account-reporter@campus.test',password='Strong Reader Password 1234';
+  const rid=(await x.request('auth/register','POST',{email,password,institutionId:s.institution})).data.user.id;
+  await x.request('admin/verify','POST',{userId:rid},s.owner);
+  const reader=await login(x,email,password);
+  const path='users/'+s.user+'/report',body={category:'harassment',reason:'Repeated unwanted contact for review'};
+  assert.equal((await x.request(path,'POST',body)).status,401);
+  assert.equal((await x.request(path,'POST',body,reader)).status,404);
+  assert.equal((await x.request('users/'+rid+'/report','POST',body,reader)).status,403);
+  const lid=(await x.request('lessons/drafts','POST',lessonBody(s.course),s.student)).data.lesson.id;
+  await x.request('lessons/'+lid+'/submit','POST',{},s.student);
+  await x.request('lessons/'+lid+'/review','POST',{decision:'approve',reason:'Original work accepted'},s.owner);
+  assert.equal((await x.request(path,'POST',{...body,targetId:rid},reader)).status,422);
+  const made=await x.request(path,'POST',body,reader);assert.equal(made.status,201);
+  assert.equal((await x.request(path,'POST',body,reader)).status,409);
+  assert.equal((await x.request('admin/user-reports','GET',undefined,reader)).status,403);
+  const queue=(await x.request('admin/user-reports','GET',undefined,s.owner)).data.reports;
+  assert.equal(queue[0].targetId,s.user);assert.equal(queue[0].reporterId,rid);
+  const resolve='admin/user-reports/'+made.data.report.id;
+  assert.equal((await x.request(resolve,'POST',{resolution:'Reviewed report details'},reader)).status,403);
+  assert.equal((await x.request(resolve,'POST',{resolution:'Reviewed report details'},s.owner)).status,200);
+  assert.equal((await x.request(resolve,'POST',{resolution:'Repeated review'},s.owner)).status,409);
+  assert.equal((await x.request('admin/user-reports','GET',undefined,s.owner)).data.reports.length,0);
+  assert.equal((await x.request('me','GET',undefined,s.student)).status,200);
+ }finally{x.close();}
+});

@@ -198,6 +198,7 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
         if(path==='admin/students'){if(!actor)return unauthorized();return responses({students:store.listStudentAccounts(cookie)});}
         if(path==='admin/pending-users'){if(!actor)return unauthorized();return responses({users:store.listPendingUsers(actor)});}
         if(path==='admin/review-queue'){if(!actor)return unauthorized();return responses({lessons:store.reviewQueue(actor)});}
+        if(path==='admin/user-reports'){if(!actor)return unauthorized();return responses({reports:store.userReportQueue(actor)});}
         if(path==='admin/reports'){if(!actor)return unauthorized();return responses({reports:store.reportQueue(actor)});}
         if(segments.length===2&&segments[0]==='creators')return store.publicCreator(segments[1])?responses({creator:store.publicCreator(segments[1])}):fail('CREATOR_NOT_FOUND',404);
         if(segments.length===3&&segments[0]==='courses'&&segments[2]==='study-sessions'){
@@ -415,6 +416,10 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
         if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
         return responses(store.markNotificationRead(actor,segments[1]));
       }
+      if(segments.length===3&&segments[0]==='users'&&segments[2]==='report')
+        return responses({report:store.reportUser(actor,segments[1],body)},201);
+      if(segments.length===3&&segments[0]==='admin'&&segments[1]==='user-reports')
+        return responses({result:store.resolveUserReport(actor,segments[2],body)});
       if(path==='messages/preference')return responses({preference:store.setMessagePreference(actor,body.allowMessages)});
       if(segments.length===2&&segments[0]==='messages'&&!['preference','report','inbox'].includes(segments[1]))return responses({message:store.sendMessage(actor,segments[1],body.text)},201);
       if(segments.length===3&&segments[0]==='messages'&&segments[2]==='block')return responses({result:store.blockContact(actor,segments[1])});

@@ -163,6 +163,14 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       updated_at TEXT NOT NULL,
       PRIMARY KEY(creator_id,viewer_id), CHECK(creator_id<>viewer_id)
     );
+    CREATE TABLE IF NOT EXISTS user_reports(
+      id TEXT PRIMARY KEY,reporter_id TEXT NOT NULL REFERENCES users(id),target_id TEXT NOT NULL REFERENCES users(id),
+      category TEXT NOT NULL CHECK(category IN('harassment','impersonation','spam','other')),
+      reason TEXT NOT NULL,created_at TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'open' CHECK(status IN('open','reviewed')),
+      reviewed_by TEXT REFERENCES users(id),resolution TEXT,CHECK(reporter_id<>target_id)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS user_reports_one_open ON user_reports(reporter_id,target_id) WHERE status='open';
+    CREATE INDEX IF NOT EXISTS user_reports_recent ON user_reports(reporter_id,created_at);
     CREATE TABLE IF NOT EXISTS message_reports(id TEXT PRIMARY KEY,reporter_id TEXT NOT NULL REFERENCES users(id),message_id TEXT NOT NULL REFERENCES messages(id),reason TEXT NOT NULL,created_at TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'open',resolved_by TEXT REFERENCES users(id),resolution TEXT,UNIQUE(reporter_id,message_id));
     -- Local course communities are restricted to manually verified students at their own campus.
     CREATE TABLE IF NOT EXISTS community_members(
@@ -1109,6 +1117,40 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       if(!db.prepare('SELECT 1 FROM users WHERE id=?').get(otherId)||actor.id===otherId)throw error('INVALID_CONTACT',422);
       transaction(()=>{db.prepare('INSERT OR IGNORE INTO user_blocks VALUES(?,?,?)').run(actor.id,otherId,stamp());audit(actor.id,'contact.blocked',otherId);});
       return {blocked:true};
+    },
+    reportUser(actor,targetId,input){
+      requireVerified(actor);
+      if(!input||Object.keys(input).length!==2||!['harassment','impersonation','spam','other'].includes(input.category)||
+        typeof input.reason!=='string'||input.reason.trim().length<10||input.reason.trim().length>1000)throw error('INVALID_REPORT',422);
+      if(targetId===actor.id)throw error('CANNOT_REPORT_SELF',403);
+      return transaction(()=>{
+        const target=db.prepare("SELECT id FROM users WHERE id=? AND role='student'").get(targetId);
+        const contact=db.prepare("SELECT 1 FROM messages WHERE (sender_id=? AND recipient_id=?) OR (sender_id=? AND recipient_id=?) LIMIT 1").get(actor.id,targetId,targetId,actor.id);
+        if(!target||(!contact&&!store.publicCreator(targetId)))throw error('USER_NOT_FOUND',404);
+        const recent=db.prepare('SELECT count(*) n FROM user_reports WHERE reporter_id=? AND created_at>?').get(actor.id,new Date(Date.now()-3600000).toISOString()).n;
+        if(recent>=10)throw error('REPORT_RATE_LIMIT',429);
+        const id=randomUUID();
+        const inserted=db.prepare('INSERT OR IGNORE INTO user_reports(id,reporter_id,target_id,category,reason,created_at) VALUES(?,?,?,?,?,?)')
+          .run(id,actor.id,targetId,input.category,input.reason.trim(),stamp()).changes;
+        if(!inserted)throw error('ALREADY_REPORTED',409);
+        audit(actor.id,'user.reported',id,{targetId,category:input.category});
+        return {id};
+      });
+    },
+    userReportQueue(actor){
+      requireAdmin(actor);
+      return db.prepare("SELECT id,reporter_id AS reporterId,target_id AS targetId,category,reason,created_at AS createdAt FROM user_reports WHERE status='open' ORDER BY created_at,id LIMIT 100").all();
+    },
+    resolveUserReport(actor,id,input){
+      requireAdmin(actor);
+      if(!input||Object.keys(input).length!==1||typeof input.resolution!=='string'||input.resolution.trim().length<5||input.resolution.trim().length>1000)
+        throw error('INVALID_RESOLUTION',422);
+      return transaction(()=>{
+        const changed=db.prepare("UPDATE user_reports SET status='reviewed',reviewed_by=?,resolution=? WHERE id=? AND status='open'").run(actor.id,input.resolution.trim(),id).changes;
+        if(!changed)throw error('REPORT_CONFLICT',409);
+        audit(actor.id,'user.report.reviewed',id);
+        return {id,status:'reviewed'};
+      });
     },
     reportMessage(actor,messageId,reason){
       requireVerified(actor);

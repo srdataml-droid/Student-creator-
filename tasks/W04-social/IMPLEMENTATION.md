@@ -29,3 +29,6 @@ Additive nullable parent reference preserves existing comment hashes. One-level 
 
 ## Seventh increment: creator discovery and interaction guards
 Server-scoped creator search supports public alias, campus, course, topic and published content matching; home suggestions and search creator links; account-specific view-denied creators excluded, no private fields. Follow mutations rate-limited; bookmark/like writes require independent view authorization without granting paid access. Tests added. No new dependencies or imported code. Exact-head CI pending.
+
+## Eighth increment: account reports
+Private categorized reports against public creators or established message contacts, one open per pair and bounded reporting frequency. Platform-admin-only review queue and resolution, no automatic suspension; profile and conversation reporting UI. Tests cover anonymous, self, unrelated account, duplicate, cross-role and review denial. No imported code. Exact-head CI pending.
