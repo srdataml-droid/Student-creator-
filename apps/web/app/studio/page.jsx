@@ -60,7 +60,7 @@ export default function Studio(){
  async function logout(){await api('auth/logout',{method:'POST',body:{}});window.location.assign('/');}
  return <main className="main" id="main"><section className="hero compact"><p className="eyebrow">Creator studio</p><h1>Share what you understand.</h1><p className="intro">Build original explanations in your own words. Save text and optional original MP4 videos on the local development server without external APIs.</p></section>
  {state==='loading'?<p role="status">Opening your studio…</p>:state==='signed-out'?<div className="status"><p>Sign in to create lessons.</p><Link className="primary-link" href="/sign-in">Sign in</Link></div>:state==='unavailable'?<p role="alert" className="status">Local storage is unavailable. Check your terminal.</p>:<>
- <div className="studio-meta"><p>Signed in as <strong>{user.email}</strong> · {user.verifiedAt?'Verified student':'Verification pending'}</p><button className="quiet-button" onClick={logout}>Sign out</button></div>
+ <div className="studio-meta"><p>Signed in as <strong>{user.email}</strong> · {user.verifiedAt?'Verified student':'Verification pending'}</p><div className="button-row"><Link className="secondary-link" href="/account-security">Account security</Link><button className="quiet-button" onClick={logout}>Sign out</button></div></div>
  {user.role==='student'&&user.verifiedAt&&<section className="panel creator-profile-edit"><h2>Your public creator identity</h2>
  <p className="hint">Use a public alias, never your private school ID or account email. Handles identify individuals but do not mean a school or Worthkind endorses them. Names claiming official staff or university authority are reserved.</p>
  <form className="form-stack" onSubmit={savePublicProfile}>

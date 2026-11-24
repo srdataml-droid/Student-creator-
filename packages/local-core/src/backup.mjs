@@ -125,7 +125,13 @@ export function restoreLocalBackup({snapshotDir,databasePath}){
     checkedMedia(rows,join(tmp,'media'));
     // Invalidate restored browser sessions, while retaining users and audit records.
     const db=new DatabaseSync(copied);
-    try{db.exec('PRAGMA foreign_keys=ON; DELETE FROM sessions; PRAGMA wal_checkpoint(TRUNCATE);');}
+    try{
+      db.exec('PRAGMA foreign_keys=ON; DELETE FROM sessions;');
+      // Older snapshots predate email challenges. Never revive a reset token.
+      if(db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='account_email_challenges'").get())
+        db.exec('DELETE FROM account_email_challenges;');
+      db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+    }
     finally{db.close();}
     checkTargetVacant(dest);checkTargetVacant(dest+'.media');
     renameSync(copied,dest);movedDb=true;

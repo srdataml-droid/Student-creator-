@@ -53,7 +53,14 @@ const allowed=(s)=>s&&typeof s==='string'&&s.length<100;
  * Only standalone localhost use. No payment provider, no staging credentials.
  * @param {object} store - an open local SQLite store
  */
-export function createLocalHandler(store,{sandboxGateway,payments=null}={}){
+export function createLocalHandler(store,{sandboxGateway,payments=null,emailDelivery=null}={}){
+  // Explicit synthetic transport only. No real email or local debug token endpoint.
+  const mail=process.env.NODE_ENV!=='production'&&emailDelivery?.environment==='synthetic'&&typeof emailDelivery.send==='function'?emailDelivery:null;
+  async function sendChallenge(challenge){
+    // Do not surface recipient or provider failures to a public recovery request.
+    // A future hosted transport must use asynchronous delivery and abuse controls.
+    if(challenge&&mail){try{await mail.send(challenge);}catch{store.cancelEmailChallenge(challenge.token);}}
+  }
   // No live mode. Production builds keep all financial actions disabled.
   const gateway=process.env.NODE_ENV==='production'?null:(payments?.gateway??(sandboxGateway===undefined?(process.env.PAYSTACK_TEST_SECRET_KEY?createPaystackClient({secretKey:process.env.PAYSTACK_TEST_SECRET_KEY,environment:'test'}):null):sandboxGateway));
   const signingSecrets=payments?.signingSecrets??(process.env.PAYSTACK_WEBHOOK_KEY_ID&&process.env.PAYSTACK_WEBHOOK_SIGNING_SECRET?[{id:process.env.PAYSTACK_WEBHOOK_KEY_ID,secret:process.env.PAYSTACK_WEBHOOK_SIGNING_SECRET}]:[]);
@@ -114,6 +121,7 @@ export function createLocalHandler(store,{sandboxGateway,payments=null}={}){
       if(method==='GET'){
         if(path==='health')return responses({state:'local',database:'sqlite',providerPayments:false,sandboxCheckoutEnabled:Boolean(gateway),pilotInviteOnly:store.pilotInviteOnly()});
         if(path==='me')return actor?responses({user:actor}):fail('AUTH_REQUIRED',401);
+        if(path==='me/email-status'){if(!actor)return unauthorized();return responses({...store.emailStatus(cookie),deliveryEnabled:Boolean(mail)});}
         if(path==='me/institution-affiliation'){if(!actor)return unauthorized();return responses({affiliation:store.institutionAffiliation(actor,actor.id)});}
         if(path==='me/verification-appeals'){if(!actor)return unauthorized();return responses({appeals:store.myVerificationAppeals(actor)});}
         if(path==='me/copyright-claims'){if(!actor)return unauthorized();return responses({claims:store.myCopyrightClaims(actor)});}
@@ -216,6 +224,28 @@ export function createLocalHandler(store,{sandboxGateway,payments=null}={}){
         if(!actor)return unauthorized();
         const result=store.revokeAllSessions(cookie);
         return responses({ok:true,...result},200,{'set-cookie':`${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${new URL(request.url).protocol==='https:'?'; Secure':''}`});
+      }
+      if(path==='auth/email/verify/request'){
+        if(!actor)return unauthorized();
+        if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
+        if(!mail)return fail('EMAIL_DELIVERY_UNAVAILABLE',503);
+        await sendChallenge(store.requestEmailVerification(cookie));
+        return responses({accepted:true},202);
+      }
+      if(path==='auth/email/verify/confirm'){
+        if(!actor)return unauthorized();
+        if(Object.keys(body).some(k=>k!=='token'))return fail('UNEXPECTED_BODY',400);
+        return responses(store.confirmEmailVerification(cookie,body.token));
+      }
+      if(path==='auth/password/recover'){
+        if(Object.keys(body).some(k=>k!=='email'))return fail('UNEXPECTED_BODY',400);
+        if(!mail)return fail('EMAIL_DELIVERY_UNAVAILABLE',503);
+        await sendChallenge(store.requestPasswordRecovery(body.email));
+        return responses({accepted:true},202);
+      }
+      if(path==='auth/password/reset'){
+        if(Object.keys(body).some(k=>!['token','password'].includes(k)))return fail('UNEXPECTED_BODY',400);
+        return responses(store.resetPassword(body.token,body.password));
       }
       if(path==='auth/register')return responses({user:store.register(body)},201);
       if(path==='auth/login'){
