@@ -146,6 +146,22 @@ export function createLearningPayments({db,transaction,audit,error,requireVerifi
         return {...status(r),replayed:true};
       }
       if(r.state!=='pending')throw error('PAYMENT_REVERSED',409);
+      // If a provider charge arrives after class/service cancellation, it must
+      // enter financial review; never mint an entitlement for a closed resource.
+      let closed=false;
+      if(r.resource_kind==='class'){
+        const cls=db.prepare('SELECT status,ends_at FROM interactive_classes WHERE id=?').get(r.resource_id);
+        closed=!cls||!['scheduled','room_open'].includes(cls.status)||Date.parse(cls.ends_at)<Date.now();
+      }else{
+        const task=db.prepare('SELECT status FROM learning_requests WHERE id=?').get(r.resource_id);
+        closed=!task||!['accepted','in_progress'].includes(task.status);
+      }
+      if(closed){
+        db.prepare('INSERT OR IGNORE INTO learning_refund_reviews(id,resource_kind,resource_id,student_id,reason,created_at) VALUES(?,?,?,?,?,?)')
+          .run('late-payment:'+reference,r.resource_kind,r.resource_id,r.buyer_id,'Provider charge arrived after closure; operator must verify and reverse before any access.',stamp());
+        audit(r.buyer_id,'learning.order.charge_after_closure',reference);
+        throw error('RESOURCE_CLOSED_FINANCIAL_REVIEW',409);
+      }
       const at=stamp();
       const changed=db.prepare("UPDATE learning_purchase_orders SET state='paid',provider_transaction_id=?,provider_fee_kobo=?,paid_at=? WHERE reference=? AND state='pending'")
         .run(charge.providerTransactionId,charge.providerFeeKobo,at,reference).changes;
