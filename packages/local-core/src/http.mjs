@@ -383,7 +383,7 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
       }
       if(segments.length===3&&segments[0]==='learning-requests'){
         const id=segments[1],action=segments[2];
-        if(['quote','accept','reject','start','submit','confirm','dispute'].includes(action)){
+        if(['quote','accept','reject','start','submit','confirm','cancel','dispute'].includes(action)){
           if(['start','submit','confirm'].includes(action)&&Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
           if(action==='quote')return responses({request:store.quoteHelp(actor,id,body.quoteKobo)});
           if(action==='accept')return responses({request:store.acceptHelp(actor,id,body.expectedQuoteKobo)});
@@ -391,6 +391,7 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
           if(action==='start')return responses({request:store.startHelp(actor,id)});
           if(action==='submit')return responses({request:store.submitHelp(actor,id)});
           if(action==='confirm')return responses({request:store.confirmHelp(actor,id)});
+          if(action==='cancel')return responses({request:store.cancelHelp(actor,id,body.reason)});
           if(action==='dispute')return responses({dispute:store.disputeHelp(actor,id,body.reason)});
         }
       }
