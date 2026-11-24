@@ -135,9 +135,23 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     await reviewed.getByRole('button',{name:'Approve'}).click();
     await expect(adminPage.getByText('Lesson approved and published.')).toBeVisible();
 
+    // Browsing the feed must not initiate protected media downloads or grant requests.
+    const eagerMediaRequests=[];
+    const trackEagerMedia=req=>{
+      const pathname=new URL(req.url()).pathname;
+      if(pathname.startsWith(`/api/local/lessons/${lessonId}/`)&&
+        /\/(video(?:\/captions)?|playback-grant)$/.test(pathname))
+        eagerMediaRequests.push(pathname);
+    };
+    viewerPage.on('request',trackEagerMedia);
     await viewerPage.goto('/');
-    await expect(viewerPage.getByRole('heading',{name:title})).toBeVisible();
+    const feedPost=viewerPage.getByRole('article',{name:title});
+    await expect(feedPost.getByRole('heading',{name:title})).toBeVisible();
+    await expect(feedPost.getByRole('button',{name:'Enable playback'})).toBeVisible();
+    await expect(feedPost.locator('video')).toHaveCount(0);
     await viewerPage.goto(`/lessons/${lessonId}`);
+    viewerPage.off('request',trackEagerMedia);
+    expect(eagerMediaRequests).toEqual([]);
     await expect(viewerPage.getByRole('heading',{name:title})).toBeVisible();
     await expect(viewerPage.getByRole('button',{name:'Enable playback'})).toBeVisible();
     expect((await viewer.request.get(`/api/local/lessons/${lessonId}/video`)).status()).toBe(403);
