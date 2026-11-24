@@ -1177,7 +1177,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     recoverPendingPayments:commerce.recoverPending,
     paymentReconciliation:commerce.reconciliation,
     myPaymentDisputes:commerce.disputes,
-    resolvePaymentDispute:(actor,id,resolution)=>{governance.requireCapability(actor,'finance.review');return commerce.resolveDispute(actor,id,resolution);}
+    resolvePaymentDispute:(actor,id,resolution)=>{governance.requireCapability(actor,'finance.review');return commerce.resolveDispute(actor,id,resolution);},
     myPurchaseOrders:commerce.ownOrders,
     creatorEarnings:commerce.creatorEarnings,
     lessonAccess:commerce.lessonAccess,
