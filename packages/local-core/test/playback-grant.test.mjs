@@ -115,9 +115,21 @@ test('student suspension revokes sessions and creator playback grants; reinstate
   assert.equal((await request(path,{...decision,userId:buyer.id},operator.token)).status,400);
   assert.equal((await request(path,{...decision,suspended:'true'},operator.token)).status,422);
   assert.equal((await request('admin/students/'+operator.user.id+'/suspension',decision,operator.token)).status,404);
+  const list=async token=>{
+   const req=new Request('http://localhost:3000/api/local/admin/students',{headers:token?{cookie:'campus_local_session='+token}:{}});
+   const res=await createLocalHandler(store)(req,['admin','students']);
+   return {status:res.status,data:await res.json()};
+  };
+  assert.equal((await list()).status,401);
+  assert.equal((await list(viewer.token)).status,403);
+  const accounts=await list(operator.token);
+  assert.equal(accounts.status,200);
+  assert.equal(accounts.data.students.length,2);
+  assert.deepEqual(Object.keys(accounts.data.students[0]).sort(),['email','id','institutionId','suspended','verifiedAt']);
   const result=await request(path,decision,operator.token);
   assert.equal(result.status,200);assert.equal(result.data.student.revokedSessions,2);
   assert.equal(result.data.student.revokedCreatorGrants,1);
+  assert.equal((await list(operator.token)).data.students.find(s=>s.id===creator.id).suspended,true);
   assert.equal(store.getSession(author.token),null);assert.equal(store.getSession(second.token),null);
   assert.equal(store.login('creator@suspension.test',pw),null);
   assert.ok(store.getSession(viewer.token));

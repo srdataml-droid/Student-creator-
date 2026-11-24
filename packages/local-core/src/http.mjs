@@ -175,6 +175,7 @@ export function createLocalHandler(store,{sandboxGateway,payments=null}={}){
         if(segments.length===2&&segments[0]==='orders'){if(!actor)return unauthorized();return responses({order:store.getPurchaseOrder(actor,segments[1])});}
         if(path==='my/creator-earnings'){if(!actor)return unauthorized();return responses({earnings:store.creatorEarnings(actor)});}
         if(segments.length===3&&segments[0]==='lessons'&&segments[2]==='access'){if(!actor)return unauthorized();return responses({access:store.lessonAccess(actor,segments[1])});}
+        if(path==='admin/students'){if(!actor)return unauthorized();return responses({students:store.listStudentAccounts(cookie)});}
         if(path==='admin/pending-users'){if(!actor)return unauthorized();return responses({users:store.listPendingUsers(actor)});}
         if(path==='admin/review-queue'){if(!actor)return unauthorized();return responses({lessons:store.reviewQueue(actor)});}
         if(path==='admin/reports'){if(!actor)return unauthorized();return responses({reports:store.reportQueue(actor)});}

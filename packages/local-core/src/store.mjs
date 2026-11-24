@@ -474,6 +474,12 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         return {revokedCount:Number(count)};
       });
     },
+    listStudentAccounts(sessionToken){
+      requireAdmin(store.getSession(sessionToken));
+      // Minimal private operator view, bounded for the one-student alpha.
+      return db.prepare("SELECT id,email,institution_id AS institutionId,verified_at AS verifiedAt,suspended FROM users WHERE role='student' ORDER BY created_at,id LIMIT 100").all()
+        .map(row=>({...row,suspended:Boolean(row.suspended)}));
+    },
     // Operator identity is resolved from a live session inside the transaction.
     setStudentSuspension(sessionToken,userId,{suspended,reason}={}){
       return transaction(()=>{
