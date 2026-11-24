@@ -26,12 +26,13 @@ insert into public.content_assets(content_id,private_object_key,mime_type,bytes,
  ('aaaaaaaa-2222-4222-8222-aaaaaaaaaaaa','private/alice/original.pdf','application/pdf',1234,'ready','clean'),
  ('bbbbbbbb-2222-4222-8222-bbbbbbbbbbbb','private/bob/pending.pdf','application/pdf',1234,'scanning','pending');
 
+-- Preserve column-level public metadata allowlist established in migration 0009.
+-- Never re-grant all content_items columns to client roles in fixtures.
 grant usage on schema auth,public to anon,authenticated,service_role;
 grant execute on function auth.uid() to anon,authenticated,service_role;
 grant select on public.institutions,public.departments,public.courses,public.course_topics,
- public.student_profiles,public.content_items,public.orders,public.entitlements to authenticated;
-grant select on public.institutions,public.departments,public.courses,public.course_topics,
- public.content_items to anon;
+ public.student_profiles,public.orders,public.entitlements to authenticated;
+grant select on public.institutions,public.departments,public.courses,public.course_topics to anon;
 -- Service role receives explicit DB privileges and bypasses RLS in real Supabase.
 grant all on all tables in schema public to service_role;
 
