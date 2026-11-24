@@ -513,6 +513,13 @@ export function createLearningServices({db,transaction,audit,error,requireVerifi
     },
     notifications(actor){
       requireVerified(actor);
+      // Locally queue only this student's upcoming class reminders on their
+      // own dashboard visit. A recurring host worker is needed for offline email/push.
+      const startingSoon=db.prepare("SELECT c.id FROM interactive_classes c JOIN interactive_class_enrollments e ON e.class_id=c.id WHERE e.student_id=? AND e.status='enrolled' AND c.status='scheduled' AND c.starts_at>=? AND c.starts_at<=? LIMIT 100")
+        .all(actor.id,new Date(now()).toISOString(),new Date(now()+3600000).toISOString());
+      transaction(()=>{
+        for(const c of startingSoon)notice(actor.id,'class_reminder',c.id,'Your class starts within an hour.');
+      });
       return db.prepare('SELECT id,kind,resource_id AS resourceId,body,created_at AS createdAt,seen_at AS seenAt FROM learning_notifications WHERE user_id=? ORDER BY created_at DESC LIMIT 100').all(actor.id);
     },
     markNoticeSeen(actor,id){
