@@ -15,6 +15,7 @@ import { createLocalCommerce } from './commerce.mjs';
 import { validateWebVtt } from './captions.mjs';
 import { createLocalAffiliations } from './affiliations.mjs';
 import { createLocalRightsCases } from './rights-cases.mjs';
+import { createLocalGovernance } from './governance.mjs';
 import { createLocalAccountEmail } from './account-email.mjs';
 
 export const SESSION_COOKIE='campus_local_session';
@@ -243,6 +244,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
   const accountEmail=createLocalAccountEmail({db,transaction,audit,error,validatePassword,getSession:token=>store.getSession(token),studentAllowed:row=>
     (pilotEmail===null||row.email===pilotEmail)&&(pilotInvite===null||Boolean(db.prepare('SELECT 1 FROM pilot_invitation_claims WHERE user_id=?').get(row.id)))});
   const rightsCases=createLocalRightsCases({db,transaction,audit,error,requireAdmin,requireVerified});
+  const governance=createLocalGovernance({db,transaction,audit,error});
   const commerce=createLocalCommerce({db,transaction,audit,error,requireVerified,requireCreatorAction});
   const withVideo=(row)=>row?{...lesson(row),priceKobo:commerce.price(row.id),hasVideo:Boolean(db.prepare('SELECT 1 FROM lesson_videos WHERE lesson_id=?').get(row.id)),hasCaptions:Boolean(db.prepare('SELECT 1 FROM lesson_captions WHERE lesson_id=?').get(row.id)),likeCount:db.prepare('SELECT COUNT(*) AS n FROM lesson_likes WHERE lesson_id=?').get(row.id).n}:null;
   function editableVideoLesson(actor,id){
@@ -367,7 +369,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       if(existing)throw error('ADMIN_ALREADY_EXISTS',409);
       const validated=validateEmail(email);validatePassword(password);
       const salt=randomBytes(16).toString('hex');const pw=scryptSync(password,salt,64).toString('hex');const id=randomUUID();
-      transaction(()=>{db.prepare("INSERT INTO users(id,email,password_hash,salt,role,created_at) VALUES(?,?,?,?,'admin',?)").run(id,validated,pw,salt,stamp());audit(id,'admin.bootstrapped',id);});
+      transaction(()=>{db.prepare("INSERT INTO users(id,email,password_hash,salt,role,created_at) VALUES(?,?,?,?,'admin',?)").run(id,validated,pw,salt,stamp());governance.bootstrapOwner(id);audit(id,'admin.bootstrapped',id);});
       return id;
     },
     createInstitution(actor,name){
@@ -1117,6 +1119,20 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         return {status:'completed',replayed:false};
       });
     },
+    // Week 7 governance is role-scoped. Financial and rights decisions remain with their domain owners.
+    governancePermission:governance.requireCapability,
+    governancePermissions:governance.permissions,
+    governanceRoles:governance.roles,
+    assignGovernanceRole:governance.assignRole,
+    revokeGovernanceRole:governance.revokeRole,
+    governanceDashboard:governance.dashboard,
+    governanceHistory:governance.history,
+    reportSecurityIncident:governance.reportIncident,
+    governanceIncidents:governance.incidents,
+    transitionSecurityIncident:governance.changeIncident,
+    proposeDataRetention:governance.proposeRetention,
+    retentionProposals:governance.retentionProposals,
+    rejectDataRetention:governance.rejectRetention,
     // Case reports never mutate payment ledgers or settle financial disputes.
     submitCopyrightClaim:rightsCases.copyrightClaim,
     myCopyrightClaims:rightsCases.myClaims,
