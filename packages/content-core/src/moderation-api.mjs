@@ -1,3 +1,4 @@
+import {supabaseServerHeaders} from './supabase-runtime-config.mjs';
 import { prepareModerationDecision, ContentRuleError } from './content.mjs';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -88,7 +89,7 @@ export function createSupabaseModerationDependencies({url,publicKey,serverKey,fe
   async function request(path,{method='GET',key=serverKey,params={},body,prefer}={}) {
     const dest=new URL(path,base);
     for(const [param,value] of Object.entries(params))dest.searchParams.set(param,value);
-    const res=await fetcher(dest,{method,headers:{apikey:key,authorization:`Bearer ${key}`,...(body?{'content-type':'application/json'}:{}),...(prefer?{prefer}:{})},body:body?JSON.stringify(body):undefined,redirect:'error'});
+    const res=await fetcher(dest,{method,headers:{...supabaseServerHeaders(key),...(body?{'content-type':'application/json'}:{}),...(prefer?{prefer}:{})},body:body?JSON.stringify(body):undefined,redirect:'error'});
     if(!res.ok)throw new Error('Provider unavailable');
     return res.status===204?[]:res.json();
   }
