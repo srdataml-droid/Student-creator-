@@ -124,15 +124,11 @@ FOR SELECT TO authenticated USING (
   user_id=(SELECT auth.uid())
   OR EXISTS(SELECT 1 FROM public.interactive_classes c WHERE c.id=class_id AND c.host_id=(SELECT auth.uid()))
 );
-CREATE POLICY creator_availability_same_campus ON public.creator_availability
-FOR SELECT TO authenticated USING (
-  creator_id=(SELECT auth.uid())
-  OR (EXISTS(SELECT 1 FROM public.student_profiles viewer
-     JOIN public.student_profiles creator ON creator.user_id=creator_id
-     WHERE viewer.user_id=(SELECT auth.uid()) AND viewer.institution_id=creator.institution_id
-       AND viewer.verified_at IS NOT NULL AND NOT viewer.suspended)
-     AND public.creator_can_view_published(creator_id))
-);
+-- Browser sees only the creator's own slots. Student discovery is served by
+-- the audited API after campus and creator message restriction checks; do not
+-- bypass profile RLS with an unsafe cross-user join.
+CREATE POLICY creator_availability_owner_read ON public.creator_availability
+FOR SELECT TO authenticated USING (creator_id=(SELECT auth.uid()));
 CREATE POLICY learning_request_participants_only ON public.personal_learning_requests
 FOR SELECT TO authenticated USING (
   (student_id=(SELECT auth.uid()) OR creator_id=(SELECT auth.uid()))
