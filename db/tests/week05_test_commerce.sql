@@ -17,7 +17,14 @@ do $$ begin
  if has_function_privilege('anon','public.week05_apply_test_charge(text,text,bigint,text,text,text,bigint)','execute') or has_function_privilege('authenticated','public.week05_create_test_order(uuid,text,uuid,text)','execute') or has_schema_privilege('authenticated','week05_finance','usage') then raise exception 'Browser access leaked'; end if;
 end $$;
 set local role service_role;
-do $$
+do $ begin
+ begin perform public.week05_create_test_order('50000000-0000-4000-8000-000000000002','buyer@example.invalid','50000000-0000-4000-8000-000000000007','week05-disabled-0001'); raise exception 'Disabled staging gate accepted order'; exception when insufficient_privilege then null; end;
+ begin update week05_finance.runtime_gate set allow_test_checkout=true; raise exception 'Service role can enable staging checkout'; exception when insufficient_privilege then null; end;
+end $;
+reset role;
+update week05_finance.runtime_gate set allow_test_checkout=true where singleton;
+set local role service_role;
+do $
 declare b uuid:='50000000-0000-4000-8000-000000000002'; c uuid:='50000000-0000-4000-8000-000000000007'; other uuid:='50000000-0000-4000-8000-000000000003'; r jsonb; ref text; oid uuid; ref2 text; oid2 uuid;
 begin
  r:=public.week05_create_test_order(b,'buyer@example.invalid',c,'week05-request-0001'); ref:=r->>'reference'; oid:=(r->>'order_id')::uuid;
@@ -30,6 +37,8 @@ begin
  begin perform public.week05_apply_test_charge(ref,'w05_tx',20000,'NGN','live','buyer@example.invalid',0); raise exception 'Live accepted'; exception when invalid_parameter_value then null; end;
  begin perform public.week05_apply_test_charge(ref,'w05_tx',20000,'NGN','test','other@example.invalid',0); raise exception 'Wrong buyer accepted'; exception when check_violation then null; end;
  if exists(select 1 from public.entitlements where order_id=oid) then raise exception 'Pending granted access'; end if;
+ begin update public.orders set status='paid' where id=oid; raise exception 'Direct paid state allowed'; exception when check_violation then null; end;
+ begin insert into public.entitlements(buyer_id,content_id,order_id,state) values(b,c,oid,'active'); raise exception 'Direct entitlement granted'; exception when check_violation then null; end;
  r:=public.week05_apply_test_charge(ref,'w05_tx',20000,'NGN','test','buyer@example.invalid',100);
  if r->>'status'<>'paid' then raise exception 'Charge failed'; end if;
  if (select count(*) from public.entitlements where order_id=oid and state='active')<>1 then raise exception 'Entitlement missing'; end if;
@@ -42,6 +51,7 @@ begin
  if (select state from public.entitlements where order_id=oid)<>'active' then raise exception 'Duplicate reversal revoked primary'; end if;
  perform public.week05_record_test_reversal(ref,'w05_tx','w05-refund-primary','refund',20000,'NGN','test');
  if (select state from public.entitlements where order_id=oid)<>'revoked' then raise exception 'Refund failed to revoke'; end if;
+ begin update public.entitlements set state='active' where order_id=oid; raise exception 'Refunded entitlement reactivated'; exception when check_violation then null; end;
  r:=public.week05_apply_test_charge(ref,'w05_tx',20000,'NGN','test','buyer@example.invalid',100);
  if r->>'status'<>'refunded' or r->>'replayed'<>'true' then raise exception 'Late charge reactivated access'; end if;
  if (select coalesce(sum(case when credit_account='creator_pending' then amount_kobo when debit_account='creator_pending' then -amount_kobo else 0 end),0) from week05_finance.journal where order_id=oid)<>0 then raise exception 'Creator balance not reversed'; end if;

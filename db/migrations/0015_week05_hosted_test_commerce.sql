@@ -6,6 +6,12 @@ create schema week05_finance;
 revoke all on schema week05_finance from public,anon,authenticated;
 grant usage on schema week05_finance to service_role;
 
+-- Explicit database-owner approval required even for NEW test orders. Never enable
+-- on a live project; existing paid-access policies do not separate test licenses.
+create table week05_finance.runtime_gate (singleton boolean primary key check(singleton), allow_test_checkout boolean not null default false);
+insert into week05_finance.runtime_gate(singleton) values(true);
+alter table week05_finance.runtime_gate enable row level security;
+
 create table week05_finance.order_terms (
  order_id uuid primary key references public.orders(id),
  buyer_email text not null check(length(buyer_email) between 3 and 254),
@@ -19,7 +25,8 @@ create table week05_finance.receipts (
  amount_kobo bigint not null check(amount_kobo between 20000 and 9007199254740991),
  fee_kobo bigint check(fee_kobo between 0 and amount_kobo),
  duplicate boolean not null,
- received_at timestamptz not null default now()
+ received_at timestamptz not null default now(),
+ unique(transaction_id,order_id)
 );
 create unique index week05_one_primary_receipt on week05_finance.receipts(order_id) where not duplicate;
 create table week05_finance.reversals (
@@ -44,6 +51,7 @@ create table week05_finance.journal (
  currency text not null default 'NGN' check(currency='NGN'),
  created_at timestamptz not null default now(),
  unique(transaction_id,kind),
+ foreign key(transaction_id,order_id) references week05_finance.receipts(transaction_id,order_id),
  check((kind='charge' and debit_account='processor_clearing' and credit_account='creator_pending')
  or (kind='duplicate_charge' and debit_account='processor_clearing' and credit_account='duplicate_liability')
  or (kind='provider_fee' and debit_account='provider_fee_suspense' and credit_account='processor_clearing')
@@ -55,7 +63,8 @@ alter table week05_finance.receipts enable row level security;
 alter table week05_finance.reversals enable row level security;
 alter table week05_finance.journal enable row level security;
 revoke all on all tables in schema week05_finance from public,anon,authenticated,service_role;
-grant select,insert on all tables in schema week05_finance to service_role;
+grant select,insert on week05_finance.order_terms,week05_finance.receipts,week05_finance.reversals,week05_finance.journal to service_role;
+grant select on week05_finance.runtime_gate to service_role;
 
 create function week05_finance.deny_mutation() returns trigger
 language plpgsql security invoker set search_path='' as $$
@@ -79,6 +88,9 @@ begin
   if old.status in ('refunded','chargeback') and new.status is distinct from old.status then
    raise exception 'TERMINAL_ORDER' using errcode='23514';
   end if;
+  if new.status='paid' and not exists(select 1 from week05_finance.receipts r join week05_finance.journal j on j.transaction_id=r.transaction_id and j.order_id=r.order_id and j.kind='charge' where r.order_id=old.id and not r.duplicate and r.amount_kobo=new.amount_kobo and j.amount_kobo=new.amount_kobo and not exists(select 1 from week05_finance.reversals v where v.transaction_id=r.transaction_id)) then
+   raise exception 'VERIFIED_JOURNAL_REQUIRED' using errcode='23514';
+  end if;
   if old.paid_at is not null and new.paid_at is distinct from old.paid_at then
    raise exception 'IMMUTABLE_PAID_AT' using errcode='23514';
   end if;
@@ -88,6 +100,30 @@ begin
 end $$;
 revoke all on function week05_finance.immutable_terms() from public,anon,authenticated;
 create trigger week05_order_snapshot before update or delete on public.orders for each row execute function week05_finance.immutable_terms();
+
+-- Block a direct active entitlement for managed orders without a matching paid
+-- receipt and posted charge. The existing visibility policy still enforces
+-- account, course and creator restrictions. Revocation never grants access.
+create function week05_finance.entitlement_guard() returns trigger
+language plpgsql security invoker set search_path='' as $
+begin
+ if tg_op='UPDATE' and exists(select 1 from week05_finance.order_terms where order_id=old.order_id) then
+  if (new.order_id,new.buyer_id,new.content_id,new.granted_at) is distinct from (old.order_id,old.buyer_id,old.content_id,old.granted_at) then
+   raise exception 'IMMUTABLE_ENTITLEMENT' using errcode='23514';
+  end if;
+ end if;
+ if new.state='active' and exists(select 1 from week05_finance.order_terms where order_id=new.order_id)
+ and not exists(select 1 from public.orders o join week05_finance.receipts r on r.order_id=o.id and not r.duplicate
+ join week05_finance.journal j on j.transaction_id=r.transaction_id and j.order_id=o.id and j.kind='charge'
+ where o.id=new.order_id and o.buyer_id=new.buyer_id and o.content_id=new.content_id and o.status='paid'
+ and o.amount_kobo=r.amount_kobo and j.amount_kobo=o.amount_kobo
+ and not exists(select 1 from week05_finance.reversals v where v.transaction_id=r.transaction_id)) then
+  raise exception 'VERIFIED_JOURNAL_REQUIRED' using errcode='23514';
+ end if;
+ return new;
+end $;
+revoke all on function week05_finance.entitlement_guard() from public,anon,authenticated;
+create trigger week05_entitlement_guard before insert or update on public.entitlements for each row execute function week05_finance.entitlement_guard();
 
 -- The caller derives buyer and email from trusted current Auth, not request JSON.
 -- A buyer-wide advisory lock serializes checkout creation across different request keys.
@@ -99,6 +135,7 @@ begin
  or p_email is null or length(p_email)>254 or p_email !~ '^[^[:space:]@]+@[^[:space:]@]+[.][^[:space:]@]+$' then
   raise exception 'INVALID_ORDER_REQUEST' using errcode='22023';
  end if;
+ if not exists(select 1 from week05_finance.runtime_gate where singleton and allow_test_checkout) then raise exception 'TEST_CHECKOUT_DISABLED' using errcode='42501'; end if;
  if not public.affiliation_eligible(p_buyer) then raise exception 'NOT_ELIGIBLE' using errcode='42501'; end if;
  perform pg_advisory_xact_lock(hashtextextended('week05:buyer:'||p_buyer::text,0));
  select * into o from public.orders where buyer_id=p_buyer and idempotency_key=p_key;
@@ -137,6 +174,8 @@ begin
  if p_ref is null or p_tx is null or p_tx !~ '^[A-Za-z0-9_-]{1,128}$' or p_amount is null
  or p_currency is distinct from 'NGN' or p_domain is distinct from 'test' or p_email is null
  or (p_fee is not null and (p_fee<0 or p_fee>p_amount)) then raise exception 'INVALID_VERIFICATION' using errcode='22023'; end if;
+ -- Serialize provider identity across DIFFERENT orders as well as callbacks for one order.
+ perform pg_advisory_xact_lock(hashtextextended('week05:tx:'||p_tx,0));
  -- Same order lock used by reversal, including early reversal before charge.
  select x.* into o from public.orders x join public.payment_attempts a on a.order_id=x.id
  where a.provider='paystack' and a.reference=p_ref for update of x;
@@ -182,6 +221,7 @@ declare o public.orders%rowtype; r week05_finance.receipts%rowtype; existing wee
 begin
  if p_ref is null or p_tx is null or p_tx !~ '^[A-Za-z0-9_-]{1,128}$' or p_event is null or length(p_event) not between 8 and 200
  or p_kind is null or p_kind not in ('refund','chargeback') or p_amount is null or p_currency is distinct from 'NGN' or p_domain is distinct from 'test' then raise exception 'INVALID_REVERSAL' using errcode='22023'; end if;
+ perform pg_advisory_xact_lock(hashtextextended('week05:tx:'||p_tx,0));
  select x.* into o from public.orders x join public.payment_attempts a on a.order_id=x.id where a.reference=p_ref and a.provider='paystack' for update of x;
  if not found then raise exception 'ORDER_NOT_FOUND' using errcode='P0002'; end if;
  if not exists(select 1 from week05_finance.order_terms where order_id=o.id) or o.environment<>'test' or o.amount_kobo is distinct from p_amount then raise exception 'REVERSAL_MISMATCH' using errcode='23514'; end if;
