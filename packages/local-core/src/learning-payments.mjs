@@ -2,7 +2,7 @@
  * Reuses Week 5 Paystack test verification and commission=0 signed ledger principles.
  * NO automatic refunds, real PSP charges, creator withdrawals or production settlement.
  */
-import {randomBytes} from 'node:crypto';
+import {randomBytes,createHash} from 'node:crypto';
 import {quoteLessonPurchase} from '../../payment-core/src/payments.mjs';
 import {decodeVerifiedPaystackWebhookV1} from '../../payment-core/src/webhooks.mjs';
 
@@ -212,6 +212,63 @@ export function createLearningPayments({db,transaction,audit,error,requireVerifi
       return {...status(db.prepare('SELECT * FROM learning_purchase_orders WHERE reference=?').get(reference)),replayed:false};
     });
   }
+  function ingestSignedTestWebhook(rawBody,signature,signingSecrets){
+    if(process.env.NODE_ENV==='production')throw error('SANDBOX_PAYMENTS_DISABLED',403);
+    // Same strict HMAC and timestamp semantics as Week 5.
+    const event=decodeVerifiedPaystackWebhookV1(rawBody,signature,signingSecrets);
+    if(event.event!=='charge.success')return {ignored:true};
+    const reference=event.data.reference,providerId=event.data.id;
+    if(typeof reference!=='string'||typeof providerId!=='string'&&typeof providerId!=='number'||
+       event.data.domain!=='test'||String(providerId).length<1)
+      throw error('INVALID_EVENT',422);
+    const raw=Buffer.isBuffer(rawBody)?rawBody:Buffer.from(rawBody);
+    const hash=createHash('sha256').update(raw).digest('hex');
+    const eventKey='charge.success:'+String(providerId);
+    return transaction(()=>{
+      const order=db.prepare('SELECT reference FROM learning_purchase_orders WHERE reference=?').get(reference);
+      if(!order)throw error('ORDER_NOT_FOUND',404);
+      // Duplicate signed deliveries cannot enqueue a second financial charge.
+      const old=db.prepare('SELECT order_reference,raw_sha256 FROM learning_payment_inbox WHERE event_key=?').get(eventKey);
+      if(old){
+        if(old.order_reference!==reference||old.raw_sha256!==hash)throw error('EVENT_CONFLICT',409);
+        return {accepted:true,replayed:true};
+      }
+      db.prepare("INSERT INTO learning_payment_inbox(event_key,order_reference,transaction_id,raw_sha256,received_at,state) VALUES(?,?,?,?,?,'pending')")
+        .run(eventKey,reference,String(providerId),hash,stamp());
+      return {accepted:true,replayed:false};
+    });
+  }
+  async function drainSignedTestInbox(actor,gateway,{limit=20}={}){
+    requireAdmin(actor);requireTest(gateway);
+    if(!Number.isSafeInteger(limit)||limit<1||limit>30)throw error('INVALID_LIMIT',422);
+    const result=[];
+    for(let i=0;i<limit;i++){
+      // Lease durable row before any network call; concurrent processes may
+      // recover expired leases without granting entitlements twice.
+      const event=transaction(()=>{
+        const found=db.prepare("SELECT * FROM learning_payment_inbox WHERE state='pending' OR (state='processing' AND lease_until<?) ORDER BY received_at LIMIT 1").get(Date.now());
+        if(!found)return null;
+        const n=db.prepare("UPDATE learning_payment_inbox SET state='processing',lease_until=?,attempts=attempts+1 WHERE event_key=? AND (state='pending' OR (state='processing' AND lease_until<?))")
+          .run(Date.now()+30000,found.event_key,Date.now()).changes;
+        return n?found:null;
+      });
+      if(!event)break;
+      try{
+        const order=db.prepare('SELECT * FROM learning_purchase_orders WHERE reference=?').get(event.order_reference);
+        if(!order)throw error('ORDER_NOT_FOUND',404);
+        const verified=await gateway.verify({reference:order.reference,buyerEmail:order.buyer_email,amountKobo:order.amount_kobo,domain:'test'});
+        if(verified.providerTransactionId!==event.transaction_id)throw error('TRANSACTION_MISMATCH',409);
+        const payment=applyVerifiedCharge(order.reference,verified);
+        db.prepare("UPDATE learning_payment_inbox SET state='processed',lease_until=0,last_error_code=NULL WHERE event_key=?").run(event.event_key);
+        result.push({eventKey:event.event_key,state:'processed',status:payment.status});
+      }catch(e){
+        const code=typeof e.code==='string'&&/^[A-Z_]{1,64}$/.test(e.code)?e.code:'VERIFICATION_FAILED';
+        db.prepare("UPDATE learning_payment_inbox SET state='failed',lease_until=0,last_error_code=? WHERE event_key=?").run(code,event.event_key);
+        result.push({eventKey:event.event_key,state:'failed',code});
+      }
+    }
+    return result;
+  }
   function ownOrders(actor){
     requireVerified(actor);
     return db.prepare('SELECT * FROM learning_purchase_orders WHERE buyer_id=? ORDER BY created_at DESC LIMIT 100').all(actor.id).map(status);
@@ -226,5 +283,6 @@ export function createLearningPayments({db,transaction,audit,error,requireVerifi
   return {createLearningOrder:createOrder,hasActiveEntitlement,
     learningOrder:(actor,ref)=>status(requireOrder(actor,ref)),
     myLearningOrders:ownOrders,learningCheckout:checkout,learningConfirm:confirm,
-    applyVerifiedLearningCharge:applyVerifiedCharge,simulateLearningReversal:reversal,learningLedger:checkLedger};
+    applyVerifiedLearningCharge:applyVerifiedCharge,simulateLearningReversal:reversal,learningLedger:checkLedger,
+    receiveSignedLearningWebhook:ingestSignedTestWebhook,drainSignedLearningInbox:drainSignedTestInbox};
 }
