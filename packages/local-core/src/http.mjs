@@ -182,6 +182,8 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
         if(segments.length===3&&segments[0]==='orders'&&segments[2]==='receipt'){if(!actor)return unauthorized();return responses({receipt:store.getPurchaseReceipt(actor,segments[1])});}
         if(path==='my/purchases'){if(!actor)return unauthorized();return responses({orders:store.myPurchaseOrders(actor)});}
         if(segments.length===2&&segments[0]==='orders'){if(!actor)return unauthorized();return responses({order:store.getPurchaseOrder(actor,segments[1])});}
+        if(path==='my/creator-financial-history'){if(!actor)return unauthorized();return responses({entries:store.creatorFinancialHistory(actor)});}
+        if(path==='admin/finance-overview'){if(!actor)return unauthorized();return responses({finance:store.financeOverview(actor)});}
         if(path==='my/creator-earnings'){if(!actor)return unauthorized();return responses({earnings:store.creatorEarnings(actor)});}
         if(segments.length===3&&segments[0]==='lessons'&&segments[2]==='access'){if(!actor)return unauthorized();return responses({access:store.lessonAccess(actor,segments[1])});}
         if(path==='admin/students'){if(!actor)return unauthorized();return responses({students:store.listStudentAccounts(cookie)});}
