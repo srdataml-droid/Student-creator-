@@ -84,7 +84,7 @@ export function createHostedGovernanceHandler({getEnv=()=>process.env,fetcher=fe
    };
    if(path!=='dashboard'){
      const {table,select,fields}=configs[path];
-     const rows=await getRows(table,{select,order:'created_at.desc',limit:50});
+     const rows=await getRows(table,{select,order:table==='governance_staff_role_grants'?'granted_at.desc':'created_at.desc',limit:50});
      const resource={incidents:'incidents',roles:'roles',retention:'proposals',history:'events'}[path];
      return respond(200,{[resource]:selectRows(rows,fields)});
    }
