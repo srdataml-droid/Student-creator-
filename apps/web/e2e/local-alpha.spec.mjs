@@ -325,3 +325,23 @@ test('mobile shell communicates offline state and recovers without replaying act
     await context.close();
   }
 });
+
+
+test('mobile navigation announces the current route and supports small screens',async({browser})=>{
+  const context=await browser.newContext({baseURL:BASE,viewport:{width:320,height:740}});
+  try{
+    const page=await context.newPage();
+    await page.goto('/');
+    const nav=page.getByRole('navigation',{name:'Mobile navigation'});
+    await expect(nav.getByRole('link',{name:'Home'})).toHaveAttribute('aria-current','page');
+    await expect(nav.locator('[aria-current]')).toHaveCount(1);
+    await nav.getByRole('link',{name:'Explore'}).click();
+    await expect(page).toHaveURL(/\/search$/);
+    await expect(nav.getByRole('link',{name:'Explore'})).toHaveAttribute('aria-current','page');
+    await expect(nav.locator('[aria-current]')).toHaveCount(1);
+    const sizes=await page.evaluate(()=>({viewport:innerWidth,document:document.documentElement.scrollWidth}));
+    expect(sizes.document).toBeLessThanOrEqual(sizes.viewport+1);
+    await page.setViewportSize({width:1280,height:800});
+    await expect(nav).not.toBeVisible();
+  }finally{await context.close();}
+});
