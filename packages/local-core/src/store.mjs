@@ -15,6 +15,7 @@ import { createLocalCommerce } from './commerce.mjs';
 import { validateWebVtt } from './captions.mjs';
 import { createLocalAffiliations } from './affiliations.mjs';
 import { createLocalRightsCases } from './rights-cases.mjs';
+import { createAccountChallenges } from './account-challenges.mjs';
 
 export const SESSION_COOKIE='campus_local_session';
 const SESSION_TTL=7*24*60*60;
@@ -22,7 +23,7 @@ const sha=(v)=>createHash('sha256').update(v).digest('hex');
 const stamp=()=>new Date().toISOString();
 const human=(row)=>row?{
   id:row.id,email:row.email,role:row.role,institutionId:row.institution_id,
-  verifiedAt:row.verified_at,suspended:Boolean(row.suspended),allowMessages:Boolean(row.allow_messages)
+  verifiedAt:row.verified_at,emailVerifiedAt:row.email_verified_at??null,suspended:Boolean(row.suspended),allowMessages:Boolean(row.allow_messages)
 }:null;
 const lesson=(r)=>r?({id:r.id,creatorId:r.creator_id,institutionId:r.institution_id,courseId:r.course_id,topicId:r.topic_id??null,title:r.title,description:r.description,previewText:r.preview_text,lessonText:r.lesson_text,status:r.status,createdAt:r.created_at,publishedAt:r.published_at,reviewReason:r.review_reason}):null;
 const course=(r)=>r?({id:r.id,institutionId:r.institution_id,code:r.code,title:r.title,active:Boolean(r.active)}):null;
@@ -238,6 +239,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     requireVerifiedUser(current);
     if(current.institutionId!==actor.institutionId||!affiliations.eligible(actor.id))throw error('VERIFICATION_REQUIRED',403);
   }
+  const challenges=createAccountChallenges({db,transaction,audit,error,validatePassword,pepper:throttlePepper,getSession:token=>store.getSession(token)});
   const affiliations=createLocalAffiliations({db,transaction,audit,error,requireAdmin});
   const rightsCases=createLocalRightsCases({db,transaction,audit,error,requireAdmin,requireVerified});
   const commerce=createLocalCommerce({db,transaction,audit,error,requireVerified,requireCreatorAction});
@@ -463,6 +465,11 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       if(pilotInvite!==null&&row?.role==='student'&&!db.prepare('SELECT 1 FROM pilot_invitation_claims WHERE user_id=?').get(row.id))return null;
       return row?.role==='student'&&!affiliations.eligible(row.id)?{...human(row),verifiedAt:null}:human(row);
     },
+    issueEmailChallenge:challenges.issueEmail,
+    issuePasswordReset:challenges.issueReset,
+    confirmEmailChallenge:challenges.confirmEmail,
+    resetPassword:challenges.resetPassword,
+    cancelAccountChallenge:challenges.cancel,
     logout(token){if(token&&/^[A-Za-z0-9_-]{43}$/.test(token))db.prepare('DELETE FROM sessions WHERE token_hash=?').run(sha(token));},
     revokeAllSessions(sessionToken){
       return transaction(()=>{
@@ -492,6 +499,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         if(Boolean(target.suspended)===suspended)throw error('SUSPENSION_CONFLICT',409);
         db.prepare("UPDATE users SET suspended=? WHERE id=? AND role='student'").run(Number(suspended),userId);
         // Reinstatement must not resurrect a pre-suspension session or grant.
+        db.prepare('DELETE FROM account_challenges WHERE user_id=?').run(userId);
         const revokedSessions=Number(db.prepare('DELETE FROM sessions WHERE user_id=?').run(userId).changes);
         const revokedCreatorGrants=Number(db.prepare('DELETE FROM playback_grants WHERE lesson_id IN (SELECT id FROM lessons WHERE creator_id=?)').run(userId).changes);
         audit(operator.id,suspended?'student.suspended':'student.reinstated',userId,{reason:reason.trim(),revokedSessions,revokedCreatorGrants});

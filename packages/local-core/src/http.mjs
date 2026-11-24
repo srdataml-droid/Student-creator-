@@ -53,7 +53,7 @@ const allowed=(s)=>s&&typeof s==='string'&&s.length<100;
  * Only standalone localhost use. No payment provider, no staging credentials.
  * @param {object} store - an open local SQLite store
  */
-export function createLocalHandler(store,{sandboxGateway,payments=null}={}){
+export function createLocalHandler(store,{sandboxGateway,payments=null,accountMailer=null}={}){
   // No live mode. Production builds keep all financial actions disabled.
   const gateway=process.env.NODE_ENV==='production'?null:(payments?.gateway??(sandboxGateway===undefined?(process.env.PAYSTACK_TEST_SECRET_KEY?createPaystackClient({secretKey:process.env.PAYSTACK_TEST_SECRET_KEY,environment:'test'}):null):sandboxGateway));
   const signingSecrets=payments?.signingSecrets??(process.env.PAYSTACK_WEBHOOK_KEY_ID&&process.env.PAYSTACK_WEBHOOK_SIGNING_SECRET?[{id:process.env.PAYSTACK_WEBHOOK_KEY_ID,secret:process.env.PAYSTACK_WEBHOOK_SIGNING_SECRET}]:[]);
@@ -211,6 +211,28 @@ export function createLocalHandler(store,{sandboxGateway,payments=null}={}){
         store.logout(cookie);return responses({ok:true},200,{'set-cookie':`${SESSION_COOKIE}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${new URL(request.url).protocol==='https:'?'; Secure':''}`});
       }
       const body=await jsonBody(request);
+      if(['auth/email/request','auth/email/confirm','auth/password/request','auth/password/reset'].includes(path)){
+        // Default runtime has no delivery adapter: fail closed, no synthetic
+        // token disclosure or claim that an email was sent.
+        if(typeof accountMailer!=='function')return fail('ACCOUNT_EMAIL_UNAVAILABLE',503);
+        if(path==='auth/email/request'||path==='auth/password/request'){
+          const isEmail=path==='auth/email/request';
+          if(isEmail&&!actor)return unauthorized();
+          if(Object.keys(body).some(k=>k!=='email'))return fail('UNEXPECTED_BODY',400);
+          const challenge=isEmail?store.issueEmailChallenge(body.email,cookie):store.issuePasswordReset(body.email);
+          if(challenge){
+            try{await accountMailer(challenge);}catch{store.cancelAccountChallenge(challenge.token);}
+          }
+          return responses({accepted:true},202);
+        }
+        if(path==='auth/email/confirm'){
+          if(!actor)return unauthorized();
+          if(Object.keys(body).some(k=>k!=='token'))return fail('UNEXPECTED_BODY',400);
+          return responses(store.confirmEmailChallenge(body.token,cookie));
+        }
+        if(Object.keys(body).some(k=>!['token','password'].includes(k)))return fail('UNEXPECTED_BODY',400);
+        return responses(store.resetPassword(body.token,body.password));
+      }
       if(path==='auth/logout-all'){
         if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
         if(!actor)return unauthorized();
