@@ -15,7 +15,7 @@ test('invalid course ID does not make provider request',async()=>{
  const result=await getPublicCourse({id:'bad',fetcher:()=>{throw Error('do not fetch');}});assert.equal(result,null);
 });
 test('remote HTTP URL rejected and provider errors sanitized',async()=>{
- await assert.rejects(()=>getPublicCourses({env:{SUPABASE_URL:'http://evil.example',SUPABASE_PUBLISHABLE_KEY:'abc'}}),/Invalid project URL/);
+ await assert.rejects(()=>getPublicCourses({env:{SUPABASE_URL:'http://evil.example',SUPABASE_PUBLISHABLE_KEY:'abc'}}),/INVALID_SUPABASE_URL/);
  await assert.rejects(()=>getPublicCourses({env:{SUPABASE_URL:'https://example.supabase.co',SUPABASE_PUBLISHABLE_KEY:'public'},fetcher:async()=>new Response('private failure',{status:500})}),/Course provider unavailable/);
 });
 
