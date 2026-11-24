@@ -36,7 +36,13 @@ BEGIN
  OR (SELECT count(*) FROM public.verification_requests
      WHERE user_id='8a5a7193-ea31-49f0-8ac7-f7f06624a4d1') <> 0
  THEN RAISE EXCEPTION 'Authenticated student A can view another student or lost own rows'; END IF;
- IF has_table_privilege(current_user,'public.content_assets','SELECT')
+ IF NOT has_column_privilege(current_user,'public.content_items','title','SELECT')
+ OR has_column_privilege(current_user,'public.content_items','creation_key','SELECT')
+ OR has_column_privilege(current_user,'public.content_items','creation_hash','SELECT')
+ OR has_column_privilege(current_user,'public.content_items','reviewer_id','SELECT')
+ OR has_column_privilege(current_user,'public.content_items','review_reason','SELECT')
+ OR has_column_privilege(current_user,'public.content_items','rights_attested_at','SELECT')
+ OR has_table_privilege(current_user,'public.content_assets','SELECT')
  OR has_table_privilege(current_user,'public.ledger_entries','SELECT')
  OR has_table_privilege(current_user,'public.platform_staff','SELECT')
  OR has_table_privilege(current_user,'public.student_profiles','INSERT,UPDATE,DELETE')
@@ -65,6 +71,10 @@ BEGIN
  OR has_table_privilege(current_user,'public.verification_requests','SELECT')
  OR has_table_privilege(current_user,'public.orders','SELECT')
  OR NOT has_table_privilege(current_user,'public.institutions','SELECT')
+ OR NOT has_column_privilege(current_user,'public.content_items','title','SELECT')
+ OR has_column_privilege(current_user,'public.content_items','creation_key','SELECT')
+ OR has_column_privilege(current_user,'public.content_items','creation_hash','SELECT')
+ OR has_column_privilege(current_user,'public.content_items','review_reason','SELECT')
  THEN RAISE EXCEPTION 'Anonymous privilege boundary incorrect'; END IF;
 END
 $rls$;
