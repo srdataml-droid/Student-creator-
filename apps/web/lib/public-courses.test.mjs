@@ -15,7 +15,7 @@ test('invalid course ID does not make provider request',async()=>{
  const result=await getPublicCourse({id:'bad',fetcher:()=>{throw Error('do not fetch');}});assert.equal(result,null);
 });
 test('remote HTTP URL rejected and provider errors sanitized',async()=>{
- await assert.rejects(()=>getPublicCourses({env:{SUPABASE_URL:'http://evil.example',SUPABASE_PUBLISHABLE_KEY:'abc'}}),/Invalid project URL/);
+ await assert.rejects(()=>getPublicCourses({env:{SUPABASE_URL:'http://evil.example',SUPABASE_PUBLISHABLE_KEY:'abc'}}),/INVALID_SUPABASE_URL/);
  await assert.rejects(()=>getPublicCourses({env:{SUPABASE_URL:'https://example.supabase.co',SUPABASE_PUBLISHABLE_KEY:'public'},fetcher:async()=>new Response('private failure',{status:500})}),/Course provider unavailable/);
 });
 
@@ -27,4 +27,17 @@ test('specific course resolves by id independently of the first 50-course direct
  assert.equal(result.code,'CSC 420');assert.equal(urls[0].searchParams.get('id'),`eq.${id}`);
  assert.equal(urls[0].searchParams.get('limit'),'1');
  assert.equal(urls[0].searchParams.has('order'),false);
+});
+
+test('Vercel lowercase Supabase settings load actual public catalog via RLS-scoped key',async()=>{
+ const ref='jnkqmlbkkvccnxrgkpno';
+ const env={supabase_url:'https://'+ref+'.supabase.co',supabase_publishable_key:'sb_publishable_fake_public',STUDENT_CREATORS_PROJECT_REF:ref};
+ const calls=[];
+ const fetcher=async (url,opts)=>{calls.push({url:String(url),headers:opts.headers});return Response.json([{id,active:true,code:'CSC101',title:'Introduction to computing'}]);};
+ const result=await getPublicCourses({env,fetcher});
+ assert.equal(result.state,'ready');
+ assert.equal(result.courses[0].title,'Introduction to computing');
+ assert.equal(calls[0].headers.apikey,'sb_publishable_fake_public');
+ assert.equal(calls[0].url.startsWith(env.supabase_url+'/rest/v1/courses'),true);
+ assert.equal('authorization' in calls[0].headers,false);
 });

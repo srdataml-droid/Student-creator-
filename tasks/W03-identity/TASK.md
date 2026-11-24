@@ -1,8 +1,8 @@
-# W12-community — Student Creators candidate-code workspace
+# W03-identity — Student Creators candidate-code workspace
 
-**Week 07; branch `work/week-07`**
+**Week 01; branch `work/week-01`**
 
-Work scope: Messages, course communities, teaching sessions.
+Work scope: Supabase auth, student eligibility, private verification, Resend recovery.
 
 These Week 1–8 groupings are **provisional groupings of the existing W00–W14 engineering workstreams**, not a previously approved detailed eight-week delivery schedule. Week 1 is the only active implementation target. Do not merge this branch into main or run external code merely because a repo is public.
 
@@ -15,7 +15,7 @@ These Week 1–8 groupings are **provisional groupings of the existing W00–W14
 
 ## Status
 - Candidate code: Not admitted until license/provenance/security review (unless a separate documented reference appears alongside this file)
-- Implementation: Deferred; research only
+- Implementation: Active Week 1 design/engineering; see master issue #34
 - Main integration: Not authorized by this template
 
 Primary tracker: https://github.com/worthkind/Student-creator-/issues/34

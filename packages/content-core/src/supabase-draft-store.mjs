@@ -1,3 +1,4 @@
+import {supabaseServerHeaders} from './supabase-runtime-config.mjs';
 /** Server-only Supabase REST adapter. Do not import into browser components. */
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function requireUUID(value) { if(!UUID.test(value)) throw new Error('Invalid identifier');return value; }
@@ -8,7 +9,7 @@ export function createSupabaseDraftDependencies({url,publicKey,serverKey,fetcher
   const api=async(path,{method='GET',body,prefer,params}={})=>{
     const endpoint=new URL(`/rest/v1/${path}`,base);
     if(params) for(const [k,v] of Object.entries(params)) endpoint.searchParams.set(k,v);
-    const response=await fetcher(endpoint,{method,headers:{apikey:serverKey,authorization:`Bearer ${serverKey}`,...(body?{'content-type':'application/json'}:{}),...(prefer?{prefer}: {})},body:body?JSON.stringify(body):undefined,redirect:'error'});
+    const response=await fetcher(endpoint,{method,headers:{...supabaseServerHeaders(serverKey),...(body?{'content-type':'application/json'}:{}),...(prefer?{prefer}: {})},body:body?JSON.stringify(body):undefined,redirect:'error'});
     if(!response.ok) throw new Error(`Database unavailable: ${response.status}`);
     return response.status===204?[]:response.json();
   };
