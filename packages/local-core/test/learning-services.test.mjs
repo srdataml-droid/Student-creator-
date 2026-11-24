@@ -239,7 +239,7 @@ test('room deletion worker retries provider errors and only administrators can d
     assert.equal((await x.call('classes/'+id+'/room-token','POST',{},a.host.cookie)).status,409);
     const student={id:a.viewer.id,role:'student',verifiedAt:new Date().toISOString(),institutionId:a.school};
     assert.equal(await x.store.drainRoomClosures(student,{deleteRoom:async()=>{}}).catch(e=>e.status),403);
-    const admin={id:'admin-placeholder',role:'admin',suspended:false};
+    const admin=x.store.login('admin@week06.invalid','Strong Synthetic Admin Password 2026').user;
     assert.equal(await x.store.drainRoomClosures(admin,null).catch(e=>e.status),503);
     let failedOnce=true,callCount=0;
     const provider={async deleteRoom(name){
