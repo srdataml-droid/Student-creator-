@@ -113,3 +113,26 @@ test('week7 retention proposals never delete records or silently approve policy;
   }finally{db.close();}
  }finally{x.finish();}
 });
+
+
+test('week7 server store methods reject cross-domain admin access even without HTTP middleware',async()=>{
+ const x=fixture();
+ try{
+  const helper=x.helper.user;
+  assert.throws(()=>x.store.listPendingUsers(helper),e=>e.status===403);
+  assert.throws(()=>x.store.reportQueue(helper),e=>e.status===403);
+  assert.throws(()=>x.store.reviewQueue(helper),e=>e.status===403);
+  assert.throws(()=>x.store.communityReportQueue(helper),e=>e.status===403);
+  assert.throws(()=>x.store.copyrightReviewQueue(helper),e=>e.status===403);
+  assert.throws(()=>x.store.privacyRequestQueue(helper),e=>e.status===403);
+  assert.throws(()=>x.store.resolvePaymentDispute(helper,'unknown-order','approved'),e=>e.status===403);
+  assert.equal((await x.call('admin/governance/roles/assign',{method:'POST',session:x.owner.token,body:{userId:x.secondId,role:'verification_reviewer'}})).status,200);
+  assert.equal(x.store.listPendingUsers(helper).length,1);
+  assert.throws(()=>x.store.reviewQueue(helper),e=>e.status===403);
+  assert.equal(x.store.verifyStudent(helper,x.student.id).id,x.student.id);
+  assert.equal((await x.call('admin/governance/roles/assign',{method:'POST',session:x.owner.token,body:{userId:x.secondId,role:'content_moderator'}})).status,200);
+  assert.deepEqual(x.store.reviewQueue(helper),[]);
+  assert.throws(()=>x.store.privacyRequestQueue(helper),e=>e.status===403);
+  assert.throws(()=>x.store.resolvePaymentDispute(helper,'unknown-order','approved'),e=>e.status===403);
+ }finally{x.finish();}
+});
