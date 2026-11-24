@@ -18,6 +18,7 @@ import { createLocalRightsCases } from './rights-cases.mjs';
 import { createLocalAccountEmail } from './account-email.mjs';
 import {createLearningServices} from './learning-services.mjs';
 import {createLearningPayments} from './learning-payments.mjs';
+import {createLocalLearningEmail} from './learning-email.mjs';
 
 export const SESSION_COOKIE='campus_local_session';
 const SESSION_TTL=7*24*60*60;
@@ -252,6 +253,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
   };
   const learning=createLearningServices({db,transaction,audit,error,requireVerified,requireCreatorAction,paymentEntitlements:classEntitlements,providerPresenceVerifier,clock:learningClock});
   learningPayments=createLearningPayments({db,transaction,audit,error,requireVerified,requireCreatorAction});
+  const learningEmail=createLocalLearningEmail({db,transaction,audit,error,requireVerified});
   const withVideo=(row)=>row?{...lesson(row),priceKobo:commerce.price(row.id),hasVideo:Boolean(db.prepare('SELECT 1 FROM lesson_videos WHERE lesson_id=?').get(row.id)),hasCaptions:Boolean(db.prepare('SELECT 1 FROM lesson_captions WHERE lesson_id=?').get(row.id)),likeCount:db.prepare('SELECT COUNT(*) AS n FROM lesson_likes WHERE lesson_id=?').get(row.id).n}:null;
   function editableVideoLesson(actor,id){
     requireVerified(actor);
@@ -1166,6 +1168,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     lessonAccess:commerce.lessonAccess,
     ...learning,
     ...learningPayments,
+    ...learningEmail,
     auditCount(){return db.prepare('SELECT count(*) AS n FROM audit_events').get().n;}
   };
   return store;
