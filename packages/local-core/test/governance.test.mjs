@@ -136,3 +136,33 @@ test('week7 server store methods reject cross-domain admin access even without H
   assert.throws(()=>x.store.resolvePaymentDispute(helper,'unknown-order','approved'),e=>e.status===403);
  }finally{x.finish();}
 });
+
+
+test('week7 institutional appeal and finance queues are independently scoped',async()=>{
+ const x=fixture();
+ try{
+  const appeal=x.store.submitVerificationAppeal(x.viewer.user,'My synthetic student verification requires review of an institution claim.');
+  assert.equal(appeal.status,'open');
+  assert.equal((await x.call('admin/verification-appeals',{session:x.viewer.token})).status,403);
+  assert.equal((await x.call('admin/verification-appeals',{session:x.helper.token})).status,403);
+  const ownerQueue=await x.call('admin/verification-appeals',{session:x.owner.token});
+  assert.equal(ownerQueue.status,200);
+  assert.equal(ownerQueue.data.appeals.length,1);
+  assert.equal(ownerQueue.data.appeals[0].caseId,appeal.caseId);
+  assert.equal((await x.call('admin/payment-disputes',{session:x.helper.token})).status,403);
+  assert.equal((await x.call('admin/governance/roles/assign',{method:'POST',session:x.owner.token,
+    body:{userId:x.secondId,role:'verification_reviewer'}})).status,200);
+  assert.equal((await x.call('admin/verification-appeals',{session:x.helper.token})).status,200);
+  assert.equal((await x.call('admin/payment-disputes',{session:x.helper.token})).status,403);
+  const reviewed=await x.call('admin/verification-appeals/'+appeal.caseId,{method:'POST',
+    session:x.helper.token,body:{decision:'review_requested',note:'Independently check the supplied institution proof.'}});
+  assert.equal(reviewed.status,200);
+  assert.equal(reviewed.data.appeal.eligibilityUnchanged,true);
+  assert.equal((await x.call('admin/governance/roles/assign',{method:'POST',session:x.owner.token,
+    body:{userId:x.secondId,role:'finance_reviewer'}})).status,200);
+  const finance=await x.call('admin/payment-disputes',{session:x.helper.token});
+  assert.equal(finance.status,200);
+  assert.deepEqual(finance.data.cases,[]);
+  assert.equal(JSON.stringify(finance.data).includes('buyer_email'),false);
+ }finally{x.finish();}
+});
