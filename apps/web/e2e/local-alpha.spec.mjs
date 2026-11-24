@@ -339,6 +339,35 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
       }
       await targetPage.setViewportSize({width:1280,height:800});
     }
+    // Backgrounded conversations should not use mobile data, and a resumed
+    // conversation must stop rendering prior state when its session is denied.
+    const pollPage=await viewer.newPage();
+    let pollReads=0,deny=false;
+    await pollPage.addInitScript(()=>{
+      Object.defineProperty(document,'visibilityState',{configurable:true,get:()=>window.__testVisibility||'visible'});
+    });
+    await pollPage.route('**/api/local/messages/'+creatorId,async route=>{
+      if(route.request().method()==='GET'){
+        pollReads++;
+        if(deny)return route.fulfill({status:401,contentType:'application/json',body:JSON.stringify({error:'AUTH_REQUIRED'})});
+      }
+      await route.continue();
+    });
+    try{
+      await pollPage.clock.install();
+      await pollPage.goto('/messages/'+creatorId);
+      await expect(pollPage.getByRole('heading',{name:'Conversation'})).toBeVisible();
+      await expect(pollPage.getByRole('textbox',{name:'Message (max 2,000 characters)'})).toBeVisible();
+      await pollPage.evaluate(()=>{window.__testVisibility='hidden';document.dispatchEvent(new Event('visibilitychange'));});
+      const hiddenReads=pollReads;
+      await pollPage.clock.fastForward(30000);
+      expect(pollReads).toBe(hiddenReads);
+      deny=true;
+      await pollPage.evaluate(()=>{window.__testVisibility='visible';document.dispatchEvent(new Event('visibilitychange'));});
+      await expect(pollPage.getByText('You need to', {exact:false})).toBeVisible();
+      await expect(pollPage.getByRole('textbox',{name:'Message (max 2,000 characters)'})).toHaveCount(0);
+      expect(pollReads).toBe(hiddenReads+1);
+    }finally{await pollPage.close();}
     await viewerPage.goto(`/creators/${creatorId}`);
     await viewerPage.getByRole('button',{name:'+ Follow creator'}).click();
     await expect(viewerPage.getByRole('button',{name:/Following/})).toBeVisible();
