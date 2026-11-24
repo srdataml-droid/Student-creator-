@@ -24,7 +24,7 @@ function validCheckout(url){
 }
 export function createLearningPayments({db,transaction,audit,error,requireVerified,requireCreatorAction}){
   db.exec([
-    "CREATE TABLE IF NOT EXISTS learning_purchase_orders (reference TEXT PRIMARY KEY,buyer_id TEXT NOT NULL REFERENCES users(id),creator_id TEXT NOT NULL REFERENCES users(id),buyer_email TEXT NOT NULL,resource_kind TEXT NOT NULL CHECK(resource_kind IN ('class','service')),resource_id TEXT NOT NULL,amount_kobo INTEGER NOT NULL CHECK(amount_kobo>=20000),state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','paid','refunded','chargeback')),provider_transaction_id TEXT UNIQUE,provider_fee_kobo INTEGER NOT NULL DEFAULT 0,request_key TEXT NOT NULL,created_at TEXT NOT NULL,paid_at TEXT,refunded_at TEXT,UNIQUE(buyer_id,request_key),UNIQUE(buyer_id,resource_kind,resource_id));",
+    "CREATE TABLE IF NOT EXISTS learning_purchase_orders (reference TEXT PRIMARY KEY,buyer_id TEXT NOT NULL REFERENCES users(id),creator_id TEXT NOT NULL REFERENCES users(id),buyer_email TEXT NOT NULL,resource_kind TEXT NOT NULL CHECK(resource_kind IN ('class','service')),resource_id TEXT NOT NULL,amount_kobo INTEGER NOT NULL CHECK(amount_kobo>=20000),state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','paid','paid_review','refunded','chargeback')),provider_transaction_id TEXT UNIQUE,provider_fee_kobo INTEGER NOT NULL DEFAULT 0,request_key TEXT NOT NULL,created_at TEXT NOT NULL,paid_at TEXT,refunded_at TEXT,UNIQUE(buyer_id,request_key),UNIQUE(buyer_id,resource_kind,resource_id));",
     "CREATE TABLE IF NOT EXISTS learning_payment_entitlements(buyer_id TEXT NOT NULL REFERENCES users(id),resource_kind TEXT NOT NULL CHECK(resource_kind IN ('class','service')),resource_id TEXT NOT NULL,order_reference TEXT NOT NULL UNIQUE REFERENCES learning_purchase_orders(reference),state TEXT NOT NULL CHECK(state IN ('active','revoked')),granted_at TEXT NOT NULL,revoked_at TEXT,PRIMARY KEY(buyer_id,resource_kind,resource_id));",
     "CREATE TABLE IF NOT EXISTS learning_checkout_sessions(order_reference TEXT PRIMARY KEY REFERENCES learning_purchase_orders(reference),state TEXT NOT NULL CHECK(state IN ('started','ready','uncertain')),authorization_url TEXT,updated_at TEXT NOT NULL);",
     "CREATE TABLE IF NOT EXISTS learning_payment_events(order_reference TEXT NOT NULL REFERENCES learning_purchase_orders(reference),event_key TEXT NOT NULL,kind TEXT NOT NULL CHECK(kind IN ('charge','provider_fee','refund','chargeback')),created_at TEXT NOT NULL,PRIMARY KEY(order_reference,event_key));",
@@ -141,7 +141,7 @@ export function createLearningPayments({db,transaction,audit,error,requireVerifi
       if(other&&other.reference!==reference)throw error('PROVIDER_TRANSACTION_REUSED',409);
       if(db.prepare('SELECT 1 FROM commerce_receipts WHERE transaction_id=?').get(charge.providerTransactionId))
         throw error('PROVIDER_TRANSACTION_REUSED',409);
-      if(r.state==='paid'){
+      if(['paid','paid_review'].includes(r.state)){
         if(r.provider_transaction_id!==charge.providerTransactionId)throw error('PAYMENT_CONFLICT',409);
         return {...status(r),replayed:true};
       }
@@ -157,10 +157,18 @@ export function createLearningPayments({db,transaction,audit,error,requireVerifi
         closed=!task||!['accepted','in_progress'].includes(task.status);
       }
       if(closed){
+        const at=stamp();
+        db.prepare("UPDATE learning_purchase_orders SET state='paid_review',provider_transaction_id=?,provider_fee_kobo=?,paid_at=? WHERE reference=? AND state='pending'")
+          .run(charge.providerTransactionId,charge.providerFeeKobo,at,reference);
+        post(reference,'charge:'+charge.providerTransactionId,'charge',[
+          ['processor_clearing',r.amount_kobo,0],['creator_payable',0,r.amount_kobo]]);
+        if(charge.providerFeeKobo)post(reference,'fee:'+charge.providerTransactionId,'provider_fee',[
+          ['provider_fee_suspense',charge.providerFeeKobo,0],['processor_clearing',0,charge.providerFeeKobo]]);
         db.prepare('INSERT OR IGNORE INTO learning_refund_reviews(id,resource_kind,resource_id,student_id,reason,created_at) VALUES(?,?,?,?,?,?)')
-          .run('late-payment:'+reference,r.resource_kind,r.resource_id,r.buyer_id,'Provider charge arrived after closure; operator must verify and reverse before any access.',stamp());
+          .run('late-payment:'+reference,r.resource_kind,r.resource_id,r.buyer_id,'Verified provider payment received after the service was closed; refund verification required.',at);
         audit(r.buyer_id,'learning.order.charge_after_closure',reference);
-        throw error('RESOURCE_CLOSED_FINANCIAL_REVIEW',409);
+        return {...status(db.prepare('SELECT * FROM learning_purchase_orders WHERE reference=?').get(reference)),
+          requiresRefundReview:true,replayed:false};
       }
       const at=stamp();
       const changed=db.prepare("UPDATE learning_purchase_orders SET state='paid',provider_transaction_id=?,provider_fee_kobo=?,paid_at=? WHERE reference=? AND state='pending'")
@@ -193,7 +201,7 @@ export function createLearningPayments({db,transaction,audit,error,requireVerifi
       if(!r)throw error('ORDER_NOT_FOUND',404);
       const targetState=kind==='refund'?'refunded':'chargeback';
       if(r.state===targetState)return {...status(r),replayed:true};
-      if(r.state!=='paid')throw error('PAYMENT_CONFLICT',409);
+      if(!['paid','paid_review'].includes(r.state))throw error('PAYMENT_CONFLICT',409);
       post(reference,'reverse:'+key,kind,[
         ['creator_payable',r.amount_kobo,0],['processor_clearing',0,r.amount_kobo]]);
       db.prepare('UPDATE learning_purchase_orders SET state=?,refunded_at=? WHERE reference=?')
