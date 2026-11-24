@@ -156,6 +156,8 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
         }
         if(path==='admin/governance/retention')return responses({proposals:store.retentionProposals(actor)});
         if(path==='admin/identity/revalidation-due'){if(!actor)return unauthorized();return responses({due:store.dueAffiliationRevalidations(actor)});}
+        if(path==='admin/verification-appeals'){if(!actor)return unauthorized();return responses({appeals:store.institutionalAppealsQueue(actor)});}
+        if(path==='admin/payment-disputes'){if(!actor)return unauthorized();return responses({cases:store.financialReviewQueue(actor)});}
         if(segments.length===3&&segments[0]==='admin'&&segments[1]==='institution-integrations'){
           if(!actor)return unauthorized();const integration=store.getInstitutionIntegration(actor,segments[2]);
           return integration?responses({integration}):fail('INTEGRATION_NOT_FOUND',404);
