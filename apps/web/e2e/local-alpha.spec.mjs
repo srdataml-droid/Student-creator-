@@ -399,3 +399,28 @@ test('registration read failure can be retried without submitting registration',
     expect(registrationWrites).toBe(0);
   }finally{await context.close();}
 });
+
+test('touch-enabled mobile Chromium keeps navigation usable in portrait and landscape',async({browser})=>{
+  // This is a desktop-hosted browser simulation, not an Android emulator/device.
+  const context=await browser.newContext({baseURL:BASE,viewport:{width:412,height:915},isMobile:true,hasTouch:true,deviceScaleFactor:2.625,reducedMotion:'reduce'});
+  try{
+    const page=await context.newPage();
+    await page.goto('/');
+    const nav=page.getByRole('navigation',{name:'Mobile navigation'});
+    await expect(nav).toBeVisible();
+    const explore=nav.getByRole('link',{name:'Explore'});
+    const bounds=await explore.boundingBox();
+    expect(bounds.height).toBeGreaterThanOrEqual(44);
+    await explore.tap();
+    await expect(page).toHaveURL(new RegExp('/search$'));
+    await expect(page.getByRole('heading',{name:'Search approved lessons.'})).toBeVisible();
+    for(const viewport of [{width:412,height:915},{width:915,height:412}]){
+      await page.setViewportSize(viewport);
+      const sizes=await page.evaluate(()=>({viewport:innerWidth,document:document.documentElement.scrollWidth}));
+      expect(sizes.document).toBeLessThanOrEqual(sizes.viewport+1);
+    }
+    // Wider landscape falls back to the existing sidebar, not a second mobile shell.
+    await expect(nav).not.toBeVisible();
+    await expect(page.getByRole('link',{name:'Student Creators home'})).toBeVisible();
+  }finally{await context.close();}
+});
