@@ -68,6 +68,7 @@ test('class lifecycle: verified creator, replay safety, enrollment cap, room rol
     assert.equal((await x.call(route,'POST',data)).status,401);
     const created=await x.call(route,'POST',data,a.host.cookie);
     assert.equal(created.status,201);
+    assert.equal((await x.call(route,'POST',x.schedule(a.course,'overlapping'),a.host.cookie)).status,409);
     const id=created.body.class.id;
     assert.equal((await x.call(route,'POST',data,a.host.cookie)).body.class.id,id);
     assert.equal((await x.call(route,'POST',{...data,priceKobo:30000},a.host.cookie)).status,409);
