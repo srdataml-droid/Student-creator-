@@ -70,7 +70,7 @@ test('class lifecycle: verified creator, replay safety, enrollment cap, room rol
     assert.equal(created.status,201);
     const id=created.body.class.id;
     assert.equal((await x.call(route,'POST',data,a.host.cookie)).body.class.id,id);
-    assert.equal((await x.call(route,'POST',{...data,priceKobo:1000},a.host.cookie)).status,409);
+    assert.equal((await x.call(route,'POST',{...data,priceKobo:30000},a.host.cookie)).status,409);
     assert.equal((await x.call(route,'GET',undefined,a.other.cookie)).status,404);
     assert.equal((await x.call(route,'GET',undefined,a.viewer.cookie)).body.classes.length,1);
     assert.equal((await x.call('classes/'+id+'/enroll','POST',{},a.viewer.cookie)).status,200);
