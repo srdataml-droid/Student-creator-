@@ -59,7 +59,7 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
   async function sendChallenge(challenge){
     // Do not surface recipient or provider failures to a public recovery request.
     // A future hosted transport must use asynchronous delivery and abuse controls.
-    if(challenge&&mail){try{await mail.send(challenge);}catch{}}
+    if(challenge&&mail){try{await mail.send(challenge);}catch{store.cancelEmailChallenge(challenge.token);}}
   }
   // No live mode. Production builds keep all financial actions disabled.
   const gateway=process.env.NODE_ENV==='production'?null:(payments?.gateway??(sandboxGateway===undefined?(process.env.PAYSTACK_TEST_SECRET_KEY?createPaystackClient({secretKey:process.env.PAYSTACK_TEST_SECRET_KEY,environment:'test'}):null):sandboxGateway));
