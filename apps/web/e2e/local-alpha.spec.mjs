@@ -359,6 +359,7 @@ test('mobile shell communicates offline state and recovers without replaying act
     await expect(page.getByRole('link', {name:'Skip to content'})).toBeFocused();
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(/#main$/);
+    await expect(page.getByRole('main')).toBeFocused();
     const width = await page.evaluate(() => ({viewport: window.innerWidth, document: document.documentElement.scrollWidth}));
     expect(width.document).toBeLessThanOrEqual(width.viewport + 1);
   } finally {
