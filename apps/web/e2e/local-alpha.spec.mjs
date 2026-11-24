@@ -376,3 +376,26 @@ test('missing page has a keyboard-reachable recovery route',async({browser})=>{
     await expect(page.getByRole('heading',{name:'The student feed',exact:false})).toBeVisible();
   }finally{await context.close();}
 });
+
+test('registration read failure can be retried without submitting registration',async({browser})=>{
+  const context=await browser.newContext({baseURL:BASE,viewport:{width:360,height:780}});
+  try{
+    const page=await context.newPage();
+    let institutionReads=0,registrationWrites=0;
+    await page.route('**/api/local/institutions',async route=>{
+      institutionReads++;
+      if(institutionReads===1)return route.abort('failed');
+      return route.continue();
+    });
+    await page.route('**/api/local/auth/register',async route=>{
+      registrationWrites++;
+      return route.abort('blockedbyclient');
+    });
+    await page.goto('/join');
+    await expect(page.getByRole('alert')).toContainText('Campus registration is temporarily unavailable');
+    await page.getByRole('button',{name:'Retry loading campuses'}).click();
+    await expect(page.locator('#campus')).toBeVisible();
+    expect(institutionReads).toBe(2);
+    expect(registrationWrites).toBe(0);
+  }finally{await context.close();}
+});
