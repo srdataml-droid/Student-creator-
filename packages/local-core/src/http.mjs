@@ -6,6 +6,7 @@ import {MAX_CAPTION_BYTES} from './captions.mjs';
 import {createReadStream} from 'node:fs';
 import {Readable} from 'node:stream';
 import {createPaystackClient,PaystackGatewayError} from '../../payment-core/src/paystack-client.mjs';
+import {classTokenIssuerFromEnv} from './livekit-class-tokens.mjs';
 const MAX_BODY=32768;
 const RESTRICTED=Symbol('restricted');
 const responses=(data,status=200,headers={})=>Response.json(data,{status,headers:{'cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer',...headers}});
@@ -53,7 +54,7 @@ const allowed=(s)=>s&&typeof s==='string'&&s.length<100;
  * Only standalone localhost use. No payment provider, no staging credentials.
  * @param {object} store - an open local SQLite store
  */
-export function createLocalHandler(store,{sandboxGateway,payments=null,emailDelivery=null}={}){
+export function createLocalHandler(store,{sandboxGateway,payments=null,emailDelivery=null,classTokenIssuer=null}={}){
   // Explicit synthetic transport only. No real email or local debug token endpoint.
   const mail=process.env.NODE_ENV!=='production'&&emailDelivery?.environment==='synthetic'&&typeof emailDelivery.send==='function'?emailDelivery:null;
   async function sendChallenge(challenge){
@@ -196,6 +197,34 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
         if(segments.length===3&&segments[0]==='courses'&&segments[2]==='community'){
           if(!actor)return unauthorized();const status=store.communityStatus(actor,segments[1]);return responses({status,posts:status.joined?store.communityPosts(actor,segments[1]):[]});
         }
+        if(segments.length===3&&segments[0]==='courses'&&segments[2]==='classes'){
+          if(!actor)return unauthorized();return responses({classes:store.discoverClasses(actor,segments[1])});
+        }
+        if(segments.length===2&&segments[0]==='classes'){
+          if(!actor)return unauthorized();return responses({class:store.classDetail(actor,segments[1])});
+        }
+        if(segments.length===3&&segments[0]==='classes'&&segments[2]==='attendance'){
+          if(!actor)return unauthorized();return responses({attendance:store.classAttendance(actor,segments[1])});
+        }
+        if(segments.length===3&&segments[0]==='creators'&&segments[2]==='availability'){
+          if(!actor)return unauthorized();return responses({availability:store.availability(actor,segments[1])});
+        }
+        if(path==='me/classes'){if(!actor)return unauthorized();return responses({classes:store.myClasses(actor)});}
+        if(path==='me/learning-requests'){
+          if(!actor)return unauthorized();return responses({requests:store.myHelp(actor)});
+        }
+        if(segments.length===2&&segments[0]==='learning-requests'){
+          if(!actor)return unauthorized();return responses({request:store.helpDetail(actor,segments[1])});
+        }
+        if(path==='me/learning-notifications'){
+          if(!actor)return unauthorized();return responses({notifications:store.notifications(actor)});
+        }
+        if(path==='admin/learning-disputes'){
+          if(!actor)return unauthorized();return responses({disputes:store.disputesForReview(actor)});
+        }
+        if(path==='admin/learning-refund-reviews'){
+          if(!actor)return unauthorized();return responses({reviews:store.refundReviews(actor)});
+        }
         if(path==='messages/inbox'){if(!actor)return unauthorized();return responses({inbox:store.inbox(actor)});}
         if(segments.length===2&&segments[0]==='messages'&&segments[1]!=='inbox'){if(!actor)return unauthorized();return responses({messages:store.thread(actor,segments[1]),blocked:store.isContactBlocked(actor,segments[1])});}
         return fail('NOT_FOUND',404);
@@ -318,6 +347,65 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
         const secure=new URL(request.url).protocol==='https:'?'; Secure':'';
         const mediaCookie=`campus_playback_${id}=${grant.token}; Path=/api/local/lessons/${id}/video; HttpOnly; SameSite=Strict; Max-Age=300${secure}`;
         return responses({expiresAt:grant.expiresAt,watermark:grant.watermark},200,{'set-cookie':mediaCookie});
+      }
+      // Week 6: money-related authorization is checked against server entitlements, not POST data.
+      if(segments.length===3&&segments[0]==='courses'&&segments[2]==='classes'){
+        if(Object.keys(body).some(k=>!['title','description','startsAt','endsAt','capacity','priceKobo','creationKey'].includes(k)))return fail('UNEXPECTED_BODY',400);
+        const result=store.scheduleClass(actor,{...body,courseId:segments[1]});
+        return responses({class:result},result.replayed?200:201);
+      }
+      if(segments.length===3&&segments[0]==='classes'){
+        const id=segments[1],action=segments[2];
+        if(['enroll','withdraw','open','finish','cancel','room-token'].includes(action)){
+          if(action==='cancel'){
+            if(Object.keys(body).some(k=>k!=='reason'))return fail('UNEXPECTED_BODY',400);
+            return responses({class:store.cancelClass(actor,id,body.reason)});
+          }
+          if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
+          if(action==='enroll')return responses({enrollment:store.enrollClass(actor,id)});
+          if(action==='withdraw')return responses({enrollment:store.withdrawClass(actor,id)});
+          if(action==='open')return responses({class:store.openClass(actor,id)});
+          if(action==='finish')return responses({class:store.finishClass(actor,id)});
+          if(action==='room-token'){
+            const token=await store.roomToken(actor,id,classTokenIssuer??classTokenIssuerFromEnv());
+            return responses({room:token},200,{'referrer-policy':'no-referrer'});
+          }
+        }
+      }
+      if(path==='me/creator-availability'){
+        if(Object.keys(body).some(k=>k!=='slots'))return fail('UNEXPECTED_BODY',400);
+        return responses({availability:store.setAvailability(actor,body.slots)});
+      }
+      if(path==='learning-requests'){
+        if(Object.keys(body).some(k=>!['creatorId','kind','description','budgetKobo','integrityAttested','creationKey'].includes(k)))return fail('UNEXPECTED_BODY',400);
+        const result=store.requestHelp(actor,body);
+        return responses({request:result},result.replayed?200:201);
+      }
+      if(segments.length===3&&segments[0]==='learning-requests'){
+        const id=segments[1],action=segments[2];
+        if(['quote','accept','reject','start','submit','confirm','cancel','dispute'].includes(action)){
+          if(['start','submit','confirm'].includes(action)&&Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
+          if(action==='quote')return responses({request:store.quoteHelp(actor,id,body.quoteKobo)});
+          if(action==='accept')return responses({request:store.acceptHelp(actor,id,body.expectedQuoteKobo)});
+          if(action==='reject')return responses({request:store.rejectHelp(actor,id,body.reason)});
+          if(action==='start')return responses({request:store.startHelp(actor,id)});
+          if(action==='submit')return responses({request:store.submitHelp(actor,id)});
+          if(action==='confirm')return responses({request:store.confirmHelp(actor,id)});
+          if(action==='cancel')return responses({request:store.cancelHelp(actor,id,body.reason)});
+          if(action==='dispute')return responses({dispute:store.disputeHelp(actor,id,body.reason)});
+        }
+      }
+      if(segments.length===3&&segments[0]==='learning-notifications'&&segments[2]==='read'){
+        if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
+        return responses({notification:store.markNoticeSeen(actor,segments[1])});
+      }
+      if(segments.length===4&&segments[0]==='admin'&&segments[1]==='learning-disputes'&&segments[3]==='resolve'){
+        if(Object.keys(body).some(k=>k!=='resolution'))return fail('UNEXPECTED_BODY',400);
+        return responses({dispute:store.resolveHelpDispute(actor,segments[2],body)});
+      }
+      if(path==='admin/learning-reminders/queue'){
+        if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
+        return responses({outbox:store.queueClassReminders(actor)});
       }
       if(path==='my/creator-profile'){const result=store.updatePublicProfile(actor,body);return responses(result,result.replayed?200:201);}
       if(segments.length===4&&segments[0]==='creators'&&segments[2]==='restrictions'){

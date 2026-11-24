@@ -16,6 +16,7 @@ import { validateWebVtt } from './captions.mjs';
 import { createLocalAffiliations } from './affiliations.mjs';
 import { createLocalRightsCases } from './rights-cases.mjs';
 import { createLocalAccountEmail } from './account-email.mjs';
+import {createLearningServices} from './learning-services.mjs';
 
 export const SESSION_COOKIE='campus_local_session';
 const SESSION_TTL=7*24*60*60;
@@ -29,7 +30,7 @@ const lesson=(r)=>r?({id:r.id,creatorId:r.creator_id,institutionId:r.institution
 const course=(r)=>r?({id:r.id,institutionId:r.institution_id,code:r.code,title:r.title,active:Boolean(r.active)}):null;
 const error=(code,status)=>Object.assign(new Error(code),{code,status});
 
-export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null,pilotInviteToken=null}={}){
+export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null,pilotInviteToken=null,paymentEntitlements=null,providerPresenceVerifier=null,learningClock=()=>Date.now()}={}){
   // Optional local-only gate for a consented, invite-only one-student alpha.
   // A quota by itself is not enough: a stranger could otherwise take the sole slot.
   const pilotEmail=typeof pilotAllowedEmail==='string' ? pilotAllowedEmail.trim().toLowerCase() : null;
@@ -244,6 +245,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     (pilotEmail===null||row.email===pilotEmail)&&(pilotInvite===null||Boolean(db.prepare('SELECT 1 FROM pilot_invitation_claims WHERE user_id=?').get(row.id)))});
   const rightsCases=createLocalRightsCases({db,transaction,audit,error,requireAdmin,requireVerified});
   const commerce=createLocalCommerce({db,transaction,audit,error,requireVerified,requireCreatorAction});
+  const learning=createLearningServices({db,transaction,audit,error,requireVerified,requireCreatorAction,paymentEntitlements,providerPresenceVerifier,clock:learningClock});
   const withVideo=(row)=>row?{...lesson(row),priceKobo:commerce.price(row.id),hasVideo:Boolean(db.prepare('SELECT 1 FROM lesson_videos WHERE lesson_id=?').get(row.id)),hasCaptions:Boolean(db.prepare('SELECT 1 FROM lesson_captions WHERE lesson_id=?').get(row.id)),likeCount:db.prepare('SELECT COUNT(*) AS n FROM lesson_likes WHERE lesson_id=?').get(row.id).n}:null;
   function editableVideoLesson(actor,id){
     requireVerified(actor);
@@ -1156,6 +1158,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     myPurchaseOrders:commerce.ownOrders,
     creatorEarnings:commerce.creatorEarnings,
     lessonAccess:commerce.lessonAccess,
+    ...learning,
     auditCount(){return db.prepare('SELECT count(*) AS n FROM audit_events').get().n;}
   };
   return store;
