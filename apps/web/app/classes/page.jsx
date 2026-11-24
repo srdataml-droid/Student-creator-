@@ -67,10 +67,7 @@ export default function ClassesPage(){
         {!host&&enrolled&&canOpen&&<button type="button" className="quiet-button" disabled={busy} onClick={()=>act(()=>api('classes/'+item.id+'/withdraw',{method:'POST',body:{}}),'Enrollment withdrawn; paid cases require a financial review.')}>Withdraw</button>}
         {host&&canOpen&&<button type="button" className="secondary-link" disabled={busy} onClick={()=>act(()=>api('classes/'+item.id+'/open',{method:'POST',body:{}}),'Room opened for authorized participants.')}>Open room</button>}
         {host&&item.status==='room_open'&&<button type="button" className="quiet-button" disabled={busy} onClick={()=>act(()=>api('classes/'+item.id+'/finish',{method:'POST',body:{}}),'Class closed.')}>End session</button>}
-        {(enrolled||host)&&item.status==='room_open'&&<button type="button" className="secondary-link" disabled={busy} onClick={()=>act(async()=>{
-          const response=await api('classes/'+item.id+'/room-token',{method:'POST',body:{}});
-          if(!response.room?.token)throw Error('Room access could not be confirmed.');
-        },'Room access granted. The live video connection requires the LiveKit room client.')}>Check room access</button>}
+        {(enrolled||host)&&item.status==='room_open'&&<Link className="secondary-link" href={'/classes/'+item.id+'/room'}>Join live room</Link>}
         {host&&item.status!=='cancelled'&&item.status!=='completed'&&<button type="button" className="quiet-button" disabled={busy} onClick={()=>{setCancelId(item.id);setCancelReason('');}}>Cancel</button>}
       </div>
       {cancelId===item.id&&<form className="form-stack" onSubmit={e=>{
