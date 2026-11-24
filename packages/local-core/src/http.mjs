@@ -53,7 +53,7 @@ const allowed=(s)=>s&&typeof s==='string'&&s.length<100;
 function adminCapability(path){
   if(path.startsWith('admin/governance/'))return null;
   if(/^admin\/(?:students|pending-users|verify|verification-appeals|identity\/)/.test(path))return 'verification.review';
-  if(/^admin\/copyright-claims(?:\/|$)/.test(path))return 'copyright.review';
+  if(/^admin\/(?:copyright-claims|copyright-appeals)(?:\/|$)/.test(path))return 'copyright.review';
   if(/^admin\/privacy-requests(?:\/|$)/.test(path))return 'privacy.review';
   if(/^admin\/payment-disputes(?:\/|$)/.test(path))return 'finance.review';
   if(/^admin\/community-reports(?:\/|$)/.test(path))return 'community.moderate';
@@ -144,6 +144,7 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
         if(path==='me/privacy-requests'){if(!actor)return unauthorized();return responses({requests:store.myPrivacyRequests(actor)});}
         if(path==='admin/copyright-claims'){if(!actor)return unauthorized();return responses({claims:store.copyrightReviewQueue(actor)});}
         if(path==='admin/privacy-requests'){if(!actor)return unauthorized();return responses({requests:store.privacyRequestQueue(actor)});}
+        if(path==='admin/copyright-appeals'){if(!actor)return unauthorized();return responses({appeals:store.copyrightAppealQueue(actor)});}
         if(path==='admin/governance/dashboard')return responses({dashboard:store.governanceDashboard(actor)});
         if(path==='admin/governance/permissions')return responses({capabilities:store.governancePermissions(actor)});
         if(path==='admin/governance/roles')return responses({roles:store.governanceRoles(actor)});
@@ -323,6 +324,14 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
          if(Object.keys(body).some(k=>k!=='reason'))return fail('UNEXPECTED_BODY',400);
          const claim=store.appealCopyrightTakedown(actor,segments[1],body.reason);
          return responses({claim},claim.replayed?200:201);
+       }
+       if(segments.length===4&&segments[0]==='admin'&&segments[1]==='copyright-appeals'&&segments[3]==='triage'){
+         if(Object.keys(body).some(k=>!['decision','note'].includes(k)))return fail('UNEXPECTED_BODY',400);
+         return responses({appeal:store.triageCopyrightAppeal(actor,segments[2],body)});
+       }
+       if(segments.length===4&&segments[0]==='admin'&&segments[1]==='privacy-requests'&&segments[3]==='triage'){
+         if(Object.keys(body).some(k=>!['decision','note'].includes(k)))return fail('UNEXPECTED_BODY',400);
+         return responses({request:store.triagePrivacyRequest(actor,segments[2],body)});
        }
        if(segments.length===4&&segments[0]==='admin'&&segments[1]==='copyright-claims'&&segments[3]==='resolve'){
          if(Object.keys(body).some(k=>!['decision','note'].includes(k)))return fail('UNEXPECTED_BODY',400);
