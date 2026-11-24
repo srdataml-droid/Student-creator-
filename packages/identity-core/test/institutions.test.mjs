@@ -69,17 +69,22 @@ test('HTTPS REST contract sends only pseudonymous subject and rejects unsigned/a
   assert.equal(request.subjectDigest,digest);assert.ok(request.requestId);
   assert.equal(JSON.stringify(request).includes('STUDENT-001'),false);
   const assertion={...request,role:'student',state:'active',issuedAt:now,expiresAt:now+1800};
-  return {ok:true,headers:{get:()=> 'application/json; charset=utf-8'},
-    text:async()=>JSON.stringify({payload:assertion,signature:signSyntheticInstitutionAssertion(secret,assertion)})};
+  return new Response(JSON.stringify({payload:assertion,signature:signSyntheticInstitutionAssertion(secret,assertion)}),{
+    status:200,headers:{'content-type':'application/json; charset=utf-8'}
+  });
  };
  const client=makeAuthorizedRestProvider({config:restConfig,secret,serverToken:token,fetchImpl,clock:()=>now});
  const result=await client.verify({subjectDigest:digest});assert.equal(result.eligible,true);assert.equal(requests,1);
- for(const bad of ['http://verify.institution.example.edu/api','https://127.0.0.1/a','https://localhost/api','https://verify.institution.example.edu:8443/a']){
+ for(const bad of ['http://verify.institution.example.edu/api','https://127.0.0.1/a','https://localhost/api','https://verify.institution.example.edu:8443/a','https://8.8.8.8/verify','https://metadata.google.internal/verify']){
   assert.throws(()=>validateInstitutionRegistryEntry({...restConfig,endpoint:bad}),{code:'IDENTITY_INVALID_PROVIDER'});
  }
  const tampered=makeAuthorizedRestProvider({config:restConfig,secret,serverToken:token,
- fetchImpl:async()=>({ok:true,headers:{get:()=> 'application/json'},text:async()=>JSON.stringify({payload:payload(),signature:'0'.repeat(64)})})});
+ fetchImpl:async()=>new Response(JSON.stringify({payload:payload(),signature:'0'.repeat(64)}),{status:200,headers:{'content-type':'application/json'}})});
  await assert.rejects(tampered.verify({subjectDigest:digest}),{code:'IDENTITY_BAD_SIGNATURE'});
+ const oversized=makeAuthorizedRestProvider({config:restConfig,secret,serverToken:token,
+  fetchImpl:async()=>new Response('x'.repeat(16384),{status:200,headers:{'content-type':'application/json'}})});
+ await assert.rejects(oversized.verify({subjectDigest:digest}),{code:'IDENTITY_PROVIDER_UNAVAILABLE'});
+
 });
 test('OIDC and SAML contracts demand signed verified issuer, audience, bound request and student classification',async()=>{
  const oidc={institutionId:school,providerId:'institution_oidc',kind:'oidc',
