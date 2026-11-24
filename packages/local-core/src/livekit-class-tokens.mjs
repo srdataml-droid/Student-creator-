@@ -31,7 +31,12 @@ export function createClassTokenIssuer({url,apiKey,apiSecret,ttlSeconds=300,cloc
   };
 }
 export function classTokenIssuerFromEnv(env=process.env){
-  const url=env.LIVEKIT_URL,apiKey=env.LIVEKIT_API_KEY,apiSecret=env.LIVEKIT_API_SECRET;
+  // Map the founder's existing Vercel lowercase provider aliases on the server.
+  // A SIP secret is NOT an API signing secret: do not substitute livekit_sip.
+  const rawUrl=env.LIVEKIT_URL||env.livekit_project_url;
+  const url=rawUrl?.startsWith('https://')?'wss://'+rawUrl.slice(8):rawUrl;
+  const apiKey=env.LIVEKIT_API_KEY||env.livekit_apikey;
+  const apiSecret=env.LIVEKIT_API_SECRET||env.livekit_api_secret;
   if(!url||!apiKey||!apiSecret)return null;
   return createClassTokenIssuer({url,apiKey,apiSecret});
 }
