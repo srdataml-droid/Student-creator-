@@ -149,3 +149,59 @@ export async function verifySamlInstitutionResponse({config,samlResponse,request
    requestId,subjectDigest:result.subjectDigest,role:result.role,state:result.state,
    issuedAt:result.issuedAt,expiresAt:result.expiresAt},now);
 }
+
+
+/** Institution-approved signed roster snapshot contract.
+ * Each record is a keyed digest, never raw student number, name, photo, or
+ * email. It only becomes an eligibility assertion when a separate matching
+ * institutional verification request is made; never auto-verify signups.
+ * Production roster signing and secure transfer need written institution consent.
+ */
+export function signSyntheticRosterSnapshot(secret,snapshot){
+ if(typeof secret!=='string'||secret.length<32)throw identityError('IDENTITY_UNAVAILABLE');
+ return mac(secret,JSON.stringify([
+  snapshot?.institutionId,snapshot?.providerId,snapshot?.issuedAt,snapshot?.expiresAt,snapshot?.entries
+ ]));
+}
+export function verifyAuthorizedRosterSnapshot({config,secret,snapshot,signature,now=Math.floor(Date.now()/1000)}){
+ validateInstitutionRegistryEntry(config);
+ if(config.kind!=='roster')throw identityError('IDENTITY_INVALID_PROVIDER');
+ assertConfig({...config,secret});
+ if(!snapshot||typeof snapshot!=='object'||Array.isArray(snapshot)||
+  snapshot.institutionId!==config.institutionId||snapshot.providerId!==config.providerId||
+  !int(snapshot.issuedAt)||!int(snapshot.expiresAt)||snapshot.issuedAt>now+30||
+  snapshot.expiresAt<=now||snapshot.expiresAt-snapshot.issuedAt>MAX_PROOF_AGE||
+  !Array.isArray(snapshot.entries)||snapshot.entries.length<1||snapshot.entries.length>1000||
+  typeof signature!=='string'||!DIGEST.test(signature))
+  throw identityError('IDENTITY_INVALID_ROSTER');
+ const expected=signSyntheticRosterSnapshot(secret,snapshot);
+ if(!timingSafeEqual(Buffer.from(signature,'hex'),Buffer.from(expected,'hex')))
+  throw identityError('IDENTITY_BAD_SIGNATURE');
+ const members=new Map();
+ for(const row of snapshot.entries){
+  if(!row||typeof row!=='object'||Object.keys(row).sort().join(',')!=='role,state,subjectDigest'||
+    !DIGEST.test(row.subjectDigest)||!ROLES.has(row.role)||!STATES.has(row.state)||
+    members.has(row.subjectDigest))
+   throw identityError('IDENTITY_INVALID_ROSTER');
+  members.set(row.subjectDigest,{role:row.role,state:row.state});
+ }
+ return Object.freeze({
+  providerId:config.providerId,institutionId:config.institutionId,validUntil:snapshot.expiresAt,
+  // Read-only lookup, no public roster member enumeration.
+  verify({subjectDigest,requestId=randomUUID()}){
+   if(!DIGEST.test(subjectDigest)||!UUID.test(requestId))throw identityError('IDENTITY_INVALID_SUBJECT');
+   if(Math.floor(Date.now()/1000)>=snapshot.expiresAt)throw identityError('IDENTITY_EXPIRED_ROSTER');
+   const entry=members.get(subjectDigest);
+   if(!entry)throw identityError('IDENTITY_NOT_FOUND');
+   const issuedAt=Math.floor(Date.now()/1000);
+   return verifySignedInstitutionAssertion({config,secret,
+    payload:{institutionId:config.institutionId,providerId:config.providerId,
+     requestId,subjectDigest,role:entry.role,state:entry.state,
+     issuedAt,expiresAt:Math.min(snapshot.expiresAt,issuedAt+3600)},
+    signature:signSyntheticInstitutionAssertion(secret,{institutionId:config.institutionId,providerId:config.providerId,
+     requestId,subjectDigest,role:entry.role,state:entry.state,
+     issuedAt,expiresAt:Math.min(snapshot.expiresAt,issuedAt+3600)}),
+    requestId,now:issuedAt});
+  }
+ });
+}
