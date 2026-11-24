@@ -45,7 +45,7 @@ export default function ClassesPage(){
   function newClass(e){
     e.preventDefault();
     const amountNaira=Number(price);
-    if(!Number.isSafeInteger(amountNaira)||amountNaira<0){setError('Enter a valid price in whole naira.');return;}
+    if(!Number.isSafeInteger(amountNaira)||amountNaira<0||(amountNaira>0&&amountNaira<200)){setError('Choose free or at least ₦200 for paid classes.');return;}
     act(async()=>{
       await api('courses/'+courseId+'/classes',{method:'POST',body:{
         title,description,startsAt:new Date(start).toISOString(),endsAt:new Date(end).toISOString(),
@@ -65,6 +65,11 @@ export default function ClassesPage(){
       <div className="button-row">
         {!host&&!enrolled&&canOpen&&<button type="button" className="secondary-link" disabled={busy} onClick={()=>act(()=>api('classes/'+item.id+'/enroll',{method:'POST',body:{}}),paid?'Seat requested. Paid access requires verified checkout before joining.':'You have a seat in this class.')}>Enroll</button>}
         {!host&&enrolled&&canOpen&&<button type="button" className="quiet-button" disabled={busy} onClick={()=>act(()=>api('classes/'+item.id+'/withdraw',{method:'POST',body:{}}),'Enrollment withdrawn; paid cases require a financial review.')}>Withdraw</button>}
+        {!host&&enrolled&&paid&&canOpen&&<button type="button" className="secondary-link" disabled={busy}
+          onClick={()=>act(async()=>{
+            await api('classes/'+item.id+'/orders',{method:'POST',body:{requestKey:'wk06-class-'+crypto.randomUUID()}});
+          },'Sandbox order created. Open My class purchases to verify payment.')}>Create sandbox checkout order</button>}
+        {!host&&enrolled&&paid&&<Link className="quiet-button" href="/learning-payments">My class purchases</Link>}
         {host&&canOpen&&<button type="button" className="secondary-link" disabled={busy} onClick={()=>act(()=>api('classes/'+item.id+'/open',{method:'POST',body:{}}),'Room opened for authorized participants.')}>Open room</button>}
         {host&&item.status==='room_open'&&<button type="button" className="quiet-button" disabled={busy} onClick={()=>act(()=>api('classes/'+item.id+'/finish',{method:'POST',body:{}}),'Class closed.')}>End session</button>}
         {(enrolled||host)&&item.status==='room_open'&&<Link className="secondary-link" href={'/classes/'+item.id+'/room'}>Join live room</Link>}
