@@ -93,7 +93,11 @@ export function createLocalLearningEmail({db,transaction,audit,error,requireVeri
         WHERE (d.notification_id IS NULL OR
           ((d.state='retry' OR (d.state='sending' AND d.lease_until<?))
             AND d.attempts<3 AND d.next_attempt_at<=?))
-        ORDER BY n.created_at LIMIT 1`).get(clock(),clock());
+          AND (n.kind<>'class_reminder' OR EXISTS(
+            SELECT 1 FROM interactive_classes c
+            WHERE c.id=n.resource_id AND c.status='scheduled' AND c.starts_at>?
+          ))
+        ORDER BY n.created_at LIMIT 1`).get(clock(),clock(),new Date(clock()).toISOString());
        if(!row)return null;
        db.prepare(`INSERT INTO learning_email_delivery(notification_id,state,attempts,lease_until,next_attempt_at,updated_at)
         VALUES(?,'sending',1,?,0,?)
