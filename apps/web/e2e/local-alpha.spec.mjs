@@ -316,6 +316,29 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     await viewerPage.locator('#lesson-comment-text').fill(comment);
     await viewerPage.getByRole('button',{name:'Post comment'}).click();
     await expect(viewerPage.getByText(comment)).toBeVisible();
+    // Exercise authenticated, populated content and communication routes,
+    // beyond the unauthenticated route-shell sweep.
+    for(const [targetPage,route] of [
+      [viewerPage,'/courses/'+courseId],
+      [viewerPage,'/communities/'+courseId],
+      [viewerPage,'/study/'+courseId],
+      [viewerPage,'/messages/'+creatorId],
+      [viewerPage,'/lessons/'+lessonId],
+      [viewerPage,'/watch/'+lessonId],
+      [viewerPage,'/creators/'+creatorId],
+      [creatorPage,'/studio'],
+      [adminPage,'/manage'],
+    ]){
+      await targetPage.goto(route);
+      const main=targetPage.getByRole('main');
+      await expect(main.getByRole('heading',{level:1})).toHaveCount(1);
+      for(const width of [320,412,768]){
+        await targetPage.setViewportSize({width,height:800});
+        const sizes=await targetPage.evaluate(()=>({viewport:innerWidth,document:document.documentElement.scrollWidth,offenders:[...document.querySelectorAll('body *')].filter(el=>{const r=el.getBoundingClientRect();return r.width>0&&r.right>innerWidth+1&&getComputedStyle(el).position!=='absolute';}).slice(0,6).map(el=>({tag:el.tagName,className:String(el.className),right:Math.round(el.getBoundingClientRect().right)}))}));
+        expect(sizes.document,`${route} authenticated at ${width}px: ${JSON.stringify(sizes.offenders)}`).toBeLessThanOrEqual(sizes.viewport+1);
+      }
+      await targetPage.setViewportSize({width:1280,height:800});
+    }
     await viewerPage.goto(`/creators/${creatorId}`);
     await viewerPage.getByRole('button',{name:'+ Follow creator'}).click();
     await expect(viewerPage.getByRole('button',{name:/Following/})).toBeVisible();
