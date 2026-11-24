@@ -10,7 +10,7 @@ export default function PersonalizedHelpPage(){
  const [me,setMe]=useState(null),[status,setStatus]=useState('loading'),[requests,setRequests]=useState([]),[notifications,setNotifications]=useState([]);
  const [creatorId,setCreatorId]=useState(''),[kind,setKind]=useState('tutoring'),[description,setDescription]=useState(''),[budget,setBudget]=useState('');
  const [agreed,setAgreed]=useState(false),[creationKey,setCreationKey]=useState('wk06-'+crypto.randomUUID());
- const [quotes,setQuotes]=useState({}),[reasons,setReasons]=useState({});
+ const [quotes,setQuotes]=useState({}),[reasons,setReasons]=useState({}),[cancellations,setCancellations]=useState({});
  const [slots,setSlots]=useState([]),[day,setDay]=useState('1'),[from,setFrom]=useState('19:00'),[until,setUntil]=useState('21:00');
  const [error,setError]=useState(''),[notice,setNotice]=useState(''),[busy,setBusy]=useState(false);
  async function reload(){
@@ -95,6 +95,12 @@ export default function PersonalizedHelpPage(){
        <label htmlFor={'decline-'+request.id}>Decline with reason</label>
        <input id={'decline-'+request.id} minLength={5} maxLength={500} required value={reason} onChange={e=>setReasons(x=>({...x,[request.id]:e.target.value}))}/>
        <button type="submit" className="quiet-button" disabled={busy}>Decline request</button>
+     </form>}
+     {['requested','quoted','accepted','in_progress','submitted'].includes(request.status)&&<form className="form-stack" onSubmit={e=>{e.preventDefault();shortAction(request,'cancel',{reason:cancellations[request.id]??''},'The service was cancelled. Paid cases require financial review.');}}>
+       <label htmlFor={'cancel-help-'+request.id}>Reason to cancel</label>
+       <input id={'cancel-help-'+request.id} minLength={8} maxLength={500} required value={cancellations[request.id]??''}
+         onChange={e=>setCancellations(x=>({...x,[request.id]:e.target.value}))}/>
+       <button type="submit" className="quiet-button" disabled={busy}>Cancel this request</button>
      </form>}
      {['accepted','in_progress','submitted','completed'].includes(request.status)&&<form className="form-stack" onSubmit={e=>{e.preventDefault();shortAction(request,'dispute',{reason},'A dispute was filed for independent review.');}}>
        <label htmlFor={'dispute-'+request.id}>Report a service concern</label>
