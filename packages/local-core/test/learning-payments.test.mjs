@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {mkdtempSync,rmSync} from 'node:fs';
 import {tmpdir} from 'node:os';
 import {join} from 'node:path';
+import {createHmac} from 'node:crypto';
 import {openLocalStore} from '../src/store.mjs';
 import {createLocalHandler} from '../src/http.mjs';
 const uuid='training-session';
@@ -20,7 +21,8 @@ function fixture(){
     return {...charged.get(order.reference)};
   }
  };
- const handle=createLocalHandler(store,{sandboxGateway:gateway});
+ const signingSecrets=[{id:'whk_week06_test',secret:'whsec_synthetic_week06_auth_key_abcdef'}];
+ const handle=createLocalHandler(store,{payments:{gateway,signingSecrets}});
  async function send(path,method='GET',body,token){
   const response=await handle(new Request('http://localhost:3000/api/local/'+path,{method,
     headers:{...(method==='POST'?{origin:'http://localhost:3000','content-type':'application/json'}:{}),
@@ -53,7 +55,12 @@ function fixture(){
   charged.set(reference,{reference,amountKobo,currency:'NGN',domain:'test',providerTransactionId:transaction,providerFeeKobo:options.fee??0});
   return transaction;
  }
- return {store,send,setup,pay,charged,gateway,classPayload,getVerifiedCalls:()=>verifiedCalls,
+ async function testHttpWebhook(url,content,header){
+  const response=await handle(new Request(url,{method:'POST',headers:{
+    'content-type':'application/json', 'paystack-signature':header},body:content}),['learning-payments','webhook']);
+  return {status:response.status,data:await response.json()};
+ }
+ return {store,send,setup,pay,charged,gateway,classPayload,testHttpWebhook,getVerifiedCalls:()=>verifiedCalls,
    close:()=>{store.close();rmSync(dir,{recursive:true,force:true});}};
 }
 
@@ -154,5 +161,73 @@ test('two orders cannot use one provider receipt and invalid provider checkout U
    assert.equal((await x.send('learning-orders/'+o1.data.order.reference+'/confirm','POST',{},a.student.token)).status,200);
    assert.equal((await x.send('learning-orders/'+o2.data.order.reference+'/confirm','POST',{},a.student.token)).status,409);
    assert.equal(x.store.hasActiveEntitlement({buyerId:a.student.user.id,resourceKind:'class',resourceId:c2.data.class.id}),false);
+ }finally{x.close();}
+});
+
+
+test('signed Paystack test webhook inbox verifies provider independently and deduplicates event',async()=>{
+ const x=fixture();
+ try{
+  const a=await x.setup();
+  const cls=await x.send('courses/'+a.course.id+'/classes','POST',x.classPayload('webhook'),a.host.token);
+  const id=cls.data.class.id;
+  assert.equal((await x.send('classes/'+id+'/enroll','POST',{},a.student.token)).status,200);
+  const order=await x.send('classes/'+id+'/orders','POST',{requestKey:'wk06-test-webhook-order-001'},a.student.token);
+  assert.equal(order.status,201);
+  const ref=order.data.order.reference;
+  const txn=x.pay(ref,30000);
+  const body=JSON.stringify({event:'charge.success',data:{reference:ref,id:txn,domain:'test'}});
+  const ts=Math.floor(Date.now()/1000);
+  const key='whsec_synthetic_week06_auth_key_abcdef';
+  const digest=createHmac('sha512',key).update(String(ts)+'.'+body).digest('hex');
+  const signature='t='+ts+',v1=whk_week06_test:'+digest;
+  async function webhook(content,header){
+    const path='http://localhost:3000/api/local/learning-payments/webhook';
+    const response=await x.testHttpWebhook(path,content,header);
+    return response;
+  }
+  assert.equal((await webhook(body,'wrong')).status,401);
+  assert.equal((await webhook(body+' ',signature)).status,401);
+  const inserted=await webhook(body,signature);
+  assert.equal(inserted.status,200);assert.equal(inserted.data.accepted,true);
+  const replay=await webhook(body,signature);
+  assert.equal(replay.status,200);assert.equal(replay.data.replayed,true);
+  assert.equal(x.store.hasActiveEntitlement({buyerId:a.student.user.id,resourceKind:'class',resourceId:id}),false);
+  assert.equal((await x.send('admin/learning-payments/inbox/drain','POST',{},a.student.token)).status,403);
+  const drained=await x.send('admin/learning-payments/inbox/drain','POST',{},a.admin.token);
+  assert.equal(drained.status,200);
+  assert.equal(drained.data.events[0].state,'processed');
+  assert.equal(x.store.hasActiveEntitlement({buyerId:a.student.user.id,resourceKind:'class',resourceId:id}),true);
+  assert.deepEqual((await x.send('admin/learning-payments/inbox/drain','POST',{},a.admin.token)).data.events,[]);
+ }finally{x.close();}
+});
+
+test('verified charge arriving after cancellation is held for refund review with no entitlement',async()=>{
+ const x=fixture();
+ try{
+  const a=await x.setup();
+  const cls=await x.send('courses/'+a.course.id+'/classes','POST',x.classPayload('late'),a.host.token);
+  const id=cls.data.class.id;
+  assert.equal((await x.send('classes/'+id+'/enroll','POST',{},a.student.token)).status,200);
+  const created=await x.send('classes/'+id+'/orders','POST',{requestKey:'wk06-late-charge-order-001'},a.student.token);
+  const reference=created.data.order.reference;
+  assert.equal(created.status,201);
+  x.pay(reference,30000,'txn_after_service_cancel');
+  assert.equal((await x.send('classes/'+id+'/cancel','POST',{reason:'Creator connection outage prevents this class'},a.host.token)).status,200);
+  const reviewed=await x.send('learning-orders/'+reference+'/confirm','POST',{},a.student.token);
+  assert.equal(reviewed.status,200);
+  assert.equal(reviewed.data.order.status,'paid_review');
+  assert.equal(reviewed.data.order.requiresRefundReview,true);
+  assert.equal(x.store.hasActiveEntitlement({buyerId:a.student.user.id,resourceKind:'class',resourceId:id}),false);
+  const pending=await x.send('admin/learning-refund-reviews','GET',undefined,a.admin.token);
+  assert.equal(pending.status,200);
+  assert.ok(pending.data.reviews.some(v=>v.resourceId===id));
+  const journal=await x.send('admin/learning-ledger/'+reference,'GET',undefined,a.admin.token);
+  assert.ok(journal.data.ledger.events.every(v=>v.balanced));
+  const refund=await x.send('admin/learning-payments/'+reference+'/simulate-reversal','POST',{
+    kind:'refund',reason:'Synthetic confirmed refund after canceled learning class',key:'wk06-late-refund-event-key-001'
+  },a.admin.token);
+  assert.equal(refund.status,200);assert.equal(refund.data.order.status,'refunded');
+  assert.equal((await x.send('learning-orders/'+reference+'/confirm','POST',{},a.student.token)).status,409);
  }finally{x.close();}
 });
