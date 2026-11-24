@@ -197,7 +197,13 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
           if(!actor)return unauthorized();const status=store.communityStatus(actor,segments[1]);return responses({status,posts:status.joined?store.communityPosts(actor,segments[1]):[]});
         }
         if(path==='messages/inbox'){if(!actor)return unauthorized();return responses({inbox:store.inbox(actor)});}
-        if(segments.length===2&&segments[0]==='messages'&&segments[1]!=='inbox'){if(!actor)return unauthorized();return responses({messages:store.thread(actor,segments[1]),blocked:store.isContactBlocked(actor,segments[1])});}
+        if(segments.length===2&&segments[0]==='messages'&&segments[1]!=='inbox'){
+          if(!actor)return unauthorized();
+          const q=new URL(request.url).searchParams;
+          if(q.getAll('before').length>1||q.getAll('limit').length>1)return fail('INVALID_MESSAGE_PAGE',422);
+          const page=store.threadPage(actor,segments[1],{before:q.get('before'),limit:q.has('limit')?Number(q.get('limit')):100});
+          return responses({...page,blocked:store.isContactBlocked(actor,segments[1])});
+        }
         return fail('NOT_FOUND',404);
       }
 

@@ -200,6 +200,17 @@ test('DM unread state is recipient-only, atomic, replay-safe and private',async(
   assert.equal(await count(a.token,s.user),0);
   const history=await x.request(`messages/${a.id}`,'GET',undefined,s.student);
   assert.equal(history.data.messages.length,2);
+  const latest=await x.request(`messages/${a.id}?limit=1`,'GET',undefined,s.student);
+  assert.equal(latest.status,200);assert.equal(latest.data.messages.length,1);
+  assert.equal(latest.data.nextBefore,latest.data.messages[0].id);
+  const earlier=await x.request(`messages/${a.id}?limit=1&before=${latest.data.nextBefore}`,'GET',undefined,s.student);
+  assert.equal(earlier.status,200);assert.equal(earlier.data.messages.length,1);assert.equal(earlier.data.nextBefore,null);
+  assert.deepEqual([...earlier.data.messages,...latest.data.messages],history.data.messages);
+  assert.equal((await x.request(`messages/${a.id}?before=${foreign}`,'GET',undefined,s.student)).status,404);
+  assert.equal((await x.request(`messages/${s.user}?before=${one}`,'GET',undefined,b.token)).status,404);
+  for(const q of ['limit=0','limit=101','limit=1.5','limit=1&limit=2','before=bad','before=']){
+   assert.equal((await x.request(`messages/${a.id}?${q}`,'GET',undefined,s.student)).status,422);
+  }
   assert.equal(await count(s.student,a.id),2,'GET does not mutate read state');
   assert.equal((await x.request(`messages/${a.id}`,'GET',undefined,b.token)).data.messages.length,0);
   assert.equal((await mark(a.id,[one],undefined)).status,401);

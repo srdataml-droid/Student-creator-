@@ -11,3 +11,6 @@ Founder assignment supersedes provisional week mapping for parallel branch devel
 - Exact-head CI and local/browser verification pending. Only local SQLite implementation changed. Hosted Supabase Auth/RLS/private message persistence and notification system remain pending; coordinate Weeks 1/2/3/7 before adopting hosted contracts. No real accounts or release.
 - Existing conversation history limit 100, inbox limit 50: pagination and backlog acknowledgment remain outstanding. No read-state disclosure to other students.
 - Audit verified-student discovery/feed/search, creator view restrictions across all metadata surfaces, follows/likes/comments, community administrator roles, notification preferences and moderation. Do not claim complete social lifecycle.
+
+## Second increment: conversation history
+First unread commit 074f5f93301fdd8bf7468dca4734427319c456b6 had all five jobs succeed in Actions run 45498683602. This follow-up adds pair-scoped keyset history (created timestamp + ID tie-breaker, max 100, no cursor from another pair), older-message controls and merge-on-refresh. New tests verify ordered, disjoint history and cross-pair cursor rejection. Exact-head CI for this change pending. No inbox pagination or hosted integration yet.

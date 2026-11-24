@@ -888,10 +888,26 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       });
     },
     thread(actor,peerId){
+      return store.threadPage(actor,peerId).messages;
+    },
+    threadPage(actor,peerId,{before=null,limit=100}={}){
       requireVerified(actor);
+      if(!Number.isInteger(limit)||limit<1||limit>100||before!==null&&(typeof before!=='string'||before.length!==36))
+        throw error('INVALID_MESSAGE_PAGE',422);
+      const pair='((sender_id=? AND recipient_id=?) OR (sender_id=? AND recipient_id=?))';
+      const args=[actor.id,peerId,peerId,actor.id];
+      let bound='',values=[];
+      if(before!==null){
+        const cursor=db.prepare('SELECT created_at,id FROM messages WHERE '+pair+' AND id=?').get(...args,before);
+        if(!cursor)throw error('MESSAGE_NOT_FOUND',404);
+        bound=' AND (created_at < ? OR (created_at = ? AND id < ?))';
+        values=[cursor.created_at,cursor.created_at,cursor.id];
+      }
       const rows=db.prepare(`SELECT id,sender_id AS senderId,recipient_id AS recipientId,body,created_at AS createdAt FROM messages
-         WHERE (sender_id=? AND recipient_id=?) OR (sender_id=? AND recipient_id=?) ORDER BY created_at DESC LIMIT 100`).all(actor.id,peerId,peerId,actor.id);
-      return rows.reverse();
+         WHERE ${pair}${bound} ORDER BY created_at DESC,id DESC LIMIT ?`).all(...args,...values,limit+1);
+      const more=rows.length>limit;
+      if(more)rows.pop();
+      return {nextBefore:more?rows.at(-1).id:null,messages:rows.reverse()};
     },
     markMessagesRead(actor,peerId,ids){
       requireVerified(actor);
