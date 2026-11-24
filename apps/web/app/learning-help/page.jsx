@@ -84,6 +84,12 @@ export default function PersonalizedHelpPage(){
        </>}
        {own&&request.status==='quoted'&&<button type="button" className="secondary-link" disabled={busy}
          onClick={()=>shortAction(request,'accept',{expectedQuoteKobo:request.quoteKobo},request.quoteKobo>0?'Quote accepted. Paid progress requires a verified payment entitlement.':'Quote accepted.')}>Accept quote</button>}
+       {own&&request.quoteKobo>0&&['accepted','in_progress','submitted'].includes(request.status)&&<>
+         <button type="button" className="secondary-link" disabled={busy}
+           onClick={()=>act(()=>api('learning-requests/'+request.id+'/orders',{method:'POST',body:{requestKey:'wk06-help-'+crypto.randomUUID()}}),
+             'Sandbox order created. Open learning purchases to verify the payment.')}>Create sandbox checkout order</button>
+         <Link href="/learning-payments" className="quiet-button">My learning purchases</Link>
+       </>}
        {creator&&request.status==='accepted'&&<button type="button" className="secondary-link" disabled={busy}
          onClick={()=>shortAction(request,'start',{},'Service started.')}>Start guidance</button>}
        {creator&&request.status==='in_progress'&&<button type="button" className="secondary-link" disabled={busy}
