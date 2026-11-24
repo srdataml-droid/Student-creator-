@@ -74,6 +74,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/migrations/0006_institution_identity_contract.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/0007_mux_webhook_idempotency.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/0008_hosted_rls_read_grants.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0009_restrict_content_metadata_columns.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/smoke.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/creator_public_profiles.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/creator_restrictions.sql
