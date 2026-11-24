@@ -1,0 +1,30 @@
+name: Worthkind worker - bounded repository inspection
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: wk-worker-smoke
+  cancel-in-progress: false
+jobs:
+  inspect:
+    if: github.repository == 'srdataml-droid/Student-creator-'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 3
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+      - name: Generate read-only inspection evidence
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import json, pathlib, re, subprocess
+          def git(*args):
+              return subprocess.run(['git','--no-optional-locks','-c','core.fsmonitor=false','-c','core.hooksPath=/dev/null',*args],capture_output=True,check=True,text=True,timeout=20).stdout.strip()
+          assert pathlib.Path(git('rev-parse','--show-toplevel')).resolve()==pathlib.Path.cwd().resolve()
+          commit=git('rev-parse','--verify','HEAD')
+          assert re.fullmatch(r'[0-9a-f]{40}',commit)
+          print(json.dumps({'repository':'student-creators','commit':commit,'tracked_file_count':len(git('ls-tree','-r','--name-only','HEAD').splitlines()),'checks':{'repository_readable':True},'scope':'read-only; no application tests run'}))
+          PY
