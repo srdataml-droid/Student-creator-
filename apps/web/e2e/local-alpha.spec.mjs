@@ -98,6 +98,14 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
       await expect(adminPage.getByText('Student membership approved.')).toBeVisible();
     }
 
+    // Week 6 real browser surface smoke after administrator verification.
+    await viewerPage.goto('/classes');
+    await expect(viewerPage.getByRole('heading',{name:'Interactive classes'})).toBeVisible();
+    await expect(viewerPage.getByRole('heading',{name:'Explore classes'})).toBeVisible();
+    await creatorPage.goto('/learning-help');
+    await expect(creatorPage.getByRole('heading',{name:'Learn directly from creators.'})).toBeVisible();
+    await expect(creatorPage.getByRole('button',{name:'Send request'})).toBeVisible();
+
     await creatorPage.goto('/studio');
     await expect(creatorPage.locator('#course')).toBeVisible();
     await creatorPage.locator('#course').selectOption(courseId);
