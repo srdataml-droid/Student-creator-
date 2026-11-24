@@ -63,7 +63,8 @@ test('pseudonymous institutional proof must be authorized, manual-reviewed and c
    previewText:'Independent explanation',lessonText:textBody,rightsAttested:true,creationKey:'identity-contract-draft-001'};
   assert.throws(()=>store.createDraft(a.user,draftPayload),{code:'VERIFICATION_REQUIRED'});
   store.verifyStudent(admin.user,studentA.id);
-  const id=store.createDraft(a.user,draftPayload).lesson.id;
+  const verifiedActor=store.getSession(a.token);
+  const id=store.createDraft(verifiedActor,draftPayload).lesson.id;
   assert.ok(id);
   assert.throws(()=>store.recordVerifiedInstitutionAffiliation(a.user,studentA.id,proof),{code:'ADMIN_REQUIRED'});
   // A graduate, alumni or lecturer is not an active verified student.
@@ -71,7 +72,7 @@ test('pseudonymous institutional proof must be authorized, manual-reviewed and c
   const graduated=await provider.verify({subjectDigest:subject});
   store.recordVerifiedInstitutionAffiliation(admin.user,studentA.id,graduated);
   assert.equal(store.getSession(a.token).verifiedAt,null);
-  assert.throws(()=>store.createDraft(a.user,{...draftPayload,creationKey:'identity-contract-draft-002'}),{code:'VERIFICATION_REQUIRED'});
+  assert.throws(()=>store.createDraft(verifiedActor,{...draftPayload,creationKey:'identity-contract-draft-002'}),{code:'VERIFICATION_REQUIRED'});
   assert.throws(()=>store.verifyStudent(admin.user,studentA.id),{code:'AFFILIATION_NOT_ELIGIBLE'});
   const appeal=await run('me/verification-appeals','POST',{reason:'My institution enrollment classification appears incorrect. Please review my eligibility.'},a.token);
   assert.equal(appeal.status,201);
