@@ -26,3 +26,6 @@ Platform admin assigns/revokes a verified joined student's limited per-course mo
 
 ## Sixth increment: lesson replies
 Additive nullable parent reference preserves existing comment hashes. One-level replies must target a visible root in the same entitled lesson, retain independent creator view/comment checks and rate limits, and disappear when the root is removed. Existing community reply code served as internal reference; no external dependencies. Reply UI, recipient notification and restart/replay/hidden-parent tests added. Exact-head CI pending. Hosted comment schema remains unchanged pending integration.
+
+## Seventh increment: creator discovery and interaction guards
+Server-scoped creator search supports public alias, campus, course, topic and published content matching; home suggestions and search creator links; account-specific view-denied creators excluded, no private fields. Follow mutations rate-limited; bookmark/like writes require independent view authorization without granting paid access. Tests added. No new dependencies or imported code. Exact-head CI pending.

@@ -26,3 +26,5 @@ export function getLocalPublicCreator(id){return getLocalStore().publicCreator(i
 
 export function getLocalPublicInstitutions(){return getLocalStore().listInstitutions();}
 export function searchLocalPublishedLessons(filters,actor=null){return getLocalStore().searchLessons(filters,actor);}
+
+export function getLocalCreatorDiscovery(actor,filters){return getLocalStore().discoverCreators(actor,filters);}

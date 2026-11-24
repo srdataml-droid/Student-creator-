@@ -150,6 +150,11 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
           if(mode==='following'&&!actor)return unauthorized();
           return responses({posts:store.discoverFeed(actor,{mode,limit:q.has('limit')?Number(q.get('limit')):60})});
         }
+        if(path==='creators'){
+          const q=new URL(request.url).searchParams;
+          const value=k=>q.get(k)||null;
+          return responses({creators:store.discoverCreators(actor,{q:q.get('q')??'',institutionId:value('institutionId'),courseId:value('courseId'),topicId:value('topicId'),limit:q.has('limit')?Number(q.get('limit')):20})});
+        }
         if(path==='search'){
           const query=new URL(request.url).searchParams;
           const limit=query.has('limit')?Number(query.get('limit')):25;

@@ -102,3 +102,20 @@ test('campus-ranked feeds, following, and preview restrictions are server scoped
   assert.equal((await ctx.req('feed?mode=wrong','GET',undefined,s.student)).status,422);
  }finally{ctx.close();}
 });
+
+test('creator discovery ranks campus, matches public names and excludes restricted previews',async()=>{
+ const ctx=setup();try{
+  const s=await ctx.seed();
+  const ranked=(await ctx.req('creators','GET',undefined,s.student)).body.creators;
+  assert.deepEqual(ranked.map(c=>c.id),[s.creator,s.creator2]);
+  assert.ok(ranked.every(c=>!Object.hasOwn(c,'email')&&!Object.hasOwn(c,'lessonText')));
+  assert.equal((await ctx.req('creators?q=Engineering')).body.creators[0].id,s.creator2);
+  assert.deepEqual((await ctx.req('creators?institutionId='+s.school)).body.creators.map(c=>c.id),[s.creator]);
+  assert.equal((await ctx.req('creators?limit=51')).status,422);
+  assert.equal((await ctx.req('creators?courseId='+s.course+'&topicId='+s.topic2)).status,422);
+  await ctx.req('creators/'+s.creator2+'/restrictions/'+s.creator,'POST',{view:true,comment:false,message:false},s.student2);
+  assert.deepEqual((await ctx.req('creators','GET',undefined,s.student)).body.creators.map(c=>c.id),[s.creator]);
+  assert.equal((await ctx.req('lessons/'+s.published2+'/like','POST',{},s.student)).status,403);
+  assert.equal((await ctx.req('lessons/'+s.published2+'/bookmark','POST',{},s.student)).status,403);
+ }finally{ctx.close();}
+});

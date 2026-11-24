@@ -670,8 +670,9 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     saveBookmark(actor,lessonId){
       requireVerified(actor);
       return transaction(()=>{
-        const target=db.prepare("SELECT l.id FROM lessons l JOIN courses c ON c.id=l.course_id WHERE l.id=? AND l.status='published' AND c.active=1").get(lessonId);
+        const target=db.prepare("SELECT l.id,l.creator_id FROM lessons l JOIN courses c ON c.id=l.course_id WHERE l.id=? AND l.status='published' AND c.active=1").get(lessonId);
         if(!target)throw error('LESSON_NOT_FOUND',404);
+        requireCreatorAction(actor,target.creator_id,'view');
         const existing=db.prepare('SELECT 1 FROM lesson_bookmarks WHERE user_id=? AND lesson_id=?').get(actor.id,lessonId);
         if(existing)return {bookmarked:true,replayed:true};
         if(db.prepare('SELECT count(*) AS n FROM lesson_bookmarks WHERE user_id=?').get(actor.id).n>=250)throw error('BOOKMARK_LIMIT',429);
@@ -695,8 +696,9 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     likeLesson(actor,lessonId){
       requireVerified(actor);
       return transaction(()=>{
-        const target=db.prepare("SELECT l.id FROM lessons l JOIN courses c ON c.id=l.course_id WHERE l.id=? AND l.status='published' AND c.active=1").get(lessonId);
+        const target=db.prepare("SELECT l.id,l.creator_id FROM lessons l JOIN courses c ON c.id=l.course_id WHERE l.id=? AND l.status='published' AND c.active=1").get(lessonId);
         if(!target)throw error('LESSON_NOT_FOUND',404);
+        requireCreatorAction(actor,target.creator_id,'view');
         const exists=db.prepare('SELECT 1 FROM lesson_likes WHERE user_id=? AND lesson_id=?').get(actor.id,lessonId);
         if(exists)return {liked:true,replayed:true};
         const recent=db.prepare("SELECT COUNT(*) AS n FROM audit_events WHERE actor_id=? AND action='lesson.liked' AND created_at>?").get(actor.id,new Date(Date.now()-3600000).toISOString()).n;
@@ -865,13 +867,40 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         return {profile:{...value,updatedAt},replayed:false};
       });
     },
+    discoverCreators(actor,{q='',institutionId=null,courseId=null,topicId=null,limit=20}={}){
+      if(typeof q!=='string'||q.trim().length>80||q.trim().length===1||/[\x00-\x1f\x7f]/.test(q)||!Number.isSafeInteger(limit)||limit<1||limit>50)
+        throw error('INVALID_SEARCH',422);
+      for(const value of [institutionId,courseId,topicId])if(value!==null&&(typeof value!=='string'||!/^[a-f\d]{8}-[a-f\d]{4}-[1-8][a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i.test(value)))throw error('INVALID_SEARCH_FILTER',422);
+      if(courseId){const course=store.getCourse(courseId);if(!course||(institutionId&&course.institutionId!==institutionId))throw error('INVALID_SEARCH_FILTER',422);}
+      if(topicId){const topic=store.getTopic(topicId);if(!topic||(courseId&&topic.courseId!==courseId)||(institutionId&&store.getCourse(topic.courseId)?.institutionId!==institutionId))throw error('INVALID_SEARCH_FILTER',422);}
+      const scope=discoveryScope(actor),where=["l.status='published'","c.active=1",scope.sql],values=[...scope.args];
+      if(institutionId){where.push('l.institution_id=?');values.push(institutionId);}
+      if(courseId){where.push('l.course_id=?');values.push(courseId);}
+      if(topicId){where.push('l.topic_id=?');values.push(topicId);}
+      const term=q.trim().replace(/^@/,'');
+      if(q.trim()&&!term)throw error('INVALID_SEARCH',422);
+      if(term){
+        const fields=['p.handle','p.display_name','i.name','c.code','c.title','l.title'];
+        where.push('('+fields.map(field=>'instr(lower(COALESCE('+field+",'')),lower(?))>0").join(' OR ')+')');
+        values.push(...fields.map(()=>term));
+      }
+      const campus=actor?.role==='student'&&actor.verifiedAt&&!actor.suspended&&affiliations.eligible(actor.id)?actor.institutionId:null;
+      return db.prepare(`SELECT u.id,p.handle,p.display_name AS displayName,p.bio,i.name AS institutionName,
+        (SELECT count(*) FROM creator_follows f WHERE f.creator_id=u.id) AS followerCount
+        FROM lessons l JOIN users u ON u.id=l.creator_id JOIN courses c ON c.id=l.course_id JOIN institutions i ON i.id=l.institution_id
+        LEFT JOIN creator_public_profiles p ON p.user_id=u.id
+        WHERE ${where.join(' AND ')}
+        GROUP BY u.id,p.handle,p.display_name,p.bio,i.name,l.institution_id
+        ORDER BY CASE WHEN l.institution_id=? THEN 0 ELSE 1 END,MAX(l.published_at) DESC,u.id LIMIT ?`).all(...values,campus,limit)
+        .map(x=>({...x,bio:x.bio??''}));
+    },
     publicCreator(id){
       const x=db.prepare(`SELECT u.id,u.allow_messages,p.handle,p.display_name,p.bio
          FROM users u LEFT JOIN creator_public_profiles p ON p.user_id=u.id
          WHERE u.id=? AND u.role='student' AND u.verified_at IS NOT NULL AND u.suspended=0
          AND EXISTS (SELECT 1 FROM lessons l JOIN courses c ON c.id=l.course_id
            WHERE l.creator_id=u.id AND l.status='published' AND c.active=1)`).get(id);
-      return x?{id:x.id,allowMessages:Boolean(x.allow_messages),
+      return x&&affiliations.eligible(id)?{id:x.id,allowMessages:Boolean(x.allow_messages),
         handle:x.handle??null,displayName:x.display_name??null,bio:x.bio??'',
         followerCount:db.prepare('SELECT COUNT(*) AS n FROM creator_follows WHERE creator_id=?').get(x.id).n}:null;
     },
@@ -880,6 +909,10 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       if(typeof creatorId!=='string'||creatorId===actor.id)throw error('CANNOT_FOLLOW_SELF',422);
       if(!store.publicCreator(creatorId))throw error('CREATOR_UNAVAILABLE',404);
       return transaction(()=>{
+        if(db.prepare('SELECT 1 FROM creator_follows WHERE follower_id=? AND creator_id=?').get(actor.id,creatorId))
+          return {creatorId,following:true,replayed:true};
+        if(db.prepare("SELECT count(*) n FROM audit_events WHERE actor_id=? AND action='creator.followed' AND created_at>?").get(actor.id,new Date(Date.now()-3600000).toISOString()).n>=60)
+          throw error('FOLLOW_RATE_LIMIT',429);
         const result=db.prepare('INSERT OR IGNORE INTO creator_follows(follower_id,creator_id,created_at) VALUES(?,?,?)').run(actor.id,creatorId,stamp());
         if(result.changes){audit(actor.id,'creator.followed',creatorId);notify(creatorId,actor.id,'follow',creatorId,creatorId);}
         return {creatorId,following:true,replayed:result.changes===0};
