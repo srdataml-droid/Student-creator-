@@ -73,6 +73,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/migrations/0005_paid_access_security.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/0006_institution_identity_contract.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/0007_mux_webhook_idempotency.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0008_hosted_rls_read_grants.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/smoke.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/creator_public_profiles.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/creator_restrictions.sql
@@ -80,6 +81,7 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/tests/paid_access.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/institution_identity.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/mux_webhook_inbox.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/hosted_rls_isolation.sql
 
   browser-alpha:
     runs-on: ubuntu-24.04
