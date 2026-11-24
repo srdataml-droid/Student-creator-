@@ -13,6 +13,7 @@ import { validateMp4 } from './video.mjs';
 import { creatorProfileInput } from './creator-profile.mjs';
 import { createLocalCommerce } from './commerce.mjs';
 import { validateWebVtt } from './captions.mjs';
+import { createLocalAffiliations } from './affiliations.mjs';
 
 export const SESSION_COOKIE='campus_local_session';
 const SESSION_TTL=7*24*60*60;
@@ -214,7 +215,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     requireVerified(actor);
     if(!['view','comment','message'].includes(kind))throw error('INVALID_RESTRICTIONS',422);
     const creator=db.prepare("SELECT id FROM users WHERE id=? AND role='student' AND verified_at IS NOT NULL AND suspended=0").get(creatorId);
-    if(!creator)throw error('CREATOR_UNAVAILABLE',404);
+    if(!creator||!affiliations.eligible(creatorId))throw error('CREATOR_UNAVAILABLE',404);
     if(actor.id!==creatorId){
       const restriction=db.prepare('SELECT deny_view,deny_comment,deny_message FROM creator_restrictions WHERE creator_id=? AND viewer_id=?').get(creatorId,actor.id);
       if(restriction?.['deny_'+kind])throw error('CREATOR_ACCESS_RESTRICTED',403);
@@ -224,8 +225,9 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     requireVerifiedUser(actor);
     const current=human(db.prepare('SELECT * FROM users WHERE id=?').get(actor.id));
     requireVerifiedUser(current);
-    if(current.institutionId!==actor.institutionId)throw error('VERIFICATION_REQUIRED',403);
+    if(current.institutionId!==actor.institutionId||!affiliations.eligible(actor.id))throw error('VERIFICATION_REQUIRED',403);
   }
+  const affiliations=createLocalAffiliations({db,transaction,audit,error,requireAdmin});
   const commerce=createLocalCommerce({db,transaction,audit,error,requireVerified,requireCreatorAction});
   const withVideo=(row)=>row?{...lesson(row),priceKobo:commerce.price(row.id),hasVideo:Boolean(db.prepare('SELECT 1 FROM lesson_videos WHERE lesson_id=?').get(row.id)),hasCaptions:Boolean(db.prepare('SELECT 1 FROM lesson_captions WHERE lesson_id=?').get(row.id)),likeCount:db.prepare('SELECT COUNT(*) AS n FROM lesson_likes WHERE lesson_id=?').get(row.id).n}:null;
   function editableVideoLesson(actor,id){
@@ -418,18 +420,18 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       if(pilotInvite!==null&&row.role==='student'&&!db.prepare('SELECT 1 FROM pilot_invitation_claims WHERE user_id=?').get(row.id))return null;
       const token=randomBytes(32).toString('base64url');
       transaction(()=>{db.prepare('INSERT INTO sessions VALUES(?,?,?)').run(sha(token),row.id,Math.floor(Date.now()/1000)+SESSION_TTL);audit(row.id,'session.created',row.id);});
-      return {token,user:human(row)};
+      return {token,user:row.role==='student'&&!affiliations.eligible(row.id)?{...human(row),verifiedAt:null}:human(row)};
     },
     getSession(token){
       if(!token||!/^[A-Za-z0-9_-]{43}$/.test(token))return null;
       const row=db.prepare('SELECT u.* FROM sessions s JOIN users u ON u.id=s.user_id WHERE s.token_hash=? AND s.expires_at>? AND u.suspended=0').get(sha(token),Math.floor(Date.now()/1000));
       if(pilotEmail!==null&&row?.role==='student'&&row.email!==pilotEmail)return null;
       if(pilotInvite!==null&&row?.role==='student'&&!db.prepare('SELECT 1 FROM pilot_invitation_claims WHERE user_id=?').get(row.id))return null;
-      return human(row);
+      return row?.role==='student'&&!affiliations.eligible(row.id)?{...human(row),verifiedAt:null}:human(row);
     },
     logout(token){if(token&&/^[A-Za-z0-9_-]{43}$/.test(token))db.prepare('DELETE FROM sessions WHERE token_hash=?').run(sha(token));},
     listPendingUsers(actor){requireAdmin(actor);return db.prepare("SELECT id,email,institution_id,created_at FROM users WHERE role='student' AND verified_at IS NULL AND suspended=0 ORDER BY created_at LIMIT 100").all();},
-    verifyStudent(actor,userId){requireAdmin(actor);const now=stamp();const count=transaction(()=>{const x=db.prepare("UPDATE users SET verified_at=? WHERE id=? AND role='student' AND verified_at IS NULL AND institution_id IS NOT NULL AND suspended=0").run(now,userId);if(x.changes===1)audit(actor.id,'student.verified',userId);return x.changes;});if(count!==1)throw error('VERIFICATION_CONFLICT',409);return {id:userId,verifiedAt:now};},
+    verifyStudent(actor,userId){requireAdmin(actor);if(!affiliations.eligible(userId))throw error('AFFILIATION_NOT_ELIGIBLE',403);const now=stamp();const count=transaction(()=>{const x=db.prepare("UPDATE users SET verified_at=? WHERE id=? AND role='student' AND verified_at IS NULL AND institution_id IS NOT NULL AND suspended=0").run(now,userId);if(x.changes===1)audit(actor.id,'student.verified',userId);return x.changes;});if(count!==1)throw error('VERIFICATION_CONFLICT',409);return {id:userId,verifiedAt:now};},
     createDraft(actor,{courseId,topicId=null,title,description,previewText,lessonText,rightsAttested,creationKey}){
       requireVerified(actor);
       const parent=store.getCourse(courseId);
@@ -1037,6 +1039,18 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         return {status:'completed',replayed:false};
       });
     },
+    // Institution proofs can only be applied by trusted server code; no
+    // endpoint accepts a browser-supplied verified=true claim or raw ID image.
+    addInstitutionIntegration:affiliations.add,
+    getInstitutionIntegration:affiliations.getIntegration,
+    enableSyntheticInstitution:affiliations.activateSynthetic,
+    disableInstitutionIntegration:affiliations.disable,
+    recordVerifiedInstitutionAffiliation:affiliations.record,
+    institutionAffiliation:affiliations.status,
+    dueAffiliationRevalidations:affiliations.due,
+    submitVerificationAppeal:affiliations.appeal,
+    myVerificationAppeals:affiliations.appeals,
+    reviewVerificationAppeal:affiliations.reviewAppeal,
     setLessonPrice:commerce.setPrice,
     createPurchaseOrder:commerce.createOrder,
     applyVerifiedTestCharge:commerce.applyVerifiedTestCharge,
