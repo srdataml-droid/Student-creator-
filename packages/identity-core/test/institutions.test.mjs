@@ -4,7 +4,8 @@ import {randomUUID} from 'node:crypto';
 import {
  institutionalSubjectDigest,validateInstitutionRegistryEntry,signSyntheticInstitutionAssertion,
  verifySignedInstitutionAssertion,makeSyntheticInstitutionProvider,makeAuthorizedRestProvider,
- verifyOidcInstitutionToken,verifySamlInstitutionResponse,isVerifiedInstitutionEvidence
+ verifyOidcInstitutionToken,verifySamlInstitutionResponse,isVerifiedInstitutionEvidence,
+ signSyntheticRosterSnapshot,verifyAuthorizedRosterSnapshot
 } from '../src/institutions.mjs';
 
 const school=randomUUID(),providerId='official_synthetic_registry',secret='synthetic_institution_only_secret_not_a_real_credential_2026';
@@ -107,4 +108,38 @@ test('OIDC and SAML contracts demand signed verified issuer, audience, bound req
  await assert.rejects(verifySamlInstitutionResponse({config:saml,samlResponse:'<WrongDestination/>',
   requestId:nonce,destination,verifySignedAssertion:async()=>({...assertion,destination:'https://attacker.example'}),now}),
   {code:'IDENTITY_BAD_SIGNATURE'});
+});
+
+
+test('signed digest-only roster rejects tampering, stale snapshots and unauthorized classification',()=>{
+ const current=Math.floor(Date.now()/1000),rosterConfig={
+  institutionId:school,providerId:'authorized_signed_roster',kind:'roster'
+ };
+ const snapshot={institutionId:school,providerId:rosterConfig.providerId,
+  issuedAt:current-10,expiresAt:current+1200,
+  entries:[{subjectDigest:digest,role:'student',state:'active'}]};
+ const signature=signSyntheticRosterSnapshot(secret,snapshot);
+ const roster=verifyAuthorizedRosterSnapshot({config:rosterConfig,secret,snapshot,signature,now:current});
+ const evidence=roster.verify({subjectDigest:digest});
+ assert.equal(evidence.eligible,true);assert.equal(isVerifiedInstitutionEvidence(evidence),true);
+ assert.equal(JSON.stringify(roster).includes('STUDENT-001'),false);
+ assert.throws(()=>roster.verify({subjectDigest:'0'.repeat(64)}),{code:'IDENTITY_NOT_FOUND'});
+ for(const mutation of [
+  {entries:[{subjectDigest:digest,role:'lecturer',state:'active'}]},
+  {entries:[{subjectDigest:digest,role:'student',state:'suspended'}]},
+  {institutionId:randomUUID()}
+ ]){
+  assert.throws(()=>verifyAuthorizedRosterSnapshot({
+   config:rosterConfig,secret,snapshot:{...snapshot,...mutation},signature,now:current
+  }),e=>['IDENTITY_BAD_SIGNATURE','IDENTITY_INVALID_ROSTER'].includes(e.code));
+ }
+ assert.throws(()=>verifyAuthorizedRosterSnapshot({config:rosterConfig,secret,
+  snapshot:{...snapshot,expiresAt:current-5},signature,now:current}),{code:'IDENTITY_INVALID_ROSTER'});
+ const rows=[...snapshot.entries,snapshot.entries[0]];
+ const duplicate={...snapshot,entries:rows};
+ assert.throws(()=>verifyAuthorizedRosterSnapshot({config:rosterConfig,secret,snapshot:duplicate,
+  signature:signSyntheticRosterSnapshot(secret,duplicate),now:current}),{code:'IDENTITY_INVALID_ROSTER'});
+ const withPrivateIdentifier={...snapshot,entries:[{...snapshot.entries[0],rawStudentId:'STUDENT-001'}]};
+ assert.throws(()=>verifyAuthorizedRosterSnapshot({config:rosterConfig,secret,snapshot:withPrivateIdentifier,
+  signature:signSyntheticRosterSnapshot(secret,withPrivateIdentifier),now:current}),{code:'IDENTITY_INVALID_ROSTER'});
 });
