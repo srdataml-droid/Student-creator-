@@ -30,6 +30,7 @@ export function createLearningServices({db,transaction,audit,error,requireVerifi
     "CREATE INDEX IF NOT EXISTS interactive_classes_course_time ON interactive_classes(course_id,starts_at);",
     "CREATE TABLE IF NOT EXISTS interactive_class_enrollments (class_id TEXT NOT NULL REFERENCES interactive_classes(id),student_id TEXT NOT NULL REFERENCES users(id),status TEXT NOT NULL CHECK(status IN ('enrolled','withdrawn')),created_at TEXT NOT NULL,updated_at TEXT NOT NULL,PRIMARY KEY(class_id,student_id));",
     "CREATE TABLE IF NOT EXISTS interactive_class_presence (provider_event_id TEXT PRIMARY KEY,class_id TEXT NOT NULL REFERENCES interactive_classes(id),student_id TEXT NOT NULL REFERENCES users(id),kind TEXT NOT NULL CHECK(kind IN ('joined','left')),created_at TEXT NOT NULL);",
+    "CREATE TABLE IF NOT EXISTS learning_room_closures (class_id TEXT PRIMARY KEY REFERENCES interactive_classes(id),room_name TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','done')),attempts INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL);",
     "CREATE TABLE IF NOT EXISTS creator_availability (creator_id TEXT PRIMARY KEY REFERENCES users(id),slots_json TEXT NOT NULL,updated_at TEXT NOT NULL);",
     "CREATE TABLE IF NOT EXISTS learning_requests (id TEXT PRIMARY KEY,student_id TEXT NOT NULL REFERENCES users(id),creator_id TEXT NOT NULL REFERENCES users(id),kind TEXT NOT NULL CHECK(kind IN ('tutoring','assignment_explanation','project_guidance')),description TEXT NOT NULL,budget_kobo INTEGER,quote_kobo INTEGER,status TEXT NOT NULL CHECK(status IN ('requested','quoted','accepted','in_progress','submitted','completed','rejected','cancelled','disputed')),creation_key TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,UNIQUE(student_id,creation_key));",
     "CREATE TABLE IF NOT EXISTS learning_disputes (id TEXT PRIMARY KEY,request_id TEXT NOT NULL REFERENCES learning_requests(id),reporter_id TEXT NOT NULL REFERENCES users(id),reason TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','resolved')),resolution TEXT,created_at TEXT NOT NULL,reviewed_at TEXT,reviewed_by TEXT REFERENCES users(id));",
@@ -163,9 +164,34 @@ export function createLearningServices({db,transaction,audit,error,requireVerifi
         if(current.status==='completed')return {id,status:'completed',replayed:true};
         if(current.status!=='room_open')throw error('CLASS_NOT_LIVE',409);
         db.prepare("UPDATE interactive_classes SET status='completed',updated_at=? WHERE id=?").run(timestamp(),id);
+        db.prepare("INSERT OR IGNORE INTO learning_room_closures(class_id,room_name,state,updated_at) VALUES(?,?,'pending',?)")
+          .run(id,row.room_name,timestamp());
         audit(actor.id,'class.finished',id);
         return {id,status:'completed',replayed:false};
       });
+    },
+    // Only a trusted server worker can drain this durable outbox using Week 1 RoomService.
+    async drainRoomClosures(actor,roomService){
+      if(!actor||actor.role!=='admin'||actor.suspended)throw error('ADMIN_REQUIRED',403);
+      if(!roomService||typeof roomService.deleteRoom!=='function')throw error('LIVEKIT_ROOM_SERVICE_NOT_CONFIGURED',503);
+      const jobs=db.prepare("SELECT class_id,room_name FROM learning_room_closures WHERE state='pending' ORDER BY updated_at LIMIT 20").all();
+      let completed=0,failed=0;
+      for(const job of jobs){
+        try{
+          await roomService.deleteRoom(job.room_name);
+          transaction(()=>{
+            db.prepare("UPDATE learning_room_closures SET state='done',attempts=attempts+1,updated_at=? WHERE class_id=? AND state='pending'")
+              .run(timestamp(),job.class_id);
+            audit(actor.id,'class.room.provider_close.confirmed',job.class_id);
+          });
+          completed++;
+        }catch{
+          db.prepare("UPDATE learning_room_closures SET attempts=attempts+1,updated_at=? WHERE class_id=?")
+            .run(timestamp(),job.class_id);
+          failed++;
+        }
+      }
+      return {completed,failed,remaining:db.prepare("SELECT count(*) AS n FROM learning_room_closures WHERE state='pending'").get().n};
     },
     cancelClass(actor,id,reason){
       const row=classRow(actor,id);
@@ -179,6 +205,8 @@ export function createLearningServices({db,transaction,audit,error,requireVerifi
         }
         if(status.status==='completed')throw error('CLASS_CLOSED',409);
         db.prepare("UPDATE interactive_classes SET status='cancelled',reason=?,updated_at=? WHERE id=?").run(explanation,timestamp(),id);
+        db.prepare("INSERT OR IGNORE INTO learning_room_closures(class_id,room_name,state,updated_at) VALUES(?,?,'pending',?)")
+          .run(id,row.room_name,timestamp());
         const enrolled=db.prepare("SELECT student_id FROM interactive_class_enrollments WHERE class_id=? AND status='enrolled'").all(id);
         for(const participant of enrolled){
           notice(participant.student_id,'class_cancelled',id,'The creator cancelled this class. Check your enrollment for next steps.');
