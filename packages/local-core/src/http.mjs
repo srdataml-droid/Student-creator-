@@ -7,6 +7,7 @@ import {createReadStream} from 'node:fs';
 import {Readable} from 'node:stream';
 import {createPaystackClient,PaystackGatewayError} from '../../payment-core/src/paystack-client.mjs';
 import {classTokenIssuerFromEnv} from './livekit-class-tokens.mjs';
+import {liveKitRoomServiceFromEnv} from './livekit-room-service.mjs';
 const MAX_BODY=32768;
 const RESTRICTED=Symbol('restricted');
 const responses=(data,status=200,headers={})=>Response.json(data,{status,headers:{'cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer',...headers}});
@@ -54,7 +55,7 @@ const allowed=(s)=>s&&typeof s==='string'&&s.length<100;
  * Only standalone localhost use. No payment provider, no staging credentials.
  * @param {object} store - an open local SQLite store
  */
-export function createLocalHandler(store,{sandboxGateway,payments=null,emailDelivery=null,classTokenIssuer=null}={}){
+export function createLocalHandler(store,{sandboxGateway,payments=null,emailDelivery=null,classTokenIssuer=null,liveKitRoomService=null}={}){
   // Explicit synthetic transport only. No real email or local debug token endpoint.
   const mail=process.env.NODE_ENV!=='production'&&emailDelivery?.environment==='synthetic'&&typeof emailDelivery.send==='function'?emailDelivery:null;
   async function sendChallenge(challenge){
@@ -65,6 +66,7 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
   // No live mode. Production builds keep all financial actions disabled.
   const gateway=process.env.NODE_ENV==='production'?null:(payments?.gateway??(sandboxGateway===undefined?(process.env.PAYSTACK_TEST_SECRET_KEY?createPaystackClient({secretKey:process.env.PAYSTACK_TEST_SECRET_KEY,environment:'test'}):null):sandboxGateway));
   const signingSecrets=payments?.signingSecrets??(process.env.PAYSTACK_WEBHOOK_KEY_ID&&process.env.PAYSTACK_WEBHOOK_SIGNING_SECRET?[{id:process.env.PAYSTACK_WEBHOOK_KEY_ID,secret:process.env.PAYSTACK_WEBHOOK_SIGNING_SECRET}]:[]);
+  const liveRooms=liveKitRoomService??liveKitRoomServiceFromEnv();
   return async function handle(request,segments=[]){
     try{
       const method=request.method.toUpperCase(),path=segments.join('/');
@@ -79,6 +81,25 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
         catch(e){if(e.code==='INVALID_SIGNATURE')return fail('INVALID_SIGNATURE',401);if(['BAD_JSON','INVALID_EVENT'].includes(e.code))return fail(e.code,400);throw e;}
         // ACK only after durable inbox commit. Worker drains independently and retries.
         return responses({received:true});
+      }
+      if(path==='livekit/webhook'&&method==='POST'){
+        if(!liveRooms)return fail('LIVEKIT_NOT_CONFIGURED',503);
+        if(!/^application\/webhook\+json(?:\s*;|\s*$)/i.test(request.headers.get('content-type')??''))
+          return fail('WEBHOOK_CONTENT_TYPE_REQUIRED',415);
+        if(Number(request.headers.get('content-length')||0)>262144)return fail('BODY_TOO_LARGE',413);
+        const reader=request.body?.getReader();if(!reader)return fail('INVALID_LIVEKIT_WEBHOOK',400);
+        const chunks=[];let bytes=0;
+        try{
+          while(true){
+            const {done,value}=await reader.read();if(done)break;
+            bytes+=value.byteLength;
+            if(bytes>262144){await reader.cancel();return fail('BODY_TOO_LARGE',413);}
+            chunks.push(Buffer.from(value));
+          }
+        }finally{reader.releaseLock();}
+        const received=await store.recordSignedLiveKitWebhook(Buffer.concat(chunks),
+          request.headers.get('authorization'),liveRooms);
+        return responses({received:true,...received});
       }
       if(method==='POST'&&!checkOrigin(request))return fail('ORIGIN_REJECTED',403);
       const cookies=parseCookies(request.headers.get('cookie'));
@@ -359,13 +380,32 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
         if(['enroll','withdraw','open','finish','cancel','room-token'].includes(action)){
           if(action==='cancel'){
             if(Object.keys(body).some(k=>k!=='reason'))return fail('UNEXPECTED_BODY',400);
-            return responses({class:store.cancelClass(actor,id,body.reason)});
+            const result=store.cancelClass(actor,id,body.reason);
+            let providerClosed=false;
+            if(liveRooms)providerClosed=Boolean((await store.closeClassRoomProvider(actor,id,liveRooms).catch(()=>null))?.providerClosed);
+            return responses({class:{...result,providerClosed}});
           }
           if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
           if(action==='enroll')return responses({enrollment:store.enrollClass(actor,id)});
           if(action==='withdraw')return responses({enrollment:store.withdrawClass(actor,id)});
-          if(action==='open')return responses({class:store.openClass(actor,id)});
-          if(action==='finish')return responses({class:store.finishClass(actor,id)});
+          if(action==='open'){
+            const pre=store.preflightOpenClass(actor,id);
+            if(!pre.alreadyOpen){
+              if(liveRooms)await liveRooms.createRoom(pre.roomName,{capacity:pre.capacity});
+              else if(process.env.NODE_ENV==='production')return fail('LIVEKIT_NOT_CONFIGURED',503);
+            }
+            try{return responses({class:store.openClass(actor,id)});}
+            catch(e){
+              if(!pre.alreadyOpen&&liveRooms)await liveRooms.deleteRoom(pre.roomName).catch(()=>null);
+              throw e;
+            }
+          }
+          if(action==='finish'){
+            const result=store.finishClass(actor,id);
+            let providerClosed=false;
+            if(liveRooms)providerClosed=Boolean((await store.closeClassRoomProvider(actor,id,liveRooms).catch(()=>null))?.providerClosed);
+            return responses({class:{...result,providerClosed}});
+          }
           if(action==='room-token'){
             const token=await store.roomToken(actor,id,classTokenIssuer??classTokenIssuerFromEnv());
             return responses({room:token},200,{'referrer-policy':'no-referrer'});
