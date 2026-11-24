@@ -84,6 +84,7 @@ export function createLearningServices({db,transaction,audit,error,requireVerifi
       if(starts<now()+5*60000||starts>now()+90*86400000||ends-starts<15*60000||ends-starts>4*3600000)throw error('INVALID_SCHEDULE',422);
       if(!Number.isInteger(input.capacity)||input.capacity<2||input.capacity>50)throw error('INVALID_CAPACITY',422);
       const price=amount(input.priceKobo??0,error);
+      if(price>0&&price<20000)throw error('BELOW_MINIMUM_PRICE',422);
       const normalized={courseId:input.courseId,title,description,startsAt:input.startsAt,endsAt:input.endsAt,capacity:input.capacity,priceKobo:price};
       return transaction(()=>{
         const old=db.prepare('SELECT * FROM interactive_classes WHERE host_id=? AND creation_key=?').get(actor.id,input.creationKey);
@@ -374,6 +375,7 @@ export function createLearningServices({db,transaction,audit,error,requireVerifi
       const row=requestRow(actor,id);
       if(row.creator_id!==actor.id)throw error('FORBIDDEN',403);
       const quote=amount(quoteKobo,error);
+      if(quote>0&&quote<20000)throw error('BELOW_MINIMUM_PRICE',422);
       return transaction(()=>{
         const r=db.prepare('SELECT * FROM learning_requests WHERE id=?').get(id);
         if(!['requested','quoted'].includes(r.status))throw error('HELP_CLOSED',409);
