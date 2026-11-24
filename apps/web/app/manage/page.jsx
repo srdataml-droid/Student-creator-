@@ -5,26 +5,46 @@ import {api,friendlyError} from '../../lib/local-client.js';
 export default function Manage(){
  const [user,setUser]=useState(null),[state,setState]=useState('loading'),[schools,setSchools]=useState([]),[courses,setCourses]=useState([]),[people,setPeople]=useState([]),[students,setStudents]=useState([]),[queue,setQueue]=useState([]),[reports,setReports]=useState([]),[communityReports,setCommunityReports]=useState([]),[commentReports,setCommentReports]=useState([]);
  const [schoolName,setSchoolName]=useState(''),[course,setCourse]=useState({institutionId:'',code:'',title:''}),[topic,setTopic]=useState({courseId:'',name:''}),[reasons,setReasons]=useState({});
- const [error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
- async function refresh(){try{const me=await api('me');setUser(me.user);if(me.user.role!=='admin'){setState('forbidden');return;}const [a,b,c,d,r,cr,comments,accounts]=await Promise.all([api('institutions'),api('courses'),api('admin/pending-users'),api('admin/review-queue'),api('admin/reports'),api('admin/community-reports'),api('admin/comment-reports'),api('admin/students')]);setSchools(a.institutions);setCourses(b.courses);setPeople(c.users);setQueue(d.lessons);setReports(r.reports);setCommunityReports(cr.reports);setCommentReports(comments.reports);setStudents(accounts.students);setState('ready');}catch(e){setState(e.status===401?'signed-out':'unavailable');}}
+ const [error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false),[scopes,setScopes]=useState([]);
+ async function refresh(){
+  try{
+    const me=await api('me');setUser(me.user);
+    if(me.user.role!=='admin'){setState('forbidden');return;}
+    const perms=await api('admin/governance/permissions');setScopes(perms.capabilities);
+    const can=key=>perms.capabilities.includes(key);
+    const [a,b,c,d,r,cr,comments,accounts]=await Promise.all([
+      api('institutions'),api('courses'),
+      can('verification.review')?api('admin/pending-users'):{users:[]},
+      can('content.moderate')?api('admin/review-queue'):{lessons:[]},
+      can('content.moderate')?api('admin/reports'):{reports:[]},
+      can('community.moderate')?api('admin/community-reports'):{reports:[]},
+      can('content.moderate')?api('admin/comment-reports'):{reports:[]},
+      can('verification.review')?api('admin/students'):{students:[]}
+    ]);
+    setSchools(a.institutions);setCourses(b.courses);setPeople(c.users);setQueue(d.lessons);
+    setReports(r.reports);setCommunityReports(cr.reports);setCommentReports(comments.reports);
+    setStudents(accounts.students);setState('ready');
+  }catch(e){setState(e.status===401?'signed-out':e.status===403?'forbidden':'unavailable');}
+ }
  useEffect(()=>{refresh();},[]);
  async function doAction(job,success){setBusy(true);setError('');setMessage('');try{await job();setMessage(success);await refresh();}catch(e){setError(friendlyError(e));}finally{setBusy(false);}}
  async function signOut(){await api('auth/logout',{method:'POST',body:{}});window.location.assign('/');}
  return <main id="main" className="main admin-console"><section className="hero compact"><p className="eyebrow">Content operations</p><h1>Protect the learning community.</h1><p className="intro">Set up campuses and courses, review student membership, and approve or reject lessons with recorded reasons.</p></section>
  {state==='loading'?<p role="status">Loading administration…</p>:state==='signed-out'?<div className="status">Administrator sign-in is required. <Link href="/sign-in">Sign in</Link>.</div>:state==='forbidden'?<p role="alert" className="status">Your account is not an administrator. <Link href="/studio">Go to your studio</Link>.</p>:state==='unavailable'?<p role="alert" className="status">Administration is temporarily unavailable. Please try again.</p>:<>
  <div className="studio-meta"><p>Signed in as <strong>{user.email}</strong> · Administrator</p><button className="quiet-button" onClick={signOut}>Sign out</button></div>
+ <p className="hint"><Link href="/manage/governance">Governance dashboard, staff roles and security incidents</Link></p>
  {message&&<p role="status" className="form-success">{message}</p>}{error&&<p role="alert" className="form-error">{error}</p>}
  <div className="manage-grid">
- <section className="panel"><p className="eyebrow">Step 1</p><h2>Campuses</h2><p className="hint">Manage institutions and their available courses.</p>
+ {scopes.includes('staff.assign')&&<section className="panel"><p className="eyebrow">Step 1</p><h2>Campuses</h2><p className="hint">Manage institutions and their available courses.</p>
  <form className="form-stack" onSubmit={e=>{e.preventDefault();doAction(()=>api('admin/institutions',{method:'POST',body:{name:schoolName}}),'Campus added.');setSchoolName('');}}><label htmlFor="schoolName">School name</label><input id="schoolName" value={schoolName} minLength="3" maxLength="160" required onChange={e=>setSchoolName(e.target.value)}/><button type="submit" disabled={busy} className="primary-link">Add campus</button></form>
- <ul className="small-list">{schools.map(s=><li key={s.id}>{s.name}</li>)}</ul></section>
- <section className="panel"><p className="eyebrow">Step 2</p><h2>Courses</h2><form className="form-stack" onSubmit={e=>{e.preventDefault();doAction(()=>api('admin/courses',{method:'POST',body:course}),'Course added.');}}>
+ <ul className="small-list">{schools.map(s=><li key={s.id}>{s.name}</li>)}</ul></section>}
+ {scopes.includes('staff.assign')&&<section className="panel"><p className="eyebrow">Step 2</p><h2>Courses</h2><form className="form-stack" onSubmit={e=>{e.preventDefault();doAction(()=>api('admin/courses',{method:'POST',body:course}),'Course added.');}}>
  <label htmlFor="courseSchool">School</label><select id="courseSchool" required value={course.institutionId} onChange={e=>setCourse({...course,institutionId:e.target.value})}><option value="">Choose a campus</option>{schools.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}</select><label htmlFor="courseCode">Course code</label><input id="courseCode" required value={course.code} onChange={e=>setCourse({...course,code:e.target.value})} placeholder="e.g. MTH 101"/><label htmlFor="courseName">Course title</label><input id="courseName" required minLength="3" value={course.title} onChange={e=>setCourse({...course,title:e.target.value})}/><button type="submit" disabled={busy||schools.length===0} className="primary-link">Add course</button>
- </form><p className="hint">{courses.length} active courses</p><div className="divider-lite"/><h3>Add a course topic</h3><form className="form-stack" onSubmit={e=>{e.preventDefault();doAction(()=>api('admin/topics',{method:'POST',body:topic}),'Topic created.');setTopic({...topic,name:''});}}><label htmlFor="topicCourse">Course</label><select id="topicCourse" required value={topic.courseId} onChange={e=>setTopic({...topic,courseId:e.target.value})}><option value="">Choose a course</option>{courses.map(c=><option key={c.id} value={c.id}>{c.code} — {c.title}</option>)}</select><label htmlFor="topicName">Topic name</label><input id="topicName" required minLength="3" maxLength="120" value={topic.name} onChange={e=>setTopic({...topic,name:e.target.value})} placeholder="e.g. Differentiation"/><button type="submit" disabled={busy||courses.length===0} className="secondary-link">Add topic</button></form></section>
- <section className="panel"><p className="eyebrow">Step 3</p><h2>Student verification</h2><p className="hint">Confirm campus membership outside the app before approving. This screen does not automatically validate an ID card or academic email.</p>
+ </form><p className="hint">{courses.length} active courses</p><div className="divider-lite"/><h3>Add a course topic</h3><form className="form-stack" onSubmit={e=>{e.preventDefault();doAction(()=>api('admin/topics',{method:'POST',body:topic}),'Topic created.');setTopic({...topic,name:''});}}><label htmlFor="topicCourse">Course</label><select id="topicCourse" required value={topic.courseId} onChange={e=>setTopic({...topic,courseId:e.target.value})}><option value="">Choose a course</option>{courses.map(c=><option key={c.id} value={c.id}>{c.code} — {c.title}</option>)}</select><label htmlFor="topicName">Topic name</label><input id="topicName" required minLength="3" maxLength="120" value={topic.name} onChange={e=>setTopic({...topic,name:e.target.value})} placeholder="e.g. Differentiation"/><button type="submit" disabled={busy||courses.length===0} className="secondary-link">Add topic</button></form></section>}
+ {scopes.includes('verification.review')&&<section className="panel"><p className="eyebrow">Step 3</p><h2>Student verification</h2><p className="hint">Confirm campus membership outside the app before approving. This screen does not automatically validate an ID card or academic email.</p>
  {people.length===0?<p role="status">No accounts awaiting verification.</p>:<ul className="review-list">{people.map(p=><li key={p.id}><h3>{p.email}</h3><p className="hint">Campus: {schools.find(s=>s.id===p.institution_id)?.name||'Not found'}</p><button className="secondary-link" disabled={busy} onClick={()=>doAction(()=>api('admin/verify',{method:'POST',body:{userId:p.id}}),'Student membership approved.')}>Confirm verified membership</button></li>)}</ul>}
- </section>
- <section className="panel"><p className="eyebrow">Account security</p><h2>Student account access</h2>
+ </section>}
+ {scopes.includes('verification.review')&&<section className="panel"><p className="eyebrow">Account security</p><h2>Student account access</h2>
  <p className="hint">Suspension blocks student sign-in and protected content access, revokes existing sessions and affected playback grants. Reinstatement requires a fresh sign-in and does not override institutional eligibility. Purchases and account records are retained.</p>
  {students.length===0?<p role="status">No student accounts.</p>:<ul className="review-list">{students.map(s=><li key={s.id}>
  <h3>{s.email}</h3><p className="hint">{s.suspended?'Suspended':s.verifiedAt?'Membership approved':'Awaiting verification'} · {schools.find(x=>x.id===s.institutionId)?.name||'Unknown campus'}</p>
@@ -33,16 +53,16 @@ export default function Manage(){
  <textarea id={'suspension-'+s.id} value={reasons['suspension-'+s.id]??''} onChange={e=>setReasons(old=>({...old,['suspension-'+s.id]:e.target.value}))} required minLength={5} maxLength={1000} rows={2} />
  <button type="submit" className="secondary-link" disabled={busy||(reasons['suspension-'+s.id]??'').trim().length<5}>{s.suspended?'Reinstate student':'Suspend student'}</button>
  </form></li>)}</ul>}
- </section>
- <section className="panel"><p className="eyebrow">Step 4</p><h2>Lesson review</h2><p className="hint">Read each submission and document the reason for your decision. Approval makes the lesson public immediately.</p>
+ </section>}
+ {scopes.includes('content.moderate')&&<section className="panel"><p className="eyebrow">Step 4</p><h2>Lesson review</h2><p className="hint">Read each submission and document the reason for your decision. Approval makes the lesson public immediately.</p>
  {queue.length===0?<p role="status">No lessons awaiting review.</p>:<ul className="review-list">{queue.map(l=><li key={l.id}><span className="pill">Awaiting review</span><h3>{l.title}</h3><p>{l.description}</p><div className="review-text">{l.lessonText}</div>
  {l.hasVideo&&<div className="lesson-video-preview"><p className="hint">Review the creator-supplied video before approval.</p><video controls playsInline preload="none" aria-label={`Review video for ${l.title}`}><source src={`/api/local/lessons/${l.id}/video`} type="video/mp4"/>{l.hasCaptions&&<track kind="captions" srcLang="en" label="English captions" src={`/api/local/lessons/${l.id}/video/captions`} default/>}This browser cannot play the video.</video></div>}
  <label htmlFor={`reason-${l.id}`}>Decision reason (minimum 5 characters)</label><textarea id={`reason-${l.id}`} value={reasons[l.id]??''} onChange={e=>setReasons({...reasons,[l.id]:e.target.value})} maxLength="1000" rows="2"/><div className="button-row"><button disabled={busy||(reasons[l.id]??'').trim().length<5} className="primary-link" onClick={()=>doAction(()=>api(`lessons/${l.id}/review`,{method:'POST',body:{decision:'approve',reason:reasons[l.id]}}),'Lesson approved and published.')}>Approve</button><button disabled={busy||(reasons[l.id]??'').trim().length<5} className="quiet-button" onClick={()=>doAction(()=>api(`lessons/${l.id}/review`,{method:'POST',body:{decision:'reject',reason:reasons[l.id]}}),'Lesson rejected with feedback.')}>Reject</button></div></li>)}</ul>}
- </section>
- <section className="panel"><p className="eyebrow">Community support</p><h2>Reported messages</h2><p className="hint">Only messages explicitly reported by recipients appear here. Document review actions; no automatic punishment is applied.</p>
+ </section>}
+ {scopes.includes('content.moderate')&&<section className="panel"><p className="eyebrow">Community support</p><h2>Reported messages</h2><p className="hint">Only messages explicitly reported by recipients appear here. Document review actions; no automatic punishment is applied.</p>
  {reports.length===0?<p role="status">No open message reports.</p>:<ul className="review-list">{reports.map(r=><li key={r.id}><h3>Report {r.id.slice(0,8)}…</h3><p className="hint">Reason: {r.reason}</p><div className="review-text">{r.body}</div><label htmlFor={`resolve-${r.id}`}>Review notes</label><textarea id={`resolve-${r.id}`} rows="2" value={reasons[r.id]??''} onChange={e=>setReasons({...reasons,[r.id]:e.target.value})}/><button disabled={busy||(reasons[r.id]??'').trim().length<5} className="secondary-link" onClick={()=>doAction(()=>api(`admin/reports/${r.id}`,{method:'POST',body:{resolution:reasons[r.id]}}),'Report reviewed and recorded.')}>Mark reviewed</button></li>)}</ul>}
- </section>
- <section className="panel"><p className="eyebrow">Creator posts</p><h2>Reported lesson comments</h2>
+ </section>}
+ {scopes.includes('content.moderate')&&<section className="panel"><p className="eyebrow">Creator posts</p><h2>Reported lesson comments</h2>
  <p className="hint">Separate student reports from verified editorial actions. A hidden comment is no longer shown publicly; its report remains for audit.</p>
  {commentReports.length===0?<p role="status">No open lesson comment reports.</p>:<ul className="review-list">{commentReports.map(r=><li key={r.id}>
   <h3>Comment report {r.id.slice(0,8)}…</h3><p className="hint">Reason: {r.reason}</p><div className="review-text">{r.body}</div>
@@ -55,10 +75,10 @@ export default function Manage(){
     onClick={()=>doAction(()=>api(`admin/comment-reports/${r.id}`,{method:'POST',body:{decision:'hide',reason:reasons[r.id]}}),'Reported comment hidden.')}>Hide comment</button>
   </div>
  </li>)}</ul>}
- </section>
- <section className="panel"><p className="eyebrow">Course communities</p><h2>Reported discussion posts</h2><p className="hint">Review flagged class discussion content. Hiding a post also hides its replies from the feed; original evidence is retained for audit.</p>
+ </section>}
+ {scopes.includes('community.moderate')&&<section className="panel"><p className="eyebrow">Course communities</p><h2>Reported discussion posts</h2><p className="hint">Review flagged class discussion content. Hiding a post also hides its replies from the feed; original evidence is retained for audit.</p>
  {communityReports.length===0?<p role="status">No open course discussion reports.</p>:<ul className="review-list">{communityReports.map(r=><li key={r.id}><h3>Discussion report {r.id.slice(0,8)}…</h3><p className="hint">Reason: {r.reason}</p><div className="review-text">{r.body}</div><label htmlFor={`community-${r.id}`}>Decision notes</label><textarea id={`community-${r.id}`} rows="2" value={reasons[r.id]??''} onChange={e=>setReasons({...reasons,[r.id]:e.target.value})}/><div className="button-row"><button disabled={busy||(reasons[r.id]??'').trim().length<5} className="secondary-link" onClick={()=>doAction(()=>api(`admin/community-reports/${r.id}`,{method:'POST',body:{decision:'dismiss',reason:reasons[r.id]}}),'Report reviewed; discussion remains visible.')}>Dismiss report</button><button disabled={busy||(reasons[r.id]??'').trim().length<5} className="quiet-button" onClick={()=>doAction(()=>api(`admin/community-reports/${r.id}`,{method:'POST',body:{decision:'hide',reason:reasons[r.id]}}),'Discussion hidden and report resolved.')}>Hide discussion</button></div></li>)}</ul>}
- </section>
+ </section>}
  </div></>}
  </main>;
 }
