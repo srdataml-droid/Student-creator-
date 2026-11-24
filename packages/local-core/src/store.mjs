@@ -1153,7 +1153,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     requestPrivacyAction:rightsCases.requestPrivacyAction,
     myPrivacyRequests:rightsCases.myPrivacyRequests,
     privacyRequestQueue:(actor)=>{governance.requireCapability(actor,'privacy.review');return rightsCases.privacyQueue(actor);},
-    triagePrivacyRequest:(actor,id,decision)=>{governance.requireCapability(actor,'privacy.review');return rightsCases.reviewPrivacyRequest(actor,id,decision);}
+    triagePrivacyRequest:(actor,id,decision)=>{governance.requireCapability(actor,'privacy.review');return rightsCases.reviewPrivacyRequest(actor,id,decision);},
     // Institution proofs can only be applied by trusted server code; no
     // endpoint accepts a browser-supplied verified=true claim or raw ID image.
     addInstitutionIntegration:affiliations.add,
