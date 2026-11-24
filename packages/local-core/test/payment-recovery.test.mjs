@@ -80,12 +80,19 @@ test('pending orders without callbacks can be reconciled after unknown provider 
   assert.equal((await f.store.recoverPendingPayments(client(f))).length,0);
  }finally{f.close();}
 });
-test('recovery rotates past an older unknown payment instead of starving the next order',async()=>{
+test('recovery rotates past an older unknown payment instead of starving the next order',async(t)=>{
+ // The contract orders equal-attempt orders by creation time, then reference.
+ // Set distinct synthetic timestamps so random references cannot change this fixture's order.
+ t.mock.timers.enable({apis:['Date'],now:Date.now()});
  const f=commerceFixture();try{
+  t.mock.timers.tick(1000);
   const later=f.store.createPurchaseOrder(f.other.user,f.id,'other-order-request-0001');
+  assert.ok(later.createdAt>f.order.createdAt);
   const pending=Object.assign(Error('unknown'),{code:'NOT_PAID'});
   const gateway={environment:'test',verify:async order=>{if(order.reference===f.order.reference)throw pending;return {reference:later.reference,providerTransactionId:'later_synthetic_tx',amountKobo:20000,currency:'NGN',domain:'test'};}};
-  await f.store.recoverPendingPayments(gateway,{limit:1});
+  const first=await f.store.recoverPendingPayments(gateway,{limit:1});
+  assert.equal(first[0].state,'pending');
+  assert.equal(first[0].code,'NOT_PAID');
   const next=await f.store.recoverPendingPayments(gateway,{limit:1});
   assert.equal(next[0].state,'paid');
   assert.equal(f.store.getPurchaseOrder(f.other.user,later.reference).status,'paid');
