@@ -1145,6 +1145,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     sandboxCheckout:commerce.sandboxCheckout,
     confirmSandboxOrder:commerce.confirmSandboxOrder,
     getPurchaseOrder:commerce.orderStatus,
+    getPurchaseReceipt:commerce.purchaseReceipt,
     reconcilePurchase:commerce.reconcilePurchase,
     simulatePaymentReversal:commerce.simulateReversal,
     receivePaymentWebhook:commerce.receiveWebhook,

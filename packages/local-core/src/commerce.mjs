@@ -2,6 +2,7 @@
 import {randomBytes,createHash} from 'node:crypto';
 import {migrateCommerce} from './commerce-schema.mjs';
 import {readCreatorJournal} from './creator-journal.mjs';
+import {readPurchaseReceipt} from './purchase-receipt.mjs';
 import {initializeCheckoutSession} from './checkout-session.mjs';
 import {claimInboxEvent,finishInboxEvent} from './payment-inbox-lease.mjs';
 import {decodeVerifiedPaystackWebhookV1} from '../../payment-core/src/webhooks.mjs';
@@ -152,6 +153,7 @@ export function createLocalCommerce({db,transaction,audit,error,requireVerified,
   return r;
  }
  function orderStatus(actor,reference){return snapshot(trustedOrder(actor,reference));}
+ function purchaseReceipt(actor,reference){requireVerified(actor);return transaction(()=>{requireVerified(actor);return readPurchaseReceipt(db,actor.id,reference,error);});}
  async function sandboxCheckout(actor,reference,gateway){
   requireSandbox();
   const row=trustedOrder(actor,reference);
@@ -315,5 +317,5 @@ export function createLocalCommerce({db,transaction,audit,error,requireVerified,
    audit(actor.id,'purchase.dispute.resolved',row.order_reference,{caseKey:key});return {replayed:false};
   });
  }
- return Object.freeze({price,setPrice,requireAccess,createOrder,applyVerifiedTestCharge:testVerification,applySyntheticRefund,ownOrders,creatorEarnings,lessonAccess,orderStatus,sandboxCheckout,confirmSandboxOrder,reconcilePurchase,simulateReversal,receiveWebhook,drainInbox,recoverPending,reconciliation,recordRestrictedPurchases,disputes,resolveDispute});
+ return Object.freeze({price,setPrice,requireAccess,createOrder,applyVerifiedTestCharge:testVerification,applySyntheticRefund,ownOrders,creatorEarnings,lessonAccess,orderStatus,purchaseReceipt,sandboxCheckout,confirmSandboxOrder,reconcilePurchase,simulateReversal,receiveWebhook,drainInbox,recoverPending,reconciliation,recordRestrictedPurchases,disputes,resolveDispute});
 }
