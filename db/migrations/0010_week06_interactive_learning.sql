@@ -42,6 +42,15 @@ CREATE TABLE public.interactive_class_presence (
   kind text NOT NULL CHECK(kind IN ('joined','left')),
   created_at timestamptz NOT NULL DEFAULT now()
 );
+-- Durable provider room teardown is server-owned. A closed SQL row does not
+-- by itself invalidate signed LiveKit tokens or remove active participants.
+CREATE TABLE public.learning_room_closures (
+  class_id uuid PRIMARY KEY REFERENCES public.interactive_classes(id),
+  room_name text NOT NULL,
+  state text NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','done')),
+  attempts integer NOT NULL DEFAULT 0 CHECK(attempts>=0),
+  updated_at timestamptz NOT NULL DEFAULT now()
+);
 CREATE TABLE public.creator_availability (
   creator_id uuid PRIMARY KEY REFERENCES public.student_profiles(user_id),
   slots_json jsonb NOT NULL CHECK(jsonb_typeof(slots_json)='array'),
@@ -101,6 +110,7 @@ CREATE TABLE public.learning_notifications (
 ALTER TABLE public.interactive_classes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.interactive_class_enrollments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.interactive_class_presence ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.learning_room_closures ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.creator_availability ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.personal_learning_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.personal_learning_disputes ENABLE ROW LEVEL SECURITY;
@@ -149,14 +159,14 @@ FOR SELECT TO authenticated USING (
 -- The refund review queue is never browser-readable. A service operator must
 -- verify an actual charge/refund against Week 5 ledger and policy.
 REVOKE ALL ON public.interactive_classes,public.interactive_class_enrollments,
- public.interactive_class_presence,public.creator_availability,public.personal_learning_requests,
+ public.interactive_class_presence,public.learning_room_closures,public.creator_availability,public.personal_learning_requests,
  public.personal_learning_disputes,public.learning_refund_reviews,public.learning_notifications
  FROM PUBLIC,anon,authenticated;
 GRANT SELECT ON public.interactive_classes,public.interactive_class_enrollments,
  public.interactive_class_presence,public.creator_availability,public.personal_learning_requests,
  public.personal_learning_disputes,public.learning_notifications TO authenticated;
 GRANT ALL ON public.interactive_classes,public.interactive_class_enrollments,
- public.interactive_class_presence,public.creator_availability,public.personal_learning_requests,
+ public.interactive_class_presence,public.learning_room_closures,public.creator_availability,public.personal_learning_requests,
  public.personal_learning_disputes,public.learning_refund_reviews,public.learning_notifications TO service_role;
 
 -- Class/service entitlements and money mutations are deliberately NOT created here:
