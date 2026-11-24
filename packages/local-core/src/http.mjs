@@ -82,6 +82,26 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
         // ACK only after durable inbox commit. Worker drains independently and retries.
         return responses({received:true});
       }
+      if(path==='learning-payments/webhook'&&method==='POST'){
+        if(process.env.NODE_ENV==='production')return fail('SANDBOX_PAYMENTS_UNAVAILABLE',503);
+        const stream=request.body?.getReader();
+        if(!stream)return fail('INVALID_EVENT',400);
+        const chunks=[];let length=0;
+        try{while(true){
+          const {done,value}=await stream.read();if(done)break;
+          length+=value.byteLength;if(length>1048576){await stream.cancel();return fail('BODY_TOO_LARGE',413);}
+          chunks.push(Buffer.from(value));
+        }}finally{stream.releaseLock();}
+        try{
+          const recorded=store.receiveSignedLearningWebhook(Buffer.concat(chunks),
+            request.headers.get('paystack-signature'),signingSecrets);
+          return responses({received:true,...recorded});
+        }catch(err){
+          if(err.code==='INVALID_SIGNATURE')return fail('INVALID_SIGNATURE',401);
+          if(['INVALID_EVENT','BAD_JSON','ORDER_NOT_FOUND'].includes(err.code))return fail(err.code,400);
+          throw err;
+        }
+      }
       if(path==='livekit/webhook'&&method==='POST'){
         if(!liveRooms)return fail('LIVEKIT_NOT_CONFIGURED',503);
         if(!/^application\/webhook\+json(?:\s*;|\s*$)/i.test(request.headers.get('content-type')??''))
@@ -470,6 +490,11 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
       if(segments.length===4&&segments[0]==='admin'&&segments[1]==='learning-disputes'&&segments[3]==='resolve'){
         if(Object.keys(body).some(k=>k!=='resolution'))return fail('UNEXPECTED_BODY',400);
         return responses({dispute:store.resolveHelpDispute(actor,segments[2],body)});
+      }
+      if(path==='admin/learning-payments/inbox/drain'){
+        if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
+        if(!gateway)return fail('SANDBOX_PAYMENTS_UNAVAILABLE',503);
+        return responses({events:await store.drainSignedLearningInbox(actor,gateway)});
       }
       if(path==='admin/learning-reminders/queue'){
         if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
