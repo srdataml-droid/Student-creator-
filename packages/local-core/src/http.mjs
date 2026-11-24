@@ -116,6 +116,10 @@ export function createLocalHandler(store,{sandboxGateway,payments=null}={}){
         if(path==='me')return actor?responses({user:actor}):fail('AUTH_REQUIRED',401);
         if(path==='me/institution-affiliation'){if(!actor)return unauthorized();return responses({affiliation:store.institutionAffiliation(actor,actor.id)});}
         if(path==='me/verification-appeals'){if(!actor)return unauthorized();return responses({appeals:store.myVerificationAppeals(actor)});}
+        if(path==='me/copyright-claims'){if(!actor)return unauthorized();return responses({claims:store.myCopyrightClaims(actor)});}
+        if(path==='me/privacy-requests'){if(!actor)return unauthorized();return responses({requests:store.myPrivacyRequests(actor)});}
+        if(path==='admin/copyright-claims'){if(!actor)return unauthorized();return responses({claims:store.copyrightReviewQueue(actor)});}
+        if(path==='admin/privacy-requests'){if(!actor)return unauthorized();return responses({requests:store.privacyRequestQueue(actor)});}
         if(path==='admin/identity/revalidation-due'){if(!actor)return unauthorized();return responses({due:store.dueAffiliationRevalidations(actor)});}
         if(segments.length===3&&segments[0]==='admin'&&segments[1]==='institution-integrations'){
           if(!actor)return unauthorized();const integration=store.getInstitutionIntegration(actor,segments[2]);
@@ -214,7 +218,26 @@ export function createLocalHandler(store,{sandboxGateway,payments=null}={}){
         return responses({user:result.user},200,{'set-cookie':`${SESSION_COOKIE}=${result.token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800${secure}`});
       }
       if(!actor)return unauthorized();
-      if(path==='me/verification-appeals'){
+      if(path==='me/copyright-claims'){
+         if(Object.keys(body).some(k=>!['lessonId','reason'].includes(k)))return fail('UNEXPECTED_BODY',400);
+         const claim=store.submitCopyrightClaim(actor,body.lessonId,body.reason);
+         return responses({claim},claim.replayed?200:201);
+       }
+       if(path==='me/privacy-requests'){
+         if(Object.keys(body).some(k=>k!=='kind'))return fail('UNEXPECTED_BODY',400);
+         const result=store.requestPrivacyAction(actor,body.kind);
+         return responses({request:result},result.replayed?200:201);
+       }
+       if(segments.length===3&&segments[0]==='copyright-claims'&&segments[2]==='appeal'){
+         if(Object.keys(body).some(k=>k!=='reason'))return fail('UNEXPECTED_BODY',400);
+         const claim=store.appealCopyrightTakedown(actor,segments[1],body.reason);
+         return responses({claim},claim.replayed?200:201);
+       }
+       if(segments.length===4&&segments[0]==='admin'&&segments[1]==='copyright-claims'&&segments[3]==='resolve'){
+         if(Object.keys(body).some(k=>!['decision','note'].includes(k)))return fail('UNEXPECTED_BODY',400);
+         return responses({result:store.resolveCopyrightClaim(actor,segments[2],body)});
+       }
+       if(path==='me/verification-appeals'){
          if(Object.keys(body).some(k=>k!=='reason'))return fail('UNEXPECTED_BODY',400);
          const appeal=store.submitVerificationAppeal(actor,body.reason);
          return responses({appeal},appeal.replayed?200:201);
