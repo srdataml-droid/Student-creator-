@@ -93,6 +93,11 @@ export function createLearningServices({db,transaction,audit,error,requireVerifi
           if(JSON.stringify(prior)!==JSON.stringify(normalized))throw error('IDEMPOTENCY_CONFLICT',409);
           return {...rowClass(old),replayed:true};
         }
+        // A host cannot advertise two overlapping live sessions and be
+        // present in both. Atomic with creation to prevent concurrent races.
+        if(db.prepare("SELECT 1 FROM interactive_classes WHERE host_id=? AND status IN ('scheduled','room_open') AND starts_at<? AND ends_at>? LIMIT 1")
+          .get(actor.id,input.endsAt,input.startsAt))
+          throw error('CLASS_SCHEDULE_CONFLICT',409);
         const id=randomUUID(),date=timestamp();
         db.prepare("INSERT INTO interactive_classes(id,course_id,host_id,title,description,starts_at,ends_at,capacity,price_kobo,status,room_name,creation_key,created_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?,'scheduled',?,?,?,?)")
           .run(id,input.courseId,actor.id,title,description,input.startsAt,input.endsAt,input.capacity,price,'wk-class-'+id,input.creationKey,date,date);
