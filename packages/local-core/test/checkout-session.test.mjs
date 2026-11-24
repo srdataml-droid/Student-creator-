@@ -53,3 +53,14 @@ test('untrusted returned checkout cannot be cached or delivered',async()=>{
     assert.deepEqual({...f.db.prepare('SELECT state,authorization_url FROM checkout_sessions').get()},{state:'uncertain',authorization_url:null});
   }finally{f.close();}
 });
+test('fresh and persisted checkout destinations share the same validation boundary',async()=>{
+  for(const authorizationUrl of ['https://evil.example/checkout','http://checkout.paystack.com/synthetic','https://user:secret@checkout.paystack.com/synthetic','https://checkout.paystack.com:444/synthetic','https://checkout.paystack.com/synthetic#unexpected','not a URL']){
+    const f=fixture();try{
+      await assert.rejects(initializeCheckoutSession(f.db,order,{initialize:async()=>({...result,authorizationUrl})},error),{code:'INVALID_CHECKOUT_RESPONSE'});
+      assert.equal(f.db.prepare('SELECT state FROM checkout_sessions').get().state,'uncertain');
+      f.db.prepare("UPDATE checkout_sessions SET state='ready',authorization_url=? WHERE order_reference=?").run(authorizationUrl,order.reference);
+      await assert.rejects(initializeCheckoutSession(f.db,order,{initialize:async()=>assert.fail('must not initialize another checkout')},error),{code:'INVALID_CHECKOUT_RESPONSE'});
+      assert.equal(f.db.prepare('SELECT state FROM checkout_sessions').get().state,'ready');
+    }finally{f.close();}
+  }
+});
