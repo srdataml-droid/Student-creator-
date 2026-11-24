@@ -1,3 +1,4 @@
+import {migrateInboxLeases} from './payment-inbox-lease.mjs';
 import {migrateCheckoutSessions} from './checkout-session.mjs';
 /** Additive, transactional local migrations. PostgreSQL draft is not the runtime. */
 export function migrateCommerce(db,transaction){
@@ -30,6 +31,7 @@ export function migrateCommerce(db,transaction){
    CREATE TABLE IF NOT EXISTS payment_recovery(order_reference TEXT PRIMARY KEY REFERENCES purchase_orders(reference),attempts INTEGER NOT NULL DEFAULT 0,last_attempt_at INTEGER NOT NULL DEFAULT 0,next_retry_at INTEGER NOT NULL DEFAULT 0);
    CREATE TABLE IF NOT EXISTS payment_inbox(event_key TEXT PRIMARY KEY,order_reference TEXT NOT NULL REFERENCES purchase_orders(reference),transaction_id TEXT NOT NULL,payload_sha256 TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'received' CHECK(state IN ('received','processed','failed')),attempts INTEGER NOT NULL DEFAULT 0,next_retry_at INTEGER NOT NULL DEFAULT 0,last_error_code TEXT,received_at TEXT NOT NULL);
   `);
+  migrateInboxLeases(db);
   for(const table of ['commerce_lines','commerce_receipts','commerce_reversals','commerce_journal','synthetic_refunds'])for(const operation of ['UPDATE','DELETE'])db.exec(`CREATE TRIGGER IF NOT EXISTS immutable_${table}_${operation} BEFORE ${operation} ON ${table} BEGIN SELECT RAISE(ABORT,'APPEND_ONLY'); END;`);
   db.exec("CREATE TRIGGER IF NOT EXISTS immutable_commerce_events_DELETE BEFORE DELETE ON commerce_events BEGIN SELECT RAISE(ABORT,'APPEND_ONLY'); END;");
   // Backfill already paid local orders once, preserving original two-line journal.

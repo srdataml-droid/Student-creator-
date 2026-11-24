@@ -3,6 +3,7 @@ import {randomBytes,createHash} from 'node:crypto';
 import {migrateCommerce} from './commerce-schema.mjs';
 import {readCreatorJournal} from './creator-journal.mjs';
 import {initializeCheckoutSession} from './checkout-session.mjs';
+import {claimInboxEvent,finishInboxEvent} from './payment-inbox-lease.mjs';
 import {decodeVerifiedPaystackWebhookV1} from '../../payment-core/src/webhooks.mjs';
 import {quoteLessonPurchase,validateVerifiedCharge} from '../../payment-core/src/payments.mjs';
 export function createLocalCommerce({db,transaction,audit,error,requireVerified,requireCreatorAction}){
@@ -90,7 +91,7 @@ export function createLocalCommerce({db,transaction,audit,error,requireVerified,
   db.prepare('DELETE FROM playback_grants WHERE user_id=? AND lesson_id=?').run(order.buyer_id,order.lesson_id);
  }
  function completeInbox(reference,transactionId){
-  db.prepare("UPDATE payment_inbox SET state='processed',last_error_code=NULL WHERE order_reference=? AND transaction_id=?").run(reference,transactionId);
+  db.prepare("UPDATE payment_inbox SET state='processed',last_error_code=NULL,lease_token=NULL,lease_until=0,dead_lettered_at=NULL WHERE order_reference=? AND transaction_id=?").run(reference,transactionId);
  }
  function restrictionDispute(reference){
   if(db.prepare("SELECT 1 FROM payment_disputes WHERE order_reference=? AND kind='creator_view_restriction' AND status='open'").get(reference))return;
@@ -244,16 +245,21 @@ export function createLocalCommerce({db,transaction,audit,error,requireVerified,
   requireSandbox();
   if(!Number.isSafeInteger(limit)||limit<1||limit>100)throw error('INVALID_LIMIT',422);
   const results=[];
-  for(const event of db.prepare("SELECT * FROM payment_inbox WHERE state<>'processed' AND next_retry_at<=? ORDER BY received_at LIMIT ?").all(Date.now(),limit)){
-   db.prepare('UPDATE payment_inbox SET attempts=attempts+1 WHERE event_key=?').run(event.event_key);
+  for(let i=0;i<limit;i++){
+   const event=claimInboxEvent(db);
+   if(!event)break;
    try{
     if(!db.prepare('SELECT 1 FROM commerce_receipts WHERE transaction_id=? AND order_reference=?').get(event.transaction_id,event.order_reference))await reconcileReference(event.order_reference,gateway,event.transaction_id);
-    db.prepare("UPDATE payment_inbox SET state='processed',last_error_code=NULL WHERE event_key=?").run(event.event_key);
+    finishInboxEvent(db,event);
     results.push({eventKey:event.event_key,state:'processed'});
    }catch(e){
     const code=typeof e.code==='string'&&/^[A-Z_]{1,60}$/.test(e.code)?e.code:'VERIFICATION_FAILED';
-    db.prepare("UPDATE payment_inbox SET state='failed',last_error_code=?,next_retry_at=? WHERE event_key=? AND state<>'processed'").run(code,Date.now()+Math.min(3600000,1000*2**Math.min(event.attempts,12)),event.event_key);
-    results.push({eventKey:event.event_key,state:'failed',code});
+    const owned=finishInboxEvent(db,event,code);
+    if(owned)results.push({eventKey:event.event_key,state:'failed',code});
+    else {
+     const current=db.prepare('SELECT state FROM payment_inbox WHERE event_key=?').get(event.event_key);
+     results.push({eventKey:event.event_key,state:current?.state==='processed'?'processed':'superseded'});
+    }
    }
   }
   return results;
@@ -285,7 +291,9 @@ export function createLocalCommerce({db,transaction,audit,error,requireVerified,
   const invalidEvents=db.prepare("SELECT count(*) n FROM commerce_events e WHERE (SELECT count(*) FROM commerce_lines l WHERE l.event_key=e.event_key)<2 OR (SELECT sum(debit_kobo)-sum(credit_kobo) FROM commerce_lines l WHERE l.event_key=e.event_key)<>0").get().n;
   const missing=db.prepare("SELECT count(*) n FROM commerce_receipts r WHERE NOT EXISTS(SELECT 1 FROM commerce_events e WHERE e.event_key='charge:'||r.transaction_id AND e.state='posted' AND e.order_reference=r.order_reference)").get().n;
   const mismatched=db.prepare("SELECT count(*) n FROM commerce_receipts r WHERE COALESCE((SELECT sum(l.debit_kobo) FROM commerce_lines l WHERE l.event_key='charge:'||r.transaction_id AND l.account='processor_clearing'),0)<>r.amount_kobo").get().n;
-  return {currency:'NGN',balanced:sums.debit===sums.credit&&unposted===0&&missing===0&&mismatched===0&&invalidEvents===0,debitKobo:sums.debit,creditKobo:sums.credit,grossKobo:gross,reversedKobo:reversed,creatorPendingKobo:balance('creator_payable'),duplicateLiabilityKobo:balance('duplicate_payable'),providerFeeKobo:-balance('provider_fee_suspense'),platformFeeKobo:balance('platform_fee'),settlementAdjustmentKobo:balance('settlement_adjustment'),payoutEnabled:false};
+  const inboxDeadLetters=db.prepare("SELECT count(*) n FROM payment_inbox WHERE state<>'processed' AND dead_lettered_at IS NOT NULL").get().n;
+  const inboxUnresolved=db.prepare("SELECT count(*) n FROM payment_inbox WHERE state<>'processed'").get().n;
+  return {inboxDeadLetters,inboxUnresolved,currency:'NGN',balanced:sums.debit===sums.credit&&unposted===0&&missing===0&&mismatched===0&&invalidEvents===0,debitKobo:sums.debit,creditKobo:sums.credit,grossKobo:gross,reversedKobo:reversed,creatorPendingKobo:balance('creator_payable'),duplicateLiabilityKobo:balance('duplicate_payable'),providerFeeKobo:-balance('provider_fee_suspense'),platformFeeKobo:balance('platform_fee'),settlementAdjustmentKobo:balance('settlement_adjustment'),payoutEnabled:false};
  }
  function recordRestrictedPurchases(creatorId,buyerId){
   for(const order of db.prepare("SELECT reference FROM purchase_orders WHERE creator_id=? AND buyer_id=? AND status='paid'").all(creatorId,buyerId)){
