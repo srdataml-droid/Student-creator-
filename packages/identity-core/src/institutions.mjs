@@ -5,6 +5,7 @@
  * Approval/roster permissions must be established with each institution.
  */
 import {createHmac,timingSafeEqual,randomUUID} from 'node:crypto';
+import {isIP} from 'node:net';
 
 const verified=new WeakSet();
 const identityError=(code)=>Object.assign(new Error(code),{code,status:403});
@@ -54,7 +55,7 @@ export function validateInstitutionRegistryEntry(entry){
  if(entry.kind==='rest'){
   let url;try{url=new URL(config.endpoint);}catch{throw identityError('IDENTITY_INVALID_PROVIDER');}
   if(url.protocol!=='https:'||url.username||url.password||url.hash||url.port||
-    !/^[a-z0-9.-]+$/i.test(url.hostname)||/^(localhost|127\.|10\.|192\.168\.|169\.254\.|0\.|172\.(1[6-9]|2\d|3[0-1])\.|::1|\[|.*\.local$)/i.test(url.hostname))
+    (!/^[a-z0-9.-]+$/i.test(url.hostname)||isIP(url.hostname)!==0||/^(localhost|.*\.(localhost|local|internal|onion)$)/i.test(url.hostname)))
     throw identityError('IDENTITY_INVALID_PROVIDER');
  }
  if([config.issuer,config.audience,config.endpoint].some(v=>v.length>1024||/[\r\n]/.test(v)))
@@ -109,9 +110,27 @@ export function makeAuthorizedRestProvider({config,secret,serverToken,fetchImpl=
      signal:AbortSignal.timeout(4000)});
    if(!response?.ok||!String(response.headers?.get('content-type')??'').startsWith('application/json'))
      throw identityError('IDENTITY_PROVIDER_UNAVAILABLE');
-   const body=await response.text();
-   if(Buffer.byteLength(body,'utf8')>8192)throw identityError('IDENTITY_PROVIDER_UNAVAILABLE');
-   let signed;try{signed=JSON.parse(body);}catch{throw identityError('IDENTITY_PROVIDER_UNAVAILABLE');}
+   const bodyStream=response.body;
+   if(!bodyStream||typeof bodyStream.getReader!=='function')throw identityError('IDENTITY_PROVIDER_UNAVAILABLE');
+   const length=Number(response.headers?.get('content-length')||0);
+   if(!Number.isSafeInteger(length)||length>8192)throw identityError('IDENTITY_PROVIDER_UNAVAILABLE');
+   const reader=bodyStream.getReader(),pieces=[];
+   let count=0;
+   try{
+     while(true){
+       const {done,value}=await reader.read();
+       if(done)break;
+       count+=value.byteLength;
+       if(count>8192){await reader.cancel();throw identityError('IDENTITY_PROVIDER_UNAVAILABLE');}
+       pieces.push(value);
+     }
+   }finally{reader.releaseLock();}
+   let signed;
+   try{
+     const bytes=new Uint8Array(count);let pos=0;
+     for(const piece of pieces){bytes.set(piece,pos);pos+=piece.length;}
+     signed=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
+   }catch{throw identityError('IDENTITY_PROVIDER_UNAVAILABLE');}
    return verifySignedInstitutionAssertion({config,secret,payload:signed.payload,signature:signed.signature,requestId,now:clock()});
   }
  });
