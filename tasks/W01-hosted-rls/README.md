@@ -2,10 +2,10 @@
 
 Scope: Student Creators, **not** the separate AI-generated design project.
 
-The dedicated Supabase staging database received migration `student_creators_rls_read_grants_staging_0003` after core and comment migrations. This repository mirrors that access rule in `db/migrations/0008_hosted_rls_read_grants.sql`; the filename differs from the Supabase-generated migration version because the project already reserves 0003–0007 for other schema contracts. Do not reapply core schema to a nonempty database.
+The dedicated Supabase staging database received migration `student_creators_rls_read_grants_staging_0003` after core and comment migrations. Independent review identified that its initial full-table `content_items` grant could expose internal columns on published rows; `0008` must revoke that grant and allowlist metadata columns. A separate hosted corrective migration is required and must be verified before calling it safe. This repository mirrors that access rule in `db/migrations/0008_hosted_rls_read_grants.sql`; the filename differs from the Supabase-generated migration version because the project already reserves 0003–0007 for other schema contracts. Do not reapply core schema to a nonempty database.
 
 ## Security evidence
-- Only metadata taxonomy and published content/listings are browser-readable under their existing RLS policies.
+- Public published-content reads expose only allowlisted metadata columns; internal creation keys/hashes, rights attestation and reviewer details have no client SELECT grant. Public discovery rows remain governed by RLS.
 - Signed-in students have RLS-filtered reads for their own profile, verification requests, orders and entitlements.
 - No direct authenticated write grants were added to verification, profiles, payment or moderation tables.
 - Run `psql -v ON_ERROR_STOP=1 -f db/tests/hosted_rls_isolation.sql` only on disposable Postgres or explicitly isolated staging with safe credentials. Test inserts two synthetic users and rolls the entire transaction back.
