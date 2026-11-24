@@ -1,3 +1,4 @@
+import { canInitializePaystackCheckout } from './checkout-distribution.mjs';
 import { readBoundedGatewayResponse } from './bounded-response.mjs';
 import { PaymentValidationError, validateVerifiedCharge } from './payments.mjs';
 
@@ -84,6 +85,9 @@ export function createPaystackClient({ secretKey, environment, livePaymentsAppro
       // Verification stays available when this gate closes so prior charges can reconcile.
       if (environment === 'live' && (livePaymentsApproved !== true || process.env.PAYSTACK_LIVE_PAYMENTS_ENABLED !== '1')) {
         throw new PaystackGatewayError('LIVE_PAYMENTS_DISABLED', 'Live payment initialization is not approved');
+      }
+      if (!canInitializePaystackCheckout({environment,channel:process.env.STUDENT_CREATORS_DISTRIBUTION_CHANNEL,nodeEnv:process.env.NODE_ENV})) {
+        throw new PaystackGatewayError('CHECKOUT_DISTRIBUTION_DISABLED', 'Checkout is not approved for this distribution channel');
       }
       const response = await request('/transaction/initialize', {
         method: 'POST',

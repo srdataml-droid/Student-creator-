@@ -83,6 +83,8 @@ test('aborted provider request reports unknown state requiring reconciliation',a
 
 test('live checkout requires both private founder configuration and server authorization before transport',async()=>{
   const previous=process.env.PAYSTACK_LIVE_PAYMENTS_ENABLED;
+  const priorChannel=process.env.STUDENT_CREATORS_DISTRIBUTION_CHANNEL;
+  process.env.STUDENT_CREATORS_DISTRIBUTION_CHANNEL='independent_web';
   const liveOrder={...order,domain:'live'};
   let calls=0;
   const live=approved=>createPaystackClient({secretKey:'sk_live_mockContractOnly',environment:'live',livePaymentsApproved:approved,fetchImpl:async()=>{calls++;return ok(init())}});
@@ -100,6 +102,8 @@ test('live checkout requires both private founder configuration and server autho
     await code(()=>approved.initialize(liveOrder),'LIVE_PAYMENTS_DISABLED');
     assert.equal(calls,1);
   }finally{
+    if(priorChannel===undefined)delete process.env.STUDENT_CREATORS_DISTRIBUTION_CHANNEL;
+    else process.env.STUDENT_CREATORS_DISTRIBUTION_CHANNEL=priorChannel;
     if(previous===undefined) delete process.env.PAYSTACK_LIVE_PAYMENTS_ENABLED;
     else process.env.PAYSTACK_LIVE_PAYMENTS_ENABLED=previous;
   }
@@ -113,4 +117,20 @@ test('rejects fresh provider checkout URLs containing credentials or nonstandard
     const api=createPaystackClient({secretKey:key,environment:'test',fetchImpl:async()=>ok(init(url))});
     await code(()=>api.initialize(order),'BAD_GATEWAY_RESPONSE');
   }
+});
+
+test('distribution gate denies Play checkout before provider network and does not block reconciliation',async()=>{
+ const prior=process.env.STUDENT_CREATORS_DISTRIBUTION_CHANNEL;
+ let calls=0;
+ try{
+  process.env.STUDENT_CREATORS_DISTRIBUTION_CHANNEL='google_play';
+  const api=createPaystackClient({secretKey:key,environment:'test',fetchImpl:async()=>{calls++;return ok(verified())}});
+  await code(()=>api.initialize(order),'CHECKOUT_DISTRIBUTION_DISABLED');
+  assert.equal(calls,0);
+  assert.equal((await api.verify(order)).providerTransactionId,'123');
+  assert.equal(calls,1);
+ }finally{
+  if(prior===undefined)delete process.env.STUDENT_CREATORS_DISTRIBUTION_CHANNEL;
+  else process.env.STUDENT_CREATORS_DISTRIBUTION_CHANNEL=prior;
+ }
 });
