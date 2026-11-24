@@ -445,7 +445,15 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       }
       db.prepare('DELETE FROM auth_failed_logins WHERE email_digest=?').run(key);
       const token=randomBytes(32).toString('base64url');
-      transaction(()=>{db.prepare('INSERT INTO sessions VALUES(?,?,?)').run(sha(token),row.id,Math.floor(Date.now()/1000)+SESSION_TTL);audit(row.id,'session.created',row.id);});
+      const issued=transaction(()=>{
+        // Recheck after acquiring the write lock in case of concurrent suspension.
+        const current=db.prepare('SELECT password_hash,salt,suspended FROM users WHERE id=?').get(row.id);
+        if(!current||current.suspended||current.password_hash!==row.password_hash||current.salt!==row.salt)return false;
+        db.prepare('INSERT INTO sessions VALUES(?,?,?)').run(sha(token),row.id,Math.floor(Date.now()/1000)+SESSION_TTL);
+        audit(row.id,'session.created',row.id);
+        return true;
+      });
+      if(!issued)return null;
       return {token,user:row.role==='student'&&!affiliations.eligible(row.id)?{...human(row),verifiedAt:null}:human(row)};
     },
     getSession(token){
@@ -464,6 +472,24 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         const count=db.prepare('DELETE FROM sessions WHERE user_id=?').run(current.id).changes;
         audit(current.id,'session.all_revoked',current.id,{count});
         return {revokedCount:Number(count)};
+      });
+    },
+    // Operator identity is resolved from a live session inside the transaction.
+    setStudentSuspension(sessionToken,userId,{suspended,reason}={}){
+      return transaction(()=>{
+        const operator=store.getSession(sessionToken);
+        requireAdmin(operator);
+        if(typeof userId!=='string'||typeof suspended!=='boolean'||typeof reason!=='string'||reason.trim().length<5||reason.trim().length>1000)
+          throw error('INVALID_SUSPENSION_DECISION',422);
+        const target=db.prepare("SELECT id,suspended FROM users WHERE id=? AND role='student'").get(userId);
+        if(!target)throw error('STUDENT_NOT_FOUND',404);
+        if(Boolean(target.suspended)===suspended)throw error('SUSPENSION_CONFLICT',409);
+        db.prepare("UPDATE users SET suspended=? WHERE id=? AND role='student'").run(Number(suspended),userId);
+        // Reinstatement must not resurrect a pre-suspension session or grant.
+        const revokedSessions=Number(db.prepare('DELETE FROM sessions WHERE user_id=?').run(userId).changes);
+        const revokedCreatorGrants=Number(db.prepare('DELETE FROM playback_grants WHERE lesson_id IN (SELECT id FROM lessons WHERE creator_id=?)').run(userId).changes);
+        audit(operator.id,suspended?'student.suspended':'student.reinstated',userId,{reason:reason.trim(),revokedSessions,revokedCreatorGrants});
+        return {id:userId,suspended,revokedSessions,revokedCreatorGrants};
       });
     },
     listPendingUsers(actor){requireAdmin(actor);return db.prepare("SELECT id,email,institution_id,created_at FROM users WHERE role='student' AND verified_at IS NULL AND suspended=0 ORDER BY created_at LIMIT 100").all();},

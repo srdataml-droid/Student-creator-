@@ -84,3 +84,57 @@ test('playback grants bind user, session, lesson and a five-minute expiry withou
    assert.equal((await request('auth/logout-all','POST',{},viewer.token)).status,401);
  }finally{store.close();rmSync(dir,{recursive:true,force:true});}
 });
+
+test('student suspension revokes sessions and creator playback grants; reinstatement requires fresh login',async()=>{
+ const dir=mkdtempSync(join(tmpdir(),'student-suspension-')),store=openLocalStore(join(dir,'campus.sqlite'));
+ const pw='Synthetic Student Password 2026',adminPw='Synthetic Admin Password 2026';
+ const request=async(path,body,token,origin='http://localhost:3000')=>{
+  const req=new Request('http://localhost:3000/api/local/'+path,{method:'POST',headers:{origin,'content-type':'application/json',...(token?{cookie:'campus_local_session='+token}:{})},body:JSON.stringify(body)});
+  const res=await createLocalHandler(store)(req,path.split('/'));
+  return {status:res.status,data:await res.json()};
+ };
+ try{
+  store.bootstrapAdmin('operator@suspension.test',adminPw);
+  const operator=store.login('operator@suspension.test',adminPw);
+  const school=store.createInstitution(operator.user,'Synthetic Suspension Campus');
+  const course=store.createCourse(operator.user,{institutionId:school.id,code:'SEC101',title:'Synthetic Security'});
+  const creator=store.register({email:'creator@suspension.test',password:pw,institutionId:school.id});
+  const buyer=store.register({email:'buyer@suspension.test',password:pw,institutionId:school.id});
+  store.verifyStudent(operator.user,creator.id);store.verifyStudent(operator.user,buyer.id);
+  const author=store.login('creator@suspension.test',pw),viewer=store.login('buyer@suspension.test',pw);
+  const second=store.login('creator@suspension.test',pw);
+  const lesson=store.createDraft(author.user,{courseId:course.id,title:'Synthetic suspension video',description:'Original',previewText:'Preview',lessonText:textBody,rightsAttested:true,creationKey:'suspension-lesson-key-0001'}).lesson.id;
+  store.saveVideo(author.user,lesson,media);store.submit(author.user,lesson);
+  store.review(operator.user,lesson,{decision:'approve',reason:'Original content accepted'});
+  const grant=store.issuePlaybackGrant(viewer.user,lesson,viewer.token);
+  const ownGrant=store.issuePlaybackGrant(author.user,lesson,author.token);
+  const path='admin/students/'+creator.id+'/suspension',decision={suspended:true,reason:'Synthetic policy review'};
+  assert.equal((await request(path,decision)).status,401);
+  assert.equal((await request(path,decision,viewer.token)).status,403);
+  assert.equal((await request(path,decision,operator.token,'https://outside.test')).status,403);
+  assert.equal((await request(path,{...decision,userId:buyer.id},operator.token)).status,400);
+  assert.equal((await request(path,{...decision,suspended:'true'},operator.token)).status,422);
+  assert.equal((await request('admin/students/'+operator.user.id+'/suspension',decision,operator.token)).status,404);
+  const result=await request(path,decision,operator.token);
+  assert.equal(result.status,200);assert.equal(result.data.student.revokedSessions,2);
+  assert.equal(result.data.student.revokedCreatorGrants,1);
+  assert.equal(store.getSession(author.token),null);assert.equal(store.getSession(second.token),null);
+  assert.equal(store.login('creator@suspension.test',pw),null);
+  assert.ok(store.getSession(viewer.token));
+  assert.throws(()=>store.getVideoFile(viewer.user,lesson,grant.token,viewer.token),/CREATOR_UNAVAILABLE/);
+  assert.throws(()=>store.verifyPlaybackGrant(author.user,lesson,ownGrant.token,author.token),/VERIFICATION_REQUIRED/);
+  assert.equal((await request(path,decision,operator.token)).status,409);
+  assert.equal((await request(path,{suspended:false,reason:'Synthetic reinstatement review'},operator.token)).status,200);
+  assert.equal(store.getSession(author.token),null);assert.equal(store.getSession(second.token),null);
+  assert.throws(()=>store.getVideoFile(viewer.user,lesson,grant.token,viewer.token),/PLAYBACK_GRANT_REQUIRED/);
+  const fresh=store.login('creator@suspension.test',pw);assert.ok(fresh?.token);
+  const freshGrant=store.issuePlaybackGrant(viewer.user,lesson,viewer.token);
+  assert.equal(store.getVideoFile(viewer.user,lesson,freshGrant.token,viewer.token).sizeBytes,media.length);
+  const {DatabaseSync}=await import('node:sqlite');
+  const db=new DatabaseSync(join(dir,'campus.sqlite'));
+  try{
+   const events=db.prepare("SELECT actor_id,action FROM audit_events WHERE resource_id=? AND action IN ('student.suspended','student.reinstated') ORDER BY rowid").all(creator.id);
+   assert.deepEqual(events.map(e=>[e.actor_id,e.action]),[[operator.user.id,'student.suspended'],[operator.user.id,'student.reinstated']]);
+  }finally{db.close();}
+ }finally{store.close();rmSync(dir,{recursive:true,force:true});}
+});

@@ -224,6 +224,10 @@ export function createLocalHandler(store,{sandboxGateway,payments=null}={}){
         return responses({user:result.user},200,{'set-cookie':`${SESSION_COOKIE}=${result.token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800${secure}`});
       }
       if(!actor)return unauthorized();
+      if(segments.length===4&&segments[0]==='admin'&&segments[1]==='students'&&segments[3]==='suspension'){
+        if(Object.keys(body).some(k=>!['suspended','reason'].includes(k)))return fail('UNEXPECTED_BODY',400);
+        return responses({student:store.setStudentSuspension(cookie,segments[2],body)});
+      }
       if(path==='me/copyright-claims'){
          if(Object.keys(body).some(k=>!['lessonId','reason'].includes(k)))return fail('UNEXPECTED_BODY',400);
          const claim=store.submitCopyrightClaim(actor,body.lessonId,body.reason);
