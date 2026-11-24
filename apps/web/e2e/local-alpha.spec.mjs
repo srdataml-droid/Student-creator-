@@ -424,3 +424,33 @@ test('touch-enabled mobile Chromium keeps navigation usable in portrait and land
     await expect(page.getByRole('link',{name:'Student Creators home'})).toBeVisible();
   }finally{await context.close();}
 });
+
+
+test('public and gated page shells reflow at phone, tablet and desktop widths',async({browser})=>{
+  test.setTimeout(120000);
+  const context=await browser.newContext({baseURL:BASE,viewport:{width:320,height:740}});
+  try{
+    const page=await context.newPage();
+    const routes=['/','/search','/join','/sign-in','/recover-account','/account-security','/studio','/saved','/messages','/purchases','/verification','/manage'];
+    for(const route of routes){
+      await page.goto(route);
+      const main=page.getByRole('main');
+      await expect(main,`main landmark: ${route}`).toBeVisible();
+      await expect(main).toHaveAttribute('id','main');
+      await expect(main.getByRole('heading',{level:1}),`primary heading: ${route}`).toHaveCount(1);
+      for(const width of [320,360,412,768,1280]){
+        await page.setViewportSize({width,height:800});
+        const sizes=await page.evaluate(()=>({viewport:innerWidth,document:document.documentElement.scrollWidth,offenders:[...document.querySelectorAll('body *')].filter(el=>{const r=el.getBoundingClientRect();return r.width>0&&r.right>innerWidth+1&&getComputedStyle(el).position!=='absolute';}).slice(0,6).map(el=>({tag:el.tagName,className:String(el.className),right:Math.round(el.getBoundingClientRect().right)}))}));
+        expect(sizes.document,`${route} at ${width}px: ${JSON.stringify(sizes.offenders)}`).toBeLessThanOrEqual(sizes.viewport+1);
+      }
+    }
+    await page.setViewportSize({width:320,height:740});
+    await page.goto('/');
+    const accountNav=page.getByRole('navigation',{name:'Account and saved posts'});
+    await expect(accountNav).toBeVisible();
+    await accountNav.getByRole('link',{name:'Sign in'}).focus();
+    await expect(accountNav.getByRole('link',{name:'Sign in'})).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(new RegExp('/sign-in$'));
+  }finally{await context.close();}
+});
