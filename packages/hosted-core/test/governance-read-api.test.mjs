@@ -33,6 +33,7 @@ function simulate({staff=true,roles=['governance_owner'],authenticatedId=staffId
   if(u.pathname.includes('/rest/v1/governance_incidents'))
    return Response.json([{id:'11111111-1111-4111-8111-111111111111',severity:'high',
     category:'unauthorized_access',summary:'Synthetic incident with no real identities',state:'open',created_at:'2026-11-20',updated_at:'2026-11-20',private_evidence_path:'DO_NOT_RETURN'}]);
+  if(u.pathname.startsWith('/rest/v1/rpc/week7_'))return Response.json({id:otherId,state:'open',policyApproved:false,automaticDeletion:false});
   if(u.pathname.includes('/rest/v1/governance_retention_proposals'))return Response.json([]);
   if(u.pathname.includes('/rest/v1/audit_events'))return Response.json([{id:staffId,actor_id:staffId,
    action:'security.incident.opened',target_kind:'governance_incident',target_id:otherId,created_at:'2026-11-20',
@@ -100,7 +101,7 @@ test('hosted API fails closed on unknown path, unsupported mutation and spoofed 
  const post=new Request('https://app.example.test/api/governance/incidents',{method:'POST',
   headers:{authorization:'Bearer '+goodToken,'content-type':'application/json'},
   body:JSON.stringify({role:'governance_owner',actorId:staffId,category:'fraud'})});
- assert.equal((await x.handler(post,{segments:['incidents']})).status,405);
+ assert.equal((await x.handler(post,{segments:['incidents']})).status,403);
  const cap=await x.handler(request('permissions',{'x-user-id':otherId}),{segments:['permissions']});
  assert.equal((await cap.json()).capabilities.includes('staff.assign'),false);
 });
@@ -112,4 +113,42 @@ test('provider errors remain sanitized and no server key or token leaks',async()
  assert.equal(json.error,'GOVERNANCE_PROVIDER_ERROR');
  assert.equal(JSON.stringify(json).includes('syntheticserver'),false);
  assert.equal(JSON.stringify(json).includes(goodToken),false);
+});
+
+
+test('hosted operator changes only via scoped atomic RPC with verified actor ID',async()=>{
+ const x=simulate();
+ const post=(segments,body,headers={})=>x.handler(new Request('https://app.example.test/api/governance/'+segments.join('/'),{
+  method:'POST',headers:{authorization:'Bearer '+goodToken,'content-type':'application/json',...headers},
+  body:JSON.stringify(body)
+ }),{segments});
+ const incident=await post(['incidents'],{category:'data_exposure',severity:'high',
+  summary:'Synthetic notification for an internal staging security drill.'});
+ assert.equal(incident.status,201);
+ const call=x.calls.find(c=>c.url.endsWith('/rpc/week7_open_incident'));
+ assert.ok(call);
+ assert.equal(call.headers.apikey,env.SUPABASE_SECRET_KEY);
+ assert.equal(Object.hasOwn(call.headers,'authorization'),false);
+ const bad=await post(['incidents'],{category:'data_exposure',severity:'high',
+  summary:'Synthetic notification for an internal staging security drill.',
+  actorId:otherId,staffRole:'governance_owner'});
+ assert.equal(bad.status,422);
+ const mismatched=await post(['roles','assign'],{userId:otherId,role:'invented_owner'});
+ assert.equal(mismatched.status,422);
+ const grant=await post(['roles','assign'],{userId:otherId,role:'verification_reviewer'});
+ assert.equal(grant.status,200);
+ const retention=await post(['retention'],{dataset:'verification_evidence',days:30,
+  rationale:'Propose evidence minimization pending legal and founder approval.'});
+ assert.equal(retention.status,201);
+ const n=await post(['incidents',otherId,'transition'],{state:'investigating',
+  note:'Review the affected synthetic staging route.'});
+ assert.equal(n.status,200);
+ assert.equal((await post(['incidents',otherId,'transition'],{state:'resolved',note:'Bypass state'})).status,200);
+ // Backend only validates allowed state values; PostgreSQL RPC enforces order.
+ assert.equal((await post(['retention',otherId,'reject'],{note:'Proposed duration not accepted.'})).status,200);
+ assert.equal((await post(['student-id-export'],{userId:otherId})).status,404);
+ assert.equal((await post(['incidents'],{category:'other',severity:'low',
+  summary:'Cross-site submission must fail before RPC.'},{origin:'https://evil.invalid'})).status,403);
+ const allRpc=x.calls.filter(v=>v.url.includes('/rpc/'));
+ assert.equal(allRpc.length,5);
 });
