@@ -346,7 +346,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         JOIN lessons l ON l.id=v.lesson_id JOIN courses c ON c.id=l.course_id WHERE l.id=?`).get(id);
       if(!row)throw error('VIDEO_NOT_FOUND',404);
       const current=actor?human(db.prepare('SELECT * FROM users WHERE id=?').get(actor.id)):null;
-      if((row.status!=='published'||!row.course_active)&&!(current&&!current.suspended&&(current.role==='admin'||(current.role==='student'&&current.verifiedAt&&current.id===row.creator_id))))throw error('VIDEO_NOT_FOUND',404);
+      if((row.status!=='published'||!row.course_active)&&!(current&&!current.suspended&&(current.role==='admin'||(current.role==='student'&&current.verifiedAt&&affiliations.eligible(current.id)&&current.id===row.creator_id))))throw error('VIDEO_NOT_FOUND',404);
       if(row.status==='published'&&row.course_active){
         requireCreatorAction(actor,row.creator_id,'view');
         commerce.requireAccess(actor,id,row.creator_id);

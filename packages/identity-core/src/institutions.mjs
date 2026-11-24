@@ -30,7 +30,7 @@ function sealed(input,now){
  const p=Object.fromEntries(fields.map(key=>[key,input?.[key]]));
  if(!UUID.test(String(p.institutionId))||!ID.test(String(p.providerId))||!UUID.test(String(p.requestId))||
    !DIGEST.test(String(p.subjectDigest))||!ROLES.has(p.role)||!STATES.has(p.state)||
-   !int(p.issuedAt)||!int(p.expiresAt)||p.issuedAt>now+30||p.expiresAt<=now||
+   !int(p.issuedAt)||!int(p.expiresAt)||p.issuedAt>now+30||p.expiresAt<=now||p.expiresAt<=p.issuedAt||
    p.expiresAt-p.issuedAt>MAX_PROOF_AGE)
    throw identityError('IDENTITY_INVALID_EVIDENCE');
  const result=Object.freeze({...p,eligible:p.role==='student'&&p.state==='active'});
@@ -98,7 +98,7 @@ export function makeSyntheticInstitutionProvider({config,secret,roster,clock=()=
 }
 /** Authenticated server-to-server REST adapter; rejects redirects and PII bodies. */
 export function makeAuthorizedRestProvider({config,secret,serverToken,fetchImpl=fetch,clock=()=>Math.floor(Date.now()/1000)}){
- validateInstitutionRegistryEntry(config);assertConfig({...config,secret});
+ config=validateInstitutionRegistryEntry(config);assertConfig({...config,secret});
  if(config.kind!=='rest'||typeof serverToken!=='string'||serverToken.length<32||typeof fetchImpl!=='function')
   throw identityError('IDENTITY_UNAVAILABLE');
  return Object.freeze({
@@ -131,7 +131,9 @@ export function makeAuthorizedRestProvider({config,secret,serverToken,fetchImpl=
      for(const piece of pieces){bytes.set(piece,pos);pos+=piece.length;}
      signed=JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
    }catch{throw identityError('IDENTITY_PROVIDER_UNAVAILABLE');}
-   return verifySignedInstitutionAssertion({config,secret,payload:signed.payload,signature:signed.signature,requestId,now:clock()});
+   const proof=verifySignedInstitutionAssertion({config,secret,payload:signed?.payload,signature:signed?.signature,requestId,now:clock()});
+   if(proof.subjectDigest!==subjectDigest)throw identityError('IDENTITY_RESPONSE_MISMATCH');
+   return proof;
   }
  });
 }
@@ -189,13 +191,15 @@ export function verifyAuthorizedRosterSnapshot({config,secret,snapshot,signature
  if(!snapshot||typeof snapshot!=='object'||Array.isArray(snapshot)||
   snapshot.institutionId!==config.institutionId||snapshot.providerId!==config.providerId||
   !int(snapshot.issuedAt)||!int(snapshot.expiresAt)||snapshot.issuedAt>now+30||
-  snapshot.expiresAt<=now||snapshot.expiresAt-snapshot.issuedAt>MAX_PROOF_AGE||
+  snapshot.expiresAt<=now||snapshot.expiresAt<=snapshot.issuedAt||snapshot.expiresAt-snapshot.issuedAt>MAX_PROOF_AGE||
   !Array.isArray(snapshot.entries)||snapshot.entries.length<1||snapshot.entries.length>1000||
   typeof signature!=='string'||!DIGEST.test(signature))
   throw identityError('IDENTITY_INVALID_ROSTER');
  const expected=signSyntheticRosterSnapshot(secret,snapshot);
  if(!timingSafeEqual(Buffer.from(signature,'hex'),Buffer.from(expected,'hex')))
   throw identityError('IDENTITY_BAD_SIGNATURE');
+ const issuedAt=snapshot.issuedAt,expiresAt=snapshot.expiresAt;
+ config=validateInstitutionRegistryEntry(config);
  const members=new Map();
  for(const row of snapshot.entries){
   if(!row||typeof row!=='object'||Object.keys(row).sort().join(',')!=='role,state,subjectDigest'||
@@ -205,22 +209,22 @@ export function verifyAuthorizedRosterSnapshot({config,secret,snapshot,signature
   members.set(row.subjectDigest,{role:row.role,state:row.state});
  }
  return Object.freeze({
-  providerId:config.providerId,institutionId:config.institutionId,validUntil:snapshot.expiresAt,
+  providerId:config.providerId,institutionId:config.institutionId,validUntil:expiresAt,
   // Read-only lookup, no public roster member enumeration.
   verify({subjectDigest,requestId=randomUUID()}){
    if(!DIGEST.test(subjectDigest)||!UUID.test(requestId))throw identityError('IDENTITY_INVALID_SUBJECT');
-   if(Math.floor(Date.now()/1000)>=snapshot.expiresAt)throw identityError('IDENTITY_EXPIRED_ROSTER');
+   if(Math.floor(Date.now()/1000)>=expiresAt)throw identityError('IDENTITY_EXPIRED_ROSTER');
    const entry=members.get(subjectDigest);
    if(!entry)throw identityError('IDENTITY_NOT_FOUND');
-   const issuedAt=Math.floor(Date.now()/1000);
+   const checkedAt=Math.floor(Date.now()/1000);
    return verifySignedInstitutionAssertion({config,secret,
     payload:{institutionId:config.institutionId,providerId:config.providerId,
      requestId,subjectDigest,role:entry.role,state:entry.state,
-     issuedAt,expiresAt:Math.min(snapshot.expiresAt,issuedAt+3600)},
+     issuedAt,expiresAt:Math.min(expiresAt,checkedAt+3600)},
     signature:signSyntheticInstitutionAssertion(secret,{institutionId:config.institutionId,providerId:config.providerId,
      requestId,subjectDigest,role:entry.role,state:entry.state,
-     issuedAt,expiresAt:Math.min(snapshot.expiresAt,issuedAt+3600)}),
-    requestId,now:issuedAt});
+     issuedAt,expiresAt:Math.min(expiresAt,checkedAt+3600)}),
+    requestId,now:checkedAt});
   }
  });
 }

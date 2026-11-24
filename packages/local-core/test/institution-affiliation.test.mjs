@@ -13,7 +13,7 @@ const textBody='This is an original, independently written explanation about cou
 
 test('pseudonymous institutional proof must be authorized, manual-reviewed and current for creator/media access',async()=>{
  const dir=mkdtempSync(join(tmpdir(),'institution-integration-'));
- const store=openLocalStore(join(dir,'institution.sqlite'));
+ let store=openLocalStore(join(dir,'institution.sqlite'));
  const run=async(route,method='GET',body,token)=>{
   const response=await createLocalHandler(store)(new Request('http://localhost:3000/api/local/'+route,{
    method,headers:{...(token?{cookie:'campus_local_session='+token}:{}),...(method==='POST'?{origin:'http://localhost:3000','content-type':'application/json'}:{})},
@@ -47,7 +47,7 @@ test('pseudonymous institutional proof must be authorized, manual-reviewed and c
   const fake={institutionId:institution.id,providerId:config.providerId,subjectDigest:subject,eligible:true,role:'student',state:'active'};
   assert.throws(()=>store.recordVerifiedInstitutionAffiliation(admin.user,studentA.id,fake),{code:'UNVERIFIED_INSTITUTION_EVIDENCE'});
   const roster=new Map([[subject,{role:'student',state:'active'}]]);
-  const now=Math.floor(Date.now()/1000);
+  let now=Math.floor(Date.now()/1000)-10;
   const provider=makeSyntheticInstitutionProvider({config,secret:privateKey,roster,clock:()=>now});
   const proof=await provider.verify({subjectDigest:subject});
   assert.equal(proof.eligible,true);
@@ -68,10 +68,16 @@ test('pseudonymous institutional proof must be authorized, manual-reviewed and c
   assert.ok(id);
   assert.throws(()=>store.recordVerifiedInstitutionAffiliation(a.user,studentA.id,proof),{code:'ADMIN_REQUIRED'});
   // A graduate, alumni or lecturer is not an active verified student.
+  now++;
   roster.set(subject,{role:'student',state:'graduated'});
   const graduated=await provider.verify({subjectDigest:subject});
   store.recordVerifiedInstitutionAffiliation(admin.user,studentA.id,graduated);
   assert.equal(store.getSession(a.token).verifiedAt,null);
+  store.close();store=openLocalStore(join(dir,'institution.sqlite'));
+  assert.throws(()=>store.recordVerifiedInstitutionAffiliation(admin.user,studentA.id,proof),{code:'INSTITUTION_PROOF_REPLAY'});
+  const historical=makeSyntheticInstitutionProvider({config,secret:privateKey,roster:new Map([[subject,{role:'student',state:'active'}]]),clock:()=>now-1});
+  const stale=await historical.verify({subjectDigest:subject});
+  assert.throws(()=>store.recordVerifiedInstitutionAffiliation(admin.user,studentA.id,stale),{code:'STALE_INSTITUTION_PROOF'});
   assert.throws(()=>store.createDraft(verifiedActor,{...draftPayload,creationKey:'identity-contract-draft-002'}),{code:'VERIFICATION_REQUIRED'});
   assert.throws(()=>store.verifyStudent(admin.user,studentA.id),{code:'AFFILIATION_NOT_ELIGIBLE'});
   const appeal=await run('me/verification-appeals','POST',{reason:'My institution enrollment classification appears incorrect. Please review my eligibility.'},a.token);
@@ -83,11 +89,15 @@ test('pseudonymous institutional proof must be authorized, manual-reviewed and c
   assert.equal(reviewed.status,200);
   assert.equal(reviewed.data.appeal.eligibilityUnchanged,true);
   assert.equal(store.getSession(a.token).verifiedAt,null);
+  now++;
   roster.set(subject,{role:'lecturer',state:'active'});
   const lecturer=await provider.verify({subjectDigest:subject});
   store.recordVerifiedInstitutionAffiliation(admin.user,studentA.id,lecturer);
   assert.equal(store.getSession(a.token).verifiedAt,null);
   roster.set(subject,{role:'student',state:'active'});
+  const sameSecond=await provider.verify({subjectDigest:subject});
+  assert.throws(()=>store.recordVerifiedInstitutionAffiliation(admin.user,studentA.id,sameSecond),{code:'STALE_INSTITUTION_PROOF'});
+  now++;
   store.recordVerifiedInstitutionAffiliation(admin.user,studentA.id,await provider.verify({subjectDigest:subject}));
   assert.ok(store.getSession(a.token).verifiedAt);
   const restConfig={institutionId:institution.id,providerId:'restricted_live_university',kind:'rest',
@@ -96,6 +106,8 @@ test('pseudonymous institutional proof must be authorized, manual-reviewed and c
   assert.throws(()=>store.enableSyntheticInstitution(admin.user,restConfig.providerId),{code:'INSTITUTION_AUTHORIZATION_REQUIRED'});
   store.disableInstitutionIntegration(admin.user,config.providerId);
   assert.equal(store.getSession(a.token).verifiedAt,null);
+  store.enableSyntheticInstitution(admin.user,config.providerId);
+  assert.equal(store.getSession(a.token).verifiedAt,null,'reenabling provider does not revive old affiliation');
   assert.equal((await run('me/institution-affiliation','GET',undefined,c.token)).data.affiliation.state,'manual_fallback');
  }finally{store.close();rmSync(dir,{recursive:true,force:true});}
 });

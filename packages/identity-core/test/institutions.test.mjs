@@ -37,6 +37,7 @@ test('signed institution proof uses a private subject digest, strict tenant/nonc
  assert.throws(()=>proof(payload({requestId:randomUUID()})),{code:'IDENTITY_RESPONSE_MISMATCH'});
  assert.throws(()=>proof(payload({institutionId:randomUUID()})),{code:'IDENTITY_RESPONSE_MISMATCH'});
  assert.throws(()=>proof(payload({issuedAt:now-2*24*3600,expiresAt:now-10})),{code:'IDENTITY_INVALID_EVIDENCE'});
+ assert.throws(()=>proof(payload({issuedAt:now+20,expiresAt:now+10})),{code:'IDENTITY_INVALID_EVIDENCE'});
  assert.throws(()=>proof(payload({expiresAt:now+8*24*3600})),{code:'IDENTITY_INVALID_EVIDENCE'});
  assert.throws(()=>verifySignedInstitutionAssertion({config,secret,payload:payload(),signature:'f'.repeat(64),requestId,now}),{code:'IDENTITY_BAD_SIGNATURE'});
 });
@@ -84,6 +85,11 @@ test('HTTPS REST contract sends only pseudonymous subject and rejects unsigned/a
  const oversized=makeAuthorizedRestProvider({config:restConfig,secret,serverToken:token,
   fetchImpl:async()=>new Response('x'.repeat(16384),{status:200,headers:{'content-type':'application/json'}})});
  await assert.rejects(oversized.verify({subjectDigest:digest}),{code:'IDENTITY_PROVIDER_UNAVAILABLE'});
+ const wrongSubject=makeAuthorizedRestProvider({config:restConfig,secret,serverToken:token,clock:()=>now,fetchImpl:async(url,options)=>{
+   const body=JSON.parse(options.body);const assertion={...body,subjectDigest:'b'.repeat(64),role:'student',state:'active',issuedAt:now,expiresAt:now+1800};
+   return Response.json({payload:assertion,signature:signSyntheticInstitutionAssertion(secret,assertion)});
+ }});
+ await assert.rejects(wrongSubject.verify({subjectDigest:digest}),{code:'IDENTITY_RESPONSE_MISMATCH'});
 
 });
 test('OIDC and SAML contracts demand signed verified issuer, audience, bound request and student classification',async()=>{
@@ -126,6 +132,7 @@ test('signed digest-only roster rejects tampering, stale snapshots and unauthori
  const signature=signSyntheticRosterSnapshot(secret,snapshot);
  const roster=verifyAuthorizedRosterSnapshot({config:rosterConfig,secret,snapshot,signature,now:current});
  const evidence=roster.verify({subjectDigest:digest});
+ assert.equal(evidence.issuedAt,snapshot.issuedAt,'old roster must retain signed issuance time');
  assert.equal(evidence.eligible,true);assert.equal(isVerifiedInstitutionEvidence(evidence),true);
  assert.equal(JSON.stringify(roster).includes('STUDENT-001'),false);
  assert.throws(()=>roster.verify({subjectDigest:'0'.repeat(64)}),{code:'IDENTITY_NOT_FOUND'});
