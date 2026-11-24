@@ -376,6 +376,8 @@ export function createLearningServices({db,transaction,audit,error,requireVerifi
         const r=db.prepare('SELECT * FROM learning_requests WHERE id=?').get(id);
         if(r.status==='submitted')return {...rowService(r),replayed:true};
         if(r.status!=='in_progress')throw error('HELP_CLOSED',409);
+        // A refunded/revoked service entitlement must not remain executable.
+        if(r.quote_kobo>0&&!paid({id:r.student_id},'service',id))throw error('PAYMENT_ENTITLEMENT_REQUIRED',402);
         db.prepare("UPDATE learning_requests SET status='submitted',updated_at=? WHERE id=?").run(timestamp(),id);
         notice(r.student_id,'help_submitted',id,'The creator marked guidance ready for your review.');
         audit(actor.id,'help.submitted',id);
