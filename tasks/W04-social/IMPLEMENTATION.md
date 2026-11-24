@@ -32,3 +32,6 @@ Server-scoped creator search supports public alias, campus, course, topic and pu
 
 ## Eighth increment: account reports
 Private categorized reports against public creators or established message contacts, one open per pair and bounded reporting frequency. Platform-admin-only review queue and resolution, no automatic suspension; profile and conversation reporting UI. Tests cover anonymous, self, unrelated account, duplicate, cross-role and review denial. No imported code. Exact-head CI pending.
+
+## Ninth increment: inbox and abuse boundary tests
+Pair-scoped inbox pagination with an actor-owned peer cursor; rejects unrelated cursor IDs, invalid bounds and spoofed message sender fields. Blocks limited to established contacts/public creators, existing blocks idempotent. Verified-student membership rechecked inside community post write transaction, hidden child reporting denied. New tests exercise 30-message/hour throttling, blocked contacts, forged sender, inbox paging and hidden child reports. Exact-head CI pending.

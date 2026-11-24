@@ -211,7 +211,12 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
         }
         if(path==='notifications'){if(!actor)return unauthorized();return responses({notifications:store.notifications(actor)});}
         if(path==='notifications/preferences'){if(!actor)return unauthorized();return responses({preferences:store.notificationPreferences(actor)});}
-        if(path==='messages/inbox'){if(!actor)return unauthorized();return responses({inbox:store.inbox(actor)});}
+        if(path==='messages/inbox'){
+          if(!actor)return unauthorized();
+          const q=new URL(request.url).searchParams;
+          if(q.getAll('before').length>1||q.getAll('limit').length>1)return fail('INVALID_MESSAGE_PAGE',422);
+          return responses(store.inboxPage(actor,{before:q.get('before'),limit:q.has('limit')?Number(q.get('limit')):50}));
+        }
         if(segments.length===2&&segments[0]==='messages'&&segments[1]!=='inbox'){
           if(!actor)return unauthorized();
           const q=new URL(request.url).searchParams;
@@ -421,7 +426,10 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
       if(segments.length===3&&segments[0]==='admin'&&segments[1]==='user-reports')
         return responses({result:store.resolveUserReport(actor,segments[2],body)});
       if(path==='messages/preference')return responses({preference:store.setMessagePreference(actor,body.allowMessages)});
-      if(segments.length===2&&segments[0]==='messages'&&!['preference','report','inbox'].includes(segments[1]))return responses({message:store.sendMessage(actor,segments[1],body.text)},201);
+      if(segments.length===2&&segments[0]==='messages'&&!['preference','report','inbox'].includes(segments[1])){
+        if(Object.keys(body).length!==1||!Object.hasOwn(body,'text'))return fail('UNEXPECTED_BODY',400);
+        return responses({message:store.sendMessage(actor,segments[1],body.text)},201);
+      }
       if(segments.length===3&&segments[0]==='messages'&&segments[2]==='block')return responses({result:store.blockContact(actor,segments[1])});
       if(segments.length===3&&segments[0]==='messages'&&segments[2]==='unblock')return responses({result:store.unblockContact(actor,segments[1])});
       if(segments.length===3&&segments[0]==='admin'&&segments[1]==='reports')return responses({result:store.resolveReport(actor,segments[2],body.resolution)});

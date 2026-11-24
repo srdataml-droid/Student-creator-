@@ -1000,7 +1000,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     sendMessage(actor,recipientId,body){
       requireVerified(actor);
       if(actor.id===recipientId)throw error('CANNOT_MESSAGE_SELF',422);
-      if(typeof body!=='string'||body.trim().length<1||body.trim().length>2000)throw error('INVALID_MESSAGE',422);
+      if(typeof body!=='string'||body.trim().length<1||body.trim().length>2000||/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(body))throw error('INVALID_MESSAGE',422);
       return transaction(()=>{
         requireCreatorAction(actor,recipientId,'message');
         const recipient=db.prepare("SELECT id,allow_messages FROM users WHERE id=? AND role='student' AND verified_at IS NOT NULL AND suspended=0").get(recipientId);
@@ -1094,14 +1094,31 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       });
     },
     inbox(actor){
+      return store.inboxPage(actor).inbox;
+    },
+    inboxPage(actor,{before=null,limit=50}={}){
       requireVerified(actor);
-      return db.prepare(`SELECT peerId,MAX(createdAt) AS lastMessageAt,SUM(unread) AS unreadCount FROM (
+      if(!Number.isInteger(limit)||limit<1||limit>50||before!==null&&(typeof before!=='string'||before.length!==36))
+        throw error('INVALID_MESSAGE_PAGE',422);
+      let bound='',values=[];
+      if(before!==null){
+        const cursor=db.prepare(`SELECT MAX(created_at) AS lastMessageAt FROM messages
+          WHERE (sender_id=? AND recipient_id=?) OR (sender_id=? AND recipient_id=?)`).get(actor.id,before,before,actor.id);
+        if(!cursor?.lastMessageAt)throw error('MESSAGE_NOT_FOUND',404);
+        bound=' WHERE (lastMessageAt<? OR (lastMessageAt=? AND peerId>?))';
+        values=[cursor.lastMessageAt,cursor.lastMessageAt,before];
+      }
+      const rows=db.prepare(`WITH peers AS (SELECT peerId,MAX(createdAt) AS lastMessageAt,SUM(unread) AS unreadCount FROM (
         SELECT recipient_id AS peerId,created_at AS createdAt,0 AS unread FROM messages WHERE sender_id=?
         UNION ALL
         SELECT m.sender_id AS peerId,m.created_at AS createdAt,
           CASE WHEN r.message_id IS NULL THEN 1 ELSE 0 END AS unread
           FROM messages m LEFT JOIN message_reads r ON r.message_id=m.id WHERE m.recipient_id=?
-      ) GROUP BY peerId ORDER BY lastMessageAt DESC,peerId LIMIT 50`).all(actor.id,actor.id);
+      ) GROUP BY peerId)
+      SELECT * FROM peers${bound} ORDER BY lastMessageAt DESC,peerId LIMIT ?`).all(actor.id,actor.id,...values,limit+1);
+      const more=rows.length>limit;
+      if(more)rows.pop();
+      return {inbox:rows,nextBefore:more?rows.at(-1).peerId:null};
     },
     isContactBlocked(actor,otherId){
       requireVerified(actor);
@@ -1114,8 +1131,15 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     },
     blockContact(actor,otherId){
       requireVerified(actor);
-      if(!db.prepare('SELECT 1 FROM users WHERE id=?').get(otherId)||actor.id===otherId)throw error('INVALID_CONTACT',422);
-      transaction(()=>{db.prepare('INSERT OR IGNORE INTO user_blocks VALUES(?,?,?)').run(actor.id,otherId,stamp());audit(actor.id,'contact.blocked',otherId);});
+      if(actor.id===otherId)throw error('INVALID_CONTACT',422);
+      transaction(()=>{
+        const already=db.prepare('SELECT 1 FROM user_blocks WHERE blocker_id=? AND blocked_id=?').get(actor.id,otherId);
+        if(already)return;
+        const contact=db.prepare("SELECT 1 FROM messages WHERE (sender_id=? AND recipient_id=?) OR (sender_id=? AND recipient_id=?) LIMIT 1").get(actor.id,otherId,otherId,actor.id);
+        if(!contact&&!store.publicCreator(otherId))throw error('INVALID_CONTACT',422);
+        db.prepare('INSERT INTO user_blocks VALUES(?,?,?)').run(actor.id,otherId,stamp());
+        audit(actor.id,'contact.blocked',otherId);
+      });
       return {blocked:true};
     },
     reportUser(actor,targetId,input){
@@ -1250,6 +1274,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       if(replyTo!==null&&(typeof replyTo!=='string'||replyTo.length>80))throw error('INVALID_REPLY',422);
       const body=text.trim(),requestHash=sha(JSON.stringify({courseId,topicId,replyTo,body}));
       return transaction(()=>{
+        communityAccess(actor,courseId,true);
         const previous=db.prepare('SELECT * FROM community_posts WHERE author_id=? AND request_key=?').get(actor.id,creationKey);
         if(previous){
           if(previous.request_hash!==requestHash)throw error('IDEMPOTENCY_CONFLICT',409);
@@ -1280,7 +1305,8 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       requireVerified(actor);
       if(typeof reason!=='string'||reason.trim().length<10||reason.trim().length>1000)throw error('INVALID_REPORT',422);
       return transaction(()=>{
-        const post=db.prepare('SELECT * FROM community_posts WHERE id=? AND hidden_at IS NULL').get(postId);
+        const post=db.prepare(`SELECT p.* FROM community_posts p WHERE p.id=? AND p.hidden_at IS NULL
+          AND (p.parent_id IS NULL OR EXISTS(SELECT 1 FROM community_posts parent WHERE parent.id=p.parent_id AND parent.course_id=p.course_id AND parent.hidden_at IS NULL))`).get(postId);
         if(!post)throw error('POST_NOT_FOUND',404);
         communityAccess(actor,post.course_id,true);
         if(post.author_id===actor.id)throw error('CANNOT_REPORT_SELF',403);

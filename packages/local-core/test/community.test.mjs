@@ -147,6 +147,7 @@ test('course moderator role is assigned only by platform admin and lost when mem
   assert.equal((await feed(d.bob.token)).posts.length,0);
   assert.equal((await x.request(`courses/${d.course}/posts`,'POST',body(100),d.bob.token)).status,404);
   assert.equal((await x.request(`courses/${d.course}/posts`,'POST',body(101,{replyTo:parent.id}),d.alice.token)).status,404);
+  assert.equal((await x.request('community/posts/report','POST',{postId:reply.id,reason:'Reply is hidden with parent'},d.bob.token)).status,404);
   const notifications=await x.request('notifications','GET',undefined,d.bob.token);
   assert.equal(notifications.data.notifications.length,0,'hidden parent makes reply notification invisible');
   await x.request(`courses/${d.course}/leave`,'POST',{},d.alice.token);

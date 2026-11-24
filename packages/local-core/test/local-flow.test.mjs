@@ -197,6 +197,14 @@ test('DM unread state is recipient-only, atomic, replay-safe and private',async(
   const count=async(t,peer)=>(await x.request('messages/inbox','GET',undefined,t)).data.inbox.find(v=>v.peerId===peer)?.unreadCount;
   const mark=(peer,ids,t,origin)=>x.request(`messages/${peer}/read`,'POST',{messageIds:ids},t,origin);
   assert.equal(await count(s.student,a.id),2);assert.equal(await count(s.student,b.id),1);
+  const page=await x.request('messages/inbox?limit=1','GET',undefined,s.student);
+  assert.equal(page.status,200);assert.equal(page.data.inbox.length,1);
+  assert.equal(page.data.nextBefore,page.data.inbox[0].peerId);
+  const next=await x.request('messages/inbox?limit=1&before='+page.data.nextBefore,'GET',undefined,s.student);
+  assert.equal(next.status,200);assert.equal(next.data.inbox.length,1);assert.equal(next.data.nextBefore,null);
+  assert.notEqual(next.data.inbox[0].peerId,page.data.inbox[0].peerId);
+  assert.equal((await x.request('messages/inbox?before='+a.id,'GET',undefined,b.token)).status,404);
+  assert.equal((await x.request('messages/inbox?limit=51','GET',undefined,s.student)).status,422);
   assert.equal(await count(a.token,s.user),0);
   const history=await x.request(`messages/${a.id}`,'GET',undefined,s.student);
   assert.equal(history.data.messages.length,2);
@@ -292,5 +300,28 @@ test('account reports require an established contact or public profile and indep
   assert.equal((await x.request(resolve,'POST',{resolution:'Repeated review'},s.owner)).status,409);
   assert.equal((await x.request('admin/user-reports','GET',undefined,s.owner)).data.reports.length,0);
   assert.equal((await x.request('me','GET',undefined,s.student)).status,200);
+ }finally{x.close();}
+});
+
+test('text messaging rejects spoofed sender fields, unrelated account blocks and spam bursts',async()=>{
+ const x=setup();try{
+  const s=await begin(x);await x.request('admin/verify','POST',{userId:s.user},s.owner);
+  const lid=(await x.request('lessons/drafts','POST',lessonBody(s.course),s.student)).data.lesson.id;
+  await x.request('lessons/'+lid+'/submit','POST',{},s.student);
+  await x.request('lessons/'+lid+'/review','POST',{decision:'approve',reason:'Original work accepted'},s.owner);
+  await x.request('messages/preference','POST',{allowMessages:true},s.student);
+  const email='spam-reader@campus.test',password='Strong Reader Password 1234';
+  const rid=(await x.request('auth/register','POST',{email,password,institutionId:s.institution})).data.user.id;
+  await x.request('admin/verify','POST',{userId:rid},s.owner);
+  const reader=await login(x,email,password);
+  assert.equal((await x.request('messages/'+rid+'/block','POST',{},s.student)).status,422);
+  const path='messages/'+s.user;
+  assert.equal((await x.request(path,'POST',{text:'Spoofed sender',senderId:s.user},reader)).status,400);
+  assert.equal((await x.request(path,'POST',{text:'bad'+String.fromCharCode(0)+'text'},reader)).status,422);
+  for(let i=0;i<30;i++)assert.equal((await x.request(path,'POST',{text:'Synthetic message '+i},reader)).status,201);
+  assert.equal((await x.request(path,'POST',{text:'Above the rate limit'},reader)).status,429);
+  assert.equal((await x.request('messages/inbox','GET',undefined,s.student)).data.inbox[0].unreadCount,30);
+  assert.equal((await x.request('messages/'+rid+'/block','POST',{},s.student)).status,200);
+  assert.equal((await x.request(path,'POST',{text:'Blocked now'},reader)).status,403);
  }finally{x.close();}
 });
