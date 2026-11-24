@@ -103,7 +103,16 @@ export function createLearningServices({db,transaction,audit,error,requireVerifi
       return db.prepare("SELECT * FROM interactive_classes WHERE course_id=? AND status IN ('scheduled','room_open') AND ends_at>? ORDER BY starts_at LIMIT 100")
         .all(courseId,new Date(now()).toISOString()).filter(x=>{
           try{requireCreatorAction(actor,x.host_id,'view');return true;}catch{return false;}
-        }).map(rowClass);
+        }).map(x=>({...rowClass(x),enrolled:x.host_id===actor.id||Boolean(member(actor,x.id)),
+          attendeeCount:db.prepare("SELECT COUNT(*) AS n FROM interactive_class_enrollments WHERE class_id=? AND status='enrolled'").get(x.id).n+1,
+          accessEligible:x.host_id===actor.id||x.price_kobo===0||paid(actor,'class',x.id)}));
+    },
+    myClasses(actor){
+      requireVerified(actor);
+      const rows=db.prepare("SELECT DISTINCT c.* FROM interactive_classes c LEFT JOIN interactive_class_enrollments e ON e.class_id=c.id WHERE c.host_id=? OR (e.student_id=? AND e.status='enrolled') ORDER BY c.starts_at DESC LIMIT 100").all(actor.id,actor.id);
+      return rows.filter(c=>{
+        try{classRow(actor,c.id);return true;}catch{return false;}
+      }).map(rowClass);
     },
     classDetail(actor,id){return rowClass(classRow(actor,id));},
     enrollClass(actor,id){
