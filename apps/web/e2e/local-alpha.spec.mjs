@@ -175,6 +175,30 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
       await cdp.detach();
       await viewerPage.setViewportSize({width:1280,height:800});
     }
+    // A delayed following response must not overwrite a newer filter selection.
+    let releaseFollowing,followingStarted;
+    const followingGate=new Promise(resolve=>{releaseFollowing=resolve;});
+    const followingRequest=new Promise(resolve=>{followingStarted=resolve;});
+    await viewerPage.route('**/api/local/following',async route=>{
+      followingStarted();
+      await followingGate;
+      await route.fulfill({status:403,contentType:'application/json',body:JSON.stringify({error:'VERIFICATION_REQUIRED'})});
+    });
+    try{
+      await viewerPage.getByRole('button',{name:'Following',exact:true}).click();
+      await followingRequest;
+      await expect(viewerPage.getByText('Loading creators you follow…')).toBeVisible();
+      await viewerPage.getByRole('button',{name:'For you',exact:true}).click();
+      const completed=viewerPage.waitForResponse(response=>response.url().endsWith('/api/local/following'));
+      releaseFollowing();
+      await completed;
+      await expect(feedPost).toBeVisible();
+      await expect(viewerPage.locator('.feed-notice')).toHaveCount(0);
+    }finally{
+      releaseFollowing();
+      await viewerPage.unroute('**/api/local/following');
+    }
+
     await viewerPage.goto(`/lessons/${lessonId}`);
     viewerPage.off('request',trackEagerMedia);
     expect(eagerMediaRequests).toEqual([]);
