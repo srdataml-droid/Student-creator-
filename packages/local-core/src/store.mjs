@@ -134,6 +134,24 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     CREATE INDEX IF NOT EXISTS lessons_discovery ON lessons(course_id,status,published_at);
     CREATE TABLE IF NOT EXISTS messages(id TEXT PRIMARY KEY,sender_id TEXT NOT NULL REFERENCES users(id),recipient_id TEXT NOT NULL REFERENCES users(id),body TEXT NOT NULL CHECK(length(body) BETWEEN 1 AND 2000),created_at TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS messages_pair ON messages(sender_id,recipient_id,created_at);
+    CREATE INDEX IF NOT EXISTS messages_recipient ON messages(recipient_id,sender_id);
+    CREATE TABLE IF NOT EXISTS message_reads(
+      message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+      read_at TEXT NOT NULL
+    );
+    CREATE TABLE IF NOT EXISTS social_notification_preferences(
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      messages INTEGER NOT NULL CHECK(messages IN(0,1)), social INTEGER NOT NULL CHECK(social IN(0,1)),
+      community INTEGER NOT NULL CHECK(community IN(0,1))
+    );
+    CREATE TABLE IF NOT EXISTS social_notifications(
+      id TEXT PRIMARY KEY,recipient_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      actor_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL CHECK(kind IN('message','follow','like','comment','community_reply')),
+      event_id TEXT NOT NULL,target_id TEXT NOT NULL,created_at TEXT NOT NULL,read_at TEXT,
+      UNIQUE(recipient_id,actor_id,kind,event_id),CHECK(recipient_id<>actor_id)
+    );
+    CREATE INDEX IF NOT EXISTS social_notifications_recipient ON social_notifications(recipient_id,created_at DESC,id DESC);
     CREATE TABLE IF NOT EXISTS user_blocks(blocker_id TEXT NOT NULL REFERENCES users(id),blocked_id TEXT NOT NULL REFERENCES users(id),created_at TEXT NOT NULL,PRIMARY KEY(blocker_id,blocked_id));
     -- Distinct per-creator permissions; unlike a DM block, these scopes are independent.
     CREATE TABLE IF NOT EXISTS creator_restrictions(
@@ -145,11 +163,24 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       updated_at TEXT NOT NULL,
       PRIMARY KEY(creator_id,viewer_id), CHECK(creator_id<>viewer_id)
     );
+    CREATE TABLE IF NOT EXISTS user_reports(
+      id TEXT PRIMARY KEY,reporter_id TEXT NOT NULL REFERENCES users(id),target_id TEXT NOT NULL REFERENCES users(id),
+      category TEXT NOT NULL CHECK(category IN('harassment','impersonation','spam','other')),
+      reason TEXT NOT NULL,created_at TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'open' CHECK(status IN('open','reviewed')),
+      reviewed_by TEXT REFERENCES users(id),resolution TEXT,CHECK(reporter_id<>target_id)
+    );
+    CREATE UNIQUE INDEX IF NOT EXISTS user_reports_one_open ON user_reports(reporter_id,target_id) WHERE status='open';
+    CREATE INDEX IF NOT EXISTS user_reports_recent ON user_reports(reporter_id,created_at);
     CREATE TABLE IF NOT EXISTS message_reports(id TEXT PRIMARY KEY,reporter_id TEXT NOT NULL REFERENCES users(id),message_id TEXT NOT NULL REFERENCES messages(id),reason TEXT NOT NULL,created_at TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'open',resolved_by TEXT REFERENCES users(id),resolution TEXT,UNIQUE(reporter_id,message_id));
     -- Local course communities are restricted to manually verified students at their own campus.
     CREATE TABLE IF NOT EXISTS community_members(
       course_id TEXT NOT NULL REFERENCES courses(id),user_id TEXT NOT NULL REFERENCES users(id),
       joined_at TEXT NOT NULL,PRIMARY KEY(course_id,user_id)
+    );
+    CREATE TABLE IF NOT EXISTS community_moderators(
+      course_id TEXT NOT NULL,user_id TEXT NOT NULL,assigned_by TEXT NOT NULL REFERENCES users(id),assigned_at TEXT NOT NULL,
+      PRIMARY KEY(course_id,user_id),
+      FOREIGN KEY(course_id,user_id) REFERENCES community_members(course_id,user_id) ON DELETE CASCADE
     );
     CREATE TABLE IF NOT EXISTS community_posts(
       id TEXT PRIMARY KEY,course_id TEXT NOT NULL REFERENCES courses(id),topic_id TEXT REFERENCES topics(id),
@@ -193,6 +224,9 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
   // Additive local migration preserves databases created by earlier revisions.
   if(!db.prepare('PRAGMA table_info(lessons)').all().some(col=>col.name==='topic_id')) db.exec('ALTER TABLE lessons ADD COLUMN topic_id TEXT REFERENCES topics(id)');
   if(!db.prepare('PRAGMA table_info(users)').all().some(col=>col.name==='allow_messages')) db.exec('ALTER TABLE users ADD COLUMN allow_messages INTEGER NOT NULL DEFAULT 0');
+  if(!db.prepare('PRAGMA table_info(lesson_comments)').all().some(col=>col.name==='parent_id'))
+    db.exec('ALTER TABLE lesson_comments ADD COLUMN parent_id TEXT REFERENCES lesson_comments(id)');
+  db.exec('CREATE INDEX IF NOT EXISTS lesson_comments_parent ON lesson_comments(parent_id)');
   const reportColumns=new Set(db.prepare('PRAGMA table_info(message_reports)').all().map(x=>x.name));
   if(!reportColumns.has('status')) db.exec("ALTER TABLE message_reports ADD COLUMN status TEXT NOT NULL DEFAULT 'open'");
   if(!reportColumns.has('resolved_by')) db.exec('ALTER TABLE message_reports ADD COLUMN resolved_by TEXT REFERENCES users(id)');
@@ -213,6 +247,17 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
   function audit(actor,action,resource,detail={}){
     db.prepare('INSERT INTO audit_events VALUES(?,?,?,?,?,?)').run(randomUUID(),actor,action,resource,JSON.stringify(detail),stamp());
   }
+  function notify(recipient,actor,kind,event,target){
+    if(recipient===actor)return;
+    const recipientRow=db.prepare("SELECT id FROM users WHERE id=? AND role='student' AND verified_at IS NOT NULL AND suspended=0").get(recipient);
+    if(!recipientRow||!affiliations.eligible(recipient))return;
+    const preference=db.prepare('SELECT messages,social,community FROM social_notification_preferences WHERE user_id=?').get(recipient);
+    const group=kind==='message'?'messages':kind==='community_reply'?'community':'social';
+    if(preference&&preference[group]===0)return;
+    if(db.prepare('SELECT 1 FROM user_blocks WHERE (blocker_id=? AND blocked_id=?) OR (blocker_id=? AND blocked_id=?)').get(recipient,actor,actor,recipient))return;
+    db.prepare('INSERT OR IGNORE INTO social_notifications(id,recipient_id,actor_id,kind,event_id,target_id,created_at) VALUES(?,?,?,?,?,?,?)')
+      .run(randomUUID(),recipient,actor,kind,event,target,stamp());
+  }
   function communityAccess(actor,courseId,requireMembership=false){
     requireVerified(actor);
     const target=store.getCourse(courseId);
@@ -221,6 +266,15 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     const joined=Boolean(db.prepare('SELECT 1 FROM community_members WHERE course_id=? AND user_id=?').get(courseId,actor.id));
     if(requireMembership&&!joined)throw error('MEMBERSHIP_REQUIRED',403);
     return {target,joined};
+  }
+  // Discovery metadata follows the same creator eligibility and account-scoped viewing restriction.
+  // Anonymous previews remain public by the existing catalog contract; never include full lesson text.
+  function discoveryScope(actor,alias='l'){
+    return {sql:`EXISTS(SELECT 1 FROM users du WHERE du.id=${alias}.creator_id AND du.role='student' AND du.verified_at IS NOT NULL AND du.suspended=0
+      AND NOT EXISTS(SELECT 1 FROM institution_affiliations da LEFT JOIN institution_integrations di ON di.provider_id=da.provider_id
+        WHERE da.user_id=du.id AND (da.role<>'student' OR da.state<>'active' OR COALESCE(di.enabled,0)<>1 OR da.valid_until<=?)))
+      AND NOT EXISTS(SELECT 1 FROM creator_restrictions dr WHERE dr.creator_id=${alias}.creator_id AND dr.viewer_id=? AND dr.deny_view=1)`,
+      args:[Math.floor(Date.now()/1000),actor?.id??null]};
   }
   function requireCreatorAction(actor,creatorId,kind){
     if(!actor)throw error('AUTH_REQUIRED',401);
@@ -573,7 +627,28 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       });
     },
 
-    searchLessons({q,institutionId=null,courseId=null,topicId=null,limit=25}={}){
+    discoverFeed(actor,{mode='all',limit=60}={}){
+      if(!['all','following'].includes(mode)||!Number.isSafeInteger(limit)||limit<1||limit>100)throw error('INVALID_FEED',422);
+      if(mode==='following')requireVerified(actor);
+      const eligible=actor?.role==='student'&&actor.verifiedAt&&!actor.suspended&&affiliations.eligible(actor.id);
+      const scope=discoveryScope(actor);
+      const follow="EXISTS(SELECT 1 FROM creator_follows f WHERE f.follower_id=? AND f.creator_id=l.creator_id)";
+      const where=mode==='following'?' AND '+follow:'';
+      const rows=db.prepare(`SELECT l.id,l.creator_id AS creatorId,l.course_id AS courseId,l.topic_id AS topicId,
+        l.title,l.description,l.preview_text AS previewText,l.published_at AS publishedAt,c.code AS courseCode,c.title AS courseTitle,
+        i.name AS institutionName, l.institution_id AS institutionId,
+        EXISTS(SELECT 1 FROM lesson_videos v WHERE v.lesson_id=l.id) AS hasVideo,
+        EXISTS(SELECT 1 FROM lesson_captions cp WHERE cp.lesson_id=l.id) AS hasCaptions,
+        p.display_name AS displayName,p.handle
+        FROM lessons l JOIN courses c ON c.id=l.course_id JOIN institutions i ON i.id=l.institution_id
+        LEFT JOIN creator_public_profiles p ON p.user_id=l.creator_id
+        WHERE l.status='published' AND c.active=1 AND ${scope.sql}${where}
+        ORDER BY CASE WHEN l.institution_id=? THEN 0 ELSE 1 END,
+        CASE WHEN ${follow} THEN 0 ELSE 1 END,l.published_at DESC,l.id DESC LIMIT ?`)
+        .all(...scope.args,...(mode==='following'?[actor.id]:[]),eligible?actor.institutionId:null,eligible?actor.id:null,limit);
+      return rows.map(row=>({...row,hasVideo:Boolean(row.hasVideo),hasCaptions:Boolean(row.hasCaptions),priceKobo:commerce.price(row.id)}));
+    },
+    searchLessons({q,institutionId=null,courseId=null,topicId=null,limit=25}={},actor=null){
       if(typeof q!=='string'||q.trim().length<2||q.trim().length>80||/[\x00-\x1f\x7f]/.test(q))throw error('INVALID_SEARCH',422);
       if(!Number.isSafeInteger(limit)||limit<1||limit>50)throw error('INVALID_SEARCH_LIMIT',422);
       const term=q.trim();
@@ -585,7 +660,9 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       if(topicId){const topic=store.getTopic(topicId);if(!topic||(courseId&&topic.courseId!==courseId))throw error('INVALID_SEARCH_FILTER',422);if(institutionId&&store.getCourse(topic.courseId)?.institutionId!==institutionId)throw error('INVALID_SEARCH_FILTER',422);}
       const fields=['l.title','l.description','l.preview_text','c.code','c.title','i.name'];
       const where=["l.status='published'",'c.active=1','('+fields.map(f=>'instr(lower('+f+'),lower(?))>0').join(' OR ')+')'];
-      const values=fields.map(()=>term);
+      const scope=discoveryScope(actor);
+      where.push(scope.sql);
+      const values=[...fields.map(()=>term),...scope.args];
       if(institutionId){where.push('l.institution_id=?');values.push(institutionId);}
       if(courseId){where.push('l.course_id=?');values.push(courseId);}
       if(topicId){where.push('l.topic_id=?');values.push(topicId);}
@@ -595,13 +672,15 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
 
     myBookmarks(actor){
       requireVerified(actor);
-      return db.prepare("SELECT l.id,l.title,l.description,l.preview_text AS previewText,l.course_id AS courseId,c.code AS courseCode,i.name AS institutionName,b.created_at AS savedAt,EXISTS(SELECT 1 FROM lesson_videos v WHERE v.lesson_id=l.id) AS hasVideo FROM lesson_bookmarks b JOIN lessons l ON l.id=b.lesson_id JOIN courses c ON c.id=l.course_id JOIN institutions i ON i.id=l.institution_id WHERE b.user_id=? AND l.status='published' AND c.active=1 ORDER BY b.created_at DESC,l.id DESC LIMIT 250").all(actor.id).map(x=>({...x,hasVideo:Boolean(x.hasVideo)}));
+      const scope=discoveryScope(actor);
+      return db.prepare("SELECT l.id,l.title,l.description,l.preview_text AS previewText,l.course_id AS courseId,c.code AS courseCode,i.name AS institutionName,b.created_at AS savedAt,EXISTS(SELECT 1 FROM lesson_videos v WHERE v.lesson_id=l.id) AS hasVideo FROM lesson_bookmarks b JOIN lessons l ON l.id=b.lesson_id JOIN courses c ON c.id=l.course_id JOIN institutions i ON i.id=l.institution_id WHERE b.user_id=? AND l.status='published' AND c.active=1 AND "+scope.sql+" ORDER BY b.created_at DESC,l.id DESC LIMIT 250").all(actor.id,...scope.args).map(x=>({...x,hasVideo:Boolean(x.hasVideo)}));
     },
     saveBookmark(actor,lessonId){
       requireVerified(actor);
       return transaction(()=>{
-        const target=db.prepare("SELECT l.id FROM lessons l JOIN courses c ON c.id=l.course_id WHERE l.id=? AND l.status='published' AND c.active=1").get(lessonId);
+        const target=db.prepare("SELECT l.id,l.creator_id FROM lessons l JOIN courses c ON c.id=l.course_id WHERE l.id=? AND l.status='published' AND c.active=1").get(lessonId);
         if(!target)throw error('LESSON_NOT_FOUND',404);
+        requireCreatorAction(actor,target.creator_id,'view');
         const existing=db.prepare('SELECT 1 FROM lesson_bookmarks WHERE user_id=? AND lesson_id=?').get(actor.id,lessonId);
         if(existing)return {bookmarked:true,replayed:true};
         if(db.prepare('SELECT count(*) AS n FROM lesson_bookmarks WHERE user_id=?').get(actor.id).n>=250)throw error('BOOKMARK_LIMIT',429);
@@ -625,14 +704,17 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     likeLesson(actor,lessonId){
       requireVerified(actor);
       return transaction(()=>{
-        const target=db.prepare("SELECT l.id FROM lessons l JOIN courses c ON c.id=l.course_id WHERE l.id=? AND l.status='published' AND c.active=1").get(lessonId);
+        const target=db.prepare("SELECT l.id,l.creator_id FROM lessons l JOIN courses c ON c.id=l.course_id WHERE l.id=? AND l.status='published' AND c.active=1").get(lessonId);
         if(!target)throw error('LESSON_NOT_FOUND',404);
+        requireCreatorAction(actor,target.creator_id,'view');
         const exists=db.prepare('SELECT 1 FROM lesson_likes WHERE user_id=? AND lesson_id=?').get(actor.id,lessonId);
         if(exists)return {liked:true,replayed:true};
         const recent=db.prepare("SELECT COUNT(*) AS n FROM audit_events WHERE actor_id=? AND action='lesson.liked' AND created_at>?").get(actor.id,new Date(Date.now()-3600000).toISOString()).n;
         if(recent>=60)throw error('LIKE_RATE_LIMIT',429);
         db.prepare('INSERT INTO lesson_likes(user_id,lesson_id,created_at) VALUES(?,?,?)').run(actor.id,lessonId,stamp());
         audit(actor.id,'lesson.liked',lessonId);
+        const owner=db.prepare('SELECT creator_id FROM lessons WHERE id=?').get(lessonId).creator_id;
+        notify(owner,actor.id,'like',lessonId,lessonId);
         return {liked:true,replayed:false};
       });
     },
@@ -646,12 +728,17 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     },
     lessonComments(id){
       if(!store.publicLesson(id))throw error('LESSON_NOT_FOUND',404);
-      return db.prepare(`SELECT c.id,c.lesson_id AS lessonId,c.author_id AS authorId,c.body,c.created_at AS createdAt
+      return db.prepare(`SELECT c.id,c.lesson_id AS lessonId,c.author_id AS authorId,c.parent_id AS parentId,c.body,c.created_at AS createdAt
         FROM lesson_comments c JOIN users u ON u.id=c.author_id
         WHERE c.lesson_id=? AND c.hidden_at IS NULL AND u.verified_at IS NOT NULL AND u.suspended=0
+        AND (c.parent_id IS NULL OR EXISTS(SELECT 1 FROM lesson_comments parent JOIN users pu ON pu.id=parent.author_id
+          WHERE parent.id=c.parent_id AND parent.lesson_id=c.lesson_id AND parent.hidden_at IS NULL AND pu.verified_at IS NOT NULL AND pu.suspended=0))
         ORDER BY c.created_at DESC,c.id DESC LIMIT 50`).all(id).reverse();
     },
-    createLessonComment(actor,id,{text,creationKey}={}){
+    createLessonComment(actor,id,input={}){
+      if(!input||Object.keys(input).some(k=>!['text','creationKey','replyTo'].includes(k)))throw error('INVALID_COMMENT',422);
+      const {text,creationKey,replyTo=null}=input;
+      if(replyTo!==null&&(typeof replyTo!=='string'||replyTo.length!==36))throw error('INVALID_REPLY',422);
       requireVerified(actor);
       // A comment is part of the paid work, not a public preview action.
       const target=store.viewableLesson(actor,id);
@@ -659,7 +746,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       if(typeof text!=='string'||text.trim().length<3||text.trim().length>800||/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(text))
         throw error('INVALID_COMMENT',422);
       if(typeof creationKey!=='string'||!/^[A-Za-z0-9_-]{16,128}$/.test(creationKey))throw error('INVALID_IDEMPOTENCY_KEY',422);
-      const body=text.trim(),hash=sha(body);
+      const body=text.trim(),hash=sha(replyTo===null?body:JSON.stringify({body,replyTo}));
       return transaction(()=>{
         // Recheck with the write lock held: refund/block and comment revocation
         // must win over retries, including an old idempotency key.
@@ -667,17 +754,27 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         requireCreatorAction(actor,target.creatorId,'comment');
         const old=db.prepare('SELECT * FROM lesson_comments WHERE author_id=? AND lesson_id=? AND creation_key=?').get(actor.id,id,creationKey);
         if(old){
-          if(old.creation_hash!==hash)throw error('IDEMPOTENCY_CONFLICT',409);
+          if(old.creation_hash!==hash||old.parent_id!==replyTo)throw error('IDEMPOTENCY_CONFLICT',409);
           if(old.hidden_at)throw error('COMMENT_UNAVAILABLE',409);
-          return {comment:{id:old.id,lessonId:id,authorId:actor.id,body:old.body,createdAt:old.created_at},replayed:true};
         }
+        const parent=replyTo===null?null:db.prepare(`SELECT p.id,p.author_id FROM lesson_comments p JOIN users u ON u.id=p.author_id
+          WHERE p.id=? AND p.lesson_id=? AND p.parent_id IS NULL AND p.hidden_at IS NULL AND u.verified_at IS NOT NULL AND u.suspended=0`).get(replyTo,id);
+        if(replyTo!==null&&(!parent||!affiliations.eligible(parent.author_id)))throw error('INVALID_REPLY',422);
+        if(old)return {comment:{id:old.id,lessonId:id,authorId:actor.id,parentId:old.parent_id,body:old.body,createdAt:old.created_at},replayed:true};
         const recent=db.prepare('SELECT count(*) AS n FROM lesson_comments WHERE author_id=? AND created_at>=?').get(actor.id,new Date(Date.now()-3600000).toISOString()).n;
         if(recent>=20)throw error('COMMENT_RATE_LIMIT',429);
         const commentId=randomUUID(),createdAt=stamp();
-        db.prepare('INSERT INTO lesson_comments(id,lesson_id,author_id,body,creation_key,creation_hash,created_at) VALUES(?,?,?,?,?,?,?)')
-          .run(commentId,id,actor.id,body,creationKey,hash,createdAt);
-        audit(actor.id,'lesson.comment.created',commentId,{lessonId:id});
-        return {comment:{id:commentId,lessonId:id,authorId:actor.id,body,createdAt},replayed:false};
+        db.prepare('INSERT INTO lesson_comments(id,lesson_id,author_id,body,creation_key,creation_hash,created_at,parent_id) VALUES(?,?,?,?,?,?,?,?)')
+          .run(commentId,id,actor.id,body,creationKey,hash,createdAt,replyTo);
+        audit(actor.id,'lesson.comment.created',commentId,{lessonId:id,replyTo});
+        notify(target.creatorId,actor.id,'comment',commentId,id);
+        if(parent&&parent.author_id!==target.creatorId&&parent.author_id!==actor.id){
+          const recipient=human(db.prepare('SELECT * FROM users WHERE id=?').get(parent.author_id));
+          let allowed=false;
+          try{store.viewableLesson(recipient,id);allowed=true;}catch(e){if(!e?.status||e.status>=500)throw e;}
+          if(allowed)notify(parent.author_id,actor.id,'comment',commentId,id);
+        }
+        return {comment:{id:commentId,lessonId:id,authorId:actor.id,parentId:replyTo,body,createdAt},replayed:false};
       });
     },
     removeLessonComment(actor,id){
@@ -697,7 +794,8 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       return transaction(()=>{
         const row=db.prepare(`SELECT lc.id,lc.author_id,lc.lesson_id AS lessonId FROM lesson_comments lc
           JOIN lessons l ON l.id=lc.lesson_id JOIN courses c ON c.id=l.course_id
-          WHERE lc.id=? AND lc.hidden_at IS NULL AND l.status='published' AND c.active=1`).get(id);
+          WHERE lc.id=? AND lc.hidden_at IS NULL AND l.status='published' AND c.active=1
+          AND (lc.parent_id IS NULL OR EXISTS(SELECT 1 FROM lesson_comments p WHERE p.id=lc.parent_id AND p.lesson_id=lc.lesson_id AND p.hidden_at IS NULL))`).get(id);
         if(!row)throw error('COMMENT_NOT_FOUND',404);
         // Reports are accepted only from a viewer allowed to read that thread.
         store.viewableLesson(actor,row.lessonId);
@@ -735,7 +833,11 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         return {id,status:decision==='hide'?'hidden':'dismissed'};
       });
     },
-    publicLessons(courseId,topicId=null){if(!store.getCourse(courseId))return [];return (topicId?db.prepare("SELECT * FROM lessons WHERE course_id=? AND topic_id=? AND status='published' ORDER BY published_at DESC LIMIT 100").all(courseId,topicId):db.prepare("SELECT * FROM lessons WHERE course_id=? AND status='published' ORDER BY published_at DESC LIMIT 100").all(courseId)).map(withVideo);},
+    publicLessons(courseId,topicId=null,actor=null){
+      if(!store.getCourse(courseId))return [];
+      const scope=discoveryScope(actor);
+      return db.prepare("SELECT l.* FROM lessons l WHERE l.course_id=? AND l.status='published' AND "+scope.sql+(topicId?' AND l.topic_id=?':'')+" ORDER BY l.published_at DESC,l.id DESC LIMIT 100").all(courseId,...scope.args,...(topicId?[topicId]:[])).map(withVideo);
+    },
     viewableLesson(actor,id){
       const item=store.publicLesson(id);
       if(!item)throw error('LESSON_NOT_FOUND',404);
@@ -773,13 +875,40 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         return {profile:{...value,updatedAt},replayed:false};
       });
     },
+    discoverCreators(actor,{q='',institutionId=null,courseId=null,topicId=null,limit=20}={}){
+      if(typeof q!=='string'||q.trim().length>80||q.trim().length===1||/[\x00-\x1f\x7f]/.test(q)||!Number.isSafeInteger(limit)||limit<1||limit>50)
+        throw error('INVALID_SEARCH',422);
+      for(const value of [institutionId,courseId,topicId])if(value!==null&&(typeof value!=='string'||!/^[a-f\d]{8}-[a-f\d]{4}-[1-8][a-f\d]{3}-[89ab][a-f\d]{3}-[a-f\d]{12}$/i.test(value)))throw error('INVALID_SEARCH_FILTER',422);
+      if(courseId){const course=store.getCourse(courseId);if(!course||(institutionId&&course.institutionId!==institutionId))throw error('INVALID_SEARCH_FILTER',422);}
+      if(topicId){const topic=store.getTopic(topicId);if(!topic||(courseId&&topic.courseId!==courseId)||(institutionId&&store.getCourse(topic.courseId)?.institutionId!==institutionId))throw error('INVALID_SEARCH_FILTER',422);}
+      const scope=discoveryScope(actor),where=["l.status='published'","c.active=1",scope.sql],values=[...scope.args];
+      if(institutionId){where.push('l.institution_id=?');values.push(institutionId);}
+      if(courseId){where.push('l.course_id=?');values.push(courseId);}
+      if(topicId){where.push('l.topic_id=?');values.push(topicId);}
+      const term=q.trim().replace(/^@/,'');
+      if(q.trim()&&!term)throw error('INVALID_SEARCH',422);
+      if(term){
+        const fields=['p.handle','p.display_name','i.name','c.code','c.title','l.title'];
+        where.push('('+fields.map(field=>'instr(lower(COALESCE('+field+",'')),lower(?))>0").join(' OR ')+')');
+        values.push(...fields.map(()=>term));
+      }
+      const campus=actor?.role==='student'&&actor.verifiedAt&&!actor.suspended&&affiliations.eligible(actor.id)?actor.institutionId:null;
+      return db.prepare(`SELECT u.id,p.handle,p.display_name AS displayName,p.bio,i.name AS institutionName,
+        (SELECT count(*) FROM creator_follows f WHERE f.creator_id=u.id) AS followerCount
+        FROM lessons l JOIN users u ON u.id=l.creator_id JOIN courses c ON c.id=l.course_id JOIN institutions i ON i.id=l.institution_id
+        LEFT JOIN creator_public_profiles p ON p.user_id=u.id
+        WHERE ${where.join(' AND ')}
+        GROUP BY u.id,p.handle,p.display_name,p.bio,i.name,l.institution_id
+        ORDER BY CASE WHEN l.institution_id=? THEN 0 ELSE 1 END,MAX(l.published_at) DESC,u.id LIMIT ?`).all(...values,campus,limit)
+        .map(x=>({...x,bio:x.bio??''}));
+    },
     publicCreator(id){
       const x=db.prepare(`SELECT u.id,u.allow_messages,p.handle,p.display_name,p.bio
          FROM users u LEFT JOIN creator_public_profiles p ON p.user_id=u.id
          WHERE u.id=? AND u.role='student' AND u.verified_at IS NOT NULL AND u.suspended=0
          AND EXISTS (SELECT 1 FROM lessons l JOIN courses c ON c.id=l.course_id
            WHERE l.creator_id=u.id AND l.status='published' AND c.active=1)`).get(id);
-      return x?{id:x.id,allowMessages:Boolean(x.allow_messages),
+      return x&&affiliations.eligible(id)?{id:x.id,allowMessages:Boolean(x.allow_messages),
         handle:x.handle??null,displayName:x.display_name??null,bio:x.bio??'',
         followerCount:db.prepare('SELECT COUNT(*) AS n FROM creator_follows WHERE creator_id=?').get(x.id).n}:null;
     },
@@ -788,8 +917,12 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       if(typeof creatorId!=='string'||creatorId===actor.id)throw error('CANNOT_FOLLOW_SELF',422);
       if(!store.publicCreator(creatorId))throw error('CREATOR_UNAVAILABLE',404);
       return transaction(()=>{
+        if(db.prepare('SELECT 1 FROM creator_follows WHERE follower_id=? AND creator_id=?').get(actor.id,creatorId))
+          return {creatorId,following:true,replayed:true};
+        if(db.prepare("SELECT count(*) n FROM audit_events WHERE actor_id=? AND action='creator.followed' AND created_at>?").get(actor.id,new Date(Date.now()-3600000).toISOString()).n>=60)
+          throw error('FOLLOW_RATE_LIMIT',429);
         const result=db.prepare('INSERT OR IGNORE INTO creator_follows(follower_id,creator_id,created_at) VALUES(?,?,?)').run(actor.id,creatorId,stamp());
-        if(result.changes)audit(actor.id,'creator.followed',creatorId);
+        if(result.changes){audit(actor.id,'creator.followed',creatorId);notify(creatorId,actor.id,'follow',creatorId,creatorId);}
         return {creatorId,following:true,replayed:result.changes===0};
       });
     },
@@ -867,7 +1000,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     sendMessage(actor,recipientId,body){
       requireVerified(actor);
       if(actor.id===recipientId)throw error('CANNOT_MESSAGE_SELF',422);
-      if(typeof body!=='string'||body.trim().length<1||body.trim().length>2000)throw error('INVALID_MESSAGE',422);
+      if(typeof body!=='string'||body.trim().length<1||body.trim().length>2000||/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(body))throw error('INVALID_MESSAGE',422);
       return transaction(()=>{
         requireCreatorAction(actor,recipientId,'message');
         const recipient=db.prepare("SELECT id,allow_messages FROM users WHERE id=? AND role='student' AND verified_at IS NOT NULL AND suspended=0").get(recipientId);
@@ -879,21 +1012,113 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         if(recent>=30)throw error('MESSAGE_RATE_LIMIT',429);
         const id=randomUUID(),createdAt=stamp();db.prepare('INSERT INTO messages VALUES(?,?,?,?,?)').run(id,actor.id,recipientId,body.trim(),createdAt);
         audit(actor.id,'message.sent',id,{recipientId});
+        notify(recipientId,actor.id,'message',id,actor.id);
         return {id,senderId:actor.id,recipientId,body:body.trim(),createdAt};
       });
     },
     thread(actor,peerId){
+      return store.threadPage(actor,peerId).messages;
+    },
+    threadPage(actor,peerId,{before=null,limit=100}={}){
       requireVerified(actor);
+      if(!Number.isInteger(limit)||limit<1||limit>100||before!==null&&(typeof before!=='string'||before.length!==36))
+        throw error('INVALID_MESSAGE_PAGE',422);
+      const pair='((sender_id=? AND recipient_id=?) OR (sender_id=? AND recipient_id=?))';
+      const args=[actor.id,peerId,peerId,actor.id];
+      let bound='',values=[];
+      if(before!==null){
+        const cursor=db.prepare('SELECT created_at,id FROM messages WHERE '+pair+' AND id=?').get(...args,before);
+        if(!cursor)throw error('MESSAGE_NOT_FOUND',404);
+        bound=' AND (created_at < ? OR (created_at = ? AND id < ?))';
+        values=[cursor.created_at,cursor.created_at,cursor.id];
+      }
       const rows=db.prepare(`SELECT id,sender_id AS senderId,recipient_id AS recipientId,body,created_at AS createdAt FROM messages
-         WHERE (sender_id=? AND recipient_id=?) OR (sender_id=? AND recipient_id=?) ORDER BY created_at DESC LIMIT 100`).all(actor.id,peerId,peerId,actor.id);
-      return rows.reverse();
+         WHERE ${pair}${bound} ORDER BY created_at DESC,id DESC LIMIT ?`).all(...args,...values,limit+1);
+      const more=rows.length>limit;
+      if(more)rows.pop();
+      return {nextBefore:more?rows.at(-1).id:null,messages:rows.reverse()};
+    },
+    notificationPreferences(actor){
+      requireVerified(actor);
+      const row=db.prepare('SELECT messages,social,community FROM social_notification_preferences WHERE user_id=?').get(actor.id);
+      return row?{messages:Boolean(row.messages),social:Boolean(row.social),community:Boolean(row.community)}:{messages:true,social:true,community:true};
+    },
+    updateNotificationPreferences(actor,input){
+      requireVerified(actor);
+      const keys=['messages','social','community'];
+      if(!input||Object.keys(input).length!==3||keys.some(k=>typeof input[k]!=='boolean'))throw error('INVALID_NOTIFICATION_PREFERENCES',422);
+      return transaction(()=>{
+        db.prepare(`INSERT INTO social_notification_preferences VALUES(?,?,?,?) ON CONFLICT(user_id)
+          DO UPDATE SET messages=excluded.messages,social=excluded.social,community=excluded.community`)
+          .run(actor.id,...keys.map(k=>Number(input[k])));
+        return store.notificationPreferences(actor);
+      });
+    },
+    notifications(actor){
+      requireVerified(actor);
+      // No body snippets, emails, identity evidence, or foreign notification state.
+      // A community reply is visible only while its course remains active, campus-scoped and joined.
+      return db.prepare(`SELECT n.id,n.kind,n.target_id AS targetId,n.created_at AS createdAt,n.read_at AS readAt
+        FROM social_notifications n WHERE n.recipient_id=? AND
+        (n.kind<>'community_reply' OR EXISTS(
+          SELECT 1 FROM community_members m JOIN courses c ON c.id=m.course_id JOIN community_posts p ON p.id=n.event_id
+          JOIN community_posts parent ON parent.id=p.parent_id
+          WHERE m.user_id=n.recipient_id AND m.course_id=n.target_id AND c.active=1 AND c.institution_id=?
+          AND p.course_id=c.id AND p.hidden_at IS NULL AND parent.hidden_at IS NULL))
+        ORDER BY n.created_at DESC,n.id DESC LIMIT 100`).all(actor.id,actor.institutionId);
+    },
+    markNotificationRead(actor,id){
+      requireVerified(actor);
+      if(typeof id!=='string'||id.length!==36)throw error('NOTIFICATION_NOT_FOUND',404);
+      return transaction(()=>{
+        if(!db.prepare('SELECT 1 FROM social_notifications WHERE recipient_id=? AND id=?').get(actor.id,id))
+          throw error('NOTIFICATION_NOT_FOUND',404);
+        const marked=db.prepare('UPDATE social_notifications SET read_at=? WHERE recipient_id=? AND id=? AND read_at IS NULL')
+          .run(stamp(),actor.id,id).changes;
+        return {marked};
+      });
+    },
+    markMessagesRead(actor,peerId,ids){
+      requireVerified(actor);
+      if(!Array.isArray(ids)||ids.length<1||ids.length>100||ids.some(id=>typeof id!=='string'||id.length!==36)||new Set(ids).size!==ids.length)
+        throw error('INVALID_MESSAGE_IDS',422);
+      return transaction(()=>{
+        const owned=db.prepare('SELECT 1 FROM messages WHERE id=? AND sender_id=? AND recipient_id=?');
+        // Validate every ID before changing any state; never acknowledge outbound or foreign messages.
+        for(const id of ids)if(!owned.get(id,peerId,actor.id))throw error('MESSAGE_NOT_FOUND',404);
+        const mark=db.prepare('INSERT OR IGNORE INTO message_reads(message_id,read_at) VALUES(?,?)');
+        const at=stamp();
+        let marked=0;
+        for(const id of ids)marked+=mark.run(id,at).changes;
+        return {marked};
+      });
     },
     inbox(actor){
+      return store.inboxPage(actor).inbox;
+    },
+    inboxPage(actor,{before=null,limit=50}={}){
       requireVerified(actor);
-      return db.prepare(`SELECT peerId,MAX(createdAt) AS lastMessageAt FROM (
-        SELECT recipient_id AS peerId,created_at AS createdAt FROM messages WHERE sender_id=?
-        UNION ALL SELECT sender_id AS peerId,created_at AS createdAt FROM messages WHERE recipient_id=?
-      ) GROUP BY peerId ORDER BY lastMessageAt DESC LIMIT 50`).all(actor.id,actor.id);
+      if(!Number.isInteger(limit)||limit<1||limit>50||before!==null&&(typeof before!=='string'||before.length!==36))
+        throw error('INVALID_MESSAGE_PAGE',422);
+      let bound='',values=[];
+      if(before!==null){
+        const cursor=db.prepare(`SELECT MAX(created_at) AS lastMessageAt FROM messages
+          WHERE (sender_id=? AND recipient_id=?) OR (sender_id=? AND recipient_id=?)`).get(actor.id,before,before,actor.id);
+        if(!cursor?.lastMessageAt)throw error('MESSAGE_NOT_FOUND',404);
+        bound=' WHERE (lastMessageAt<? OR (lastMessageAt=? AND peerId>?))';
+        values=[cursor.lastMessageAt,cursor.lastMessageAt,before];
+      }
+      const rows=db.prepare(`WITH peers AS (SELECT peerId,MAX(createdAt) AS lastMessageAt,SUM(unread) AS unreadCount FROM (
+        SELECT recipient_id AS peerId,created_at AS createdAt,0 AS unread FROM messages WHERE sender_id=?
+        UNION ALL
+        SELECT m.sender_id AS peerId,m.created_at AS createdAt,
+          CASE WHEN r.message_id IS NULL THEN 1 ELSE 0 END AS unread
+          FROM messages m LEFT JOIN message_reads r ON r.message_id=m.id WHERE m.recipient_id=?
+      ) GROUP BY peerId)
+      SELECT * FROM peers${bound} ORDER BY lastMessageAt DESC,peerId LIMIT ?`).all(actor.id,actor.id,...values,limit+1);
+      const more=rows.length>limit;
+      if(more)rows.pop();
+      return {inbox:rows,nextBefore:more?rows.at(-1).peerId:null};
     },
     isContactBlocked(actor,otherId){
       requireVerified(actor);
@@ -906,9 +1131,50 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     },
     blockContact(actor,otherId){
       requireVerified(actor);
-      if(!db.prepare('SELECT 1 FROM users WHERE id=?').get(otherId)||actor.id===otherId)throw error('INVALID_CONTACT',422);
-      transaction(()=>{db.prepare('INSERT OR IGNORE INTO user_blocks VALUES(?,?,?)').run(actor.id,otherId,stamp());audit(actor.id,'contact.blocked',otherId);});
+      if(actor.id===otherId)throw error('INVALID_CONTACT',422);
+      transaction(()=>{
+        const already=db.prepare('SELECT 1 FROM user_blocks WHERE blocker_id=? AND blocked_id=?').get(actor.id,otherId);
+        if(already)return;
+        const contact=db.prepare("SELECT 1 FROM messages WHERE (sender_id=? AND recipient_id=?) OR (sender_id=? AND recipient_id=?) LIMIT 1").get(actor.id,otherId,otherId,actor.id);
+        if(!contact&&!store.publicCreator(otherId))throw error('INVALID_CONTACT',422);
+        db.prepare('INSERT INTO user_blocks VALUES(?,?,?)').run(actor.id,otherId,stamp());
+        audit(actor.id,'contact.blocked',otherId);
+      });
       return {blocked:true};
+    },
+    reportUser(actor,targetId,input){
+      requireVerified(actor);
+      if(!input||Object.keys(input).length!==2||!['harassment','impersonation','spam','other'].includes(input.category)||
+        typeof input.reason!=='string'||input.reason.trim().length<10||input.reason.trim().length>1000)throw error('INVALID_REPORT',422);
+      if(targetId===actor.id)throw error('CANNOT_REPORT_SELF',403);
+      return transaction(()=>{
+        const target=db.prepare("SELECT id FROM users WHERE id=? AND role='student'").get(targetId);
+        const contact=db.prepare("SELECT 1 FROM messages WHERE (sender_id=? AND recipient_id=?) OR (sender_id=? AND recipient_id=?) LIMIT 1").get(actor.id,targetId,targetId,actor.id);
+        if(!target||(!contact&&!store.publicCreator(targetId)))throw error('USER_NOT_FOUND',404);
+        const recent=db.prepare('SELECT count(*) n FROM user_reports WHERE reporter_id=? AND created_at>?').get(actor.id,new Date(Date.now()-3600000).toISOString()).n;
+        if(recent>=10)throw error('REPORT_RATE_LIMIT',429);
+        const id=randomUUID();
+        const inserted=db.prepare('INSERT OR IGNORE INTO user_reports(id,reporter_id,target_id,category,reason,created_at) VALUES(?,?,?,?,?,?)')
+          .run(id,actor.id,targetId,input.category,input.reason.trim(),stamp()).changes;
+        if(!inserted)throw error('ALREADY_REPORTED',409);
+        audit(actor.id,'user.reported',id,{targetId,category:input.category});
+        return {id};
+      });
+    },
+    userReportQueue(actor){
+      requireAdmin(actor);
+      return db.prepare("SELECT id,reporter_id AS reporterId,target_id AS targetId,category,reason,created_at AS createdAt FROM user_reports WHERE status='open' ORDER BY created_at,id LIMIT 100").all();
+    },
+    resolveUserReport(actor,id,input){
+      requireAdmin(actor);
+      if(!input||Object.keys(input).length!==1||typeof input.resolution!=='string'||input.resolution.trim().length<5||input.resolution.trim().length>1000)
+        throw error('INVALID_RESOLUTION',422);
+      return transaction(()=>{
+        const changed=db.prepare("UPDATE user_reports SET status='reviewed',reviewed_by=?,resolution=? WHERE id=? AND status='open'").run(actor.id,input.resolution.trim(),id).changes;
+        if(!changed)throw error('REPORT_CONFLICT',409);
+        audit(actor.id,'user.report.reviewed',id);
+        return {id,status:'reviewed'};
+      });
     },
     reportMessage(actor,messageId,reason){
       requireVerified(actor);
@@ -934,10 +1200,46 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         audit(actor.id,'message.report.resolved',reportId);return {id:reportId,status:'reviewed'};
       });
     },
+    setCommunityModerator(actor,courseId,userId,input){
+      requireAdmin(actor);
+      if(!input||Object.keys(input).length!==2||typeof input.enabled!=='boolean'||typeof input.reason!=='string'||input.reason.trim().length<5||input.reason.trim().length>1000)
+        throw error('INVALID_DECISION',422);
+      return transaction(()=>{
+        const target=store.getCourse(courseId);
+        if(!target)throw error('COMMUNITY_NOT_FOUND',404);
+        let changed;
+        if(input.enabled){
+          const member=db.prepare("SELECT u.id FROM community_members m JOIN users u ON u.id=m.user_id WHERE m.course_id=? AND m.user_id=? AND u.institution_id=? AND u.role='student' AND u.verified_at IS NOT NULL AND u.suspended=0").get(courseId,userId,target.institutionId);
+          if(!member||!affiliations.eligible(userId))throw error('MEMBERSHIP_REQUIRED',403);
+          changed=db.prepare('INSERT OR IGNORE INTO community_moderators VALUES(?,?,?,?)').run(courseId,userId,actor.id,stamp()).changes;
+        }else{
+          changed=db.prepare('DELETE FROM community_moderators WHERE course_id=? AND user_id=?').run(courseId,userId).changes;
+        }
+        if(changed)audit(actor.id,input.enabled?'community.moderator.assigned':'community.moderator.revoked',courseId,{userId,reason:input.reason.trim()});
+        return {userId,courseId,enabled:input.enabled,replayed:changed===0};
+      });
+    },
+    hideCommunityPost(actor,courseId,postId,input){
+      communityAccess(actor,courseId,true);
+      if(!input||Object.keys(input).length!==1||typeof input.reason!=='string'||input.reason.trim().length<5||input.reason.trim().length>1000)
+        throw error('INVALID_DECISION',422);
+      return transaction(()=>{
+        communityAccess(actor,courseId,true);
+        if(!db.prepare('SELECT 1 FROM community_moderators WHERE course_id=? AND user_id=?').get(courseId,actor.id))
+          throw error('COMMUNITY_MODERATOR_REQUIRED',403);
+        const post=db.prepare('SELECT id,author_id,hidden_at FROM community_posts WHERE id=? AND course_id=?').get(postId,courseId);
+        if(!post)throw error('POST_NOT_FOUND',404);
+        if(post.author_id===actor.id)throw error('CONFLICT_OF_INTEREST',403);
+        const changed=db.prepare('UPDATE community_posts SET hidden_at=? WHERE id=? AND course_id=? AND hidden_at IS NULL').run(stamp(),postId,courseId).changes;
+        if(changed)audit(actor.id,'community.moderator.post.hidden',postId,{courseId,reason:input.reason.trim()});
+        return {id:postId,hidden:true,replayed:changed===0};
+      });
+    },
     communityStatus(actor,courseId){
       const {target,joined}=communityAccess(actor,courseId);
       const memberCount=db.prepare('SELECT count(*) n FROM community_members WHERE course_id=?').get(courseId).n;
-      return {course:{id:target.id,title:target.title,code:target.code},joined,memberCount};
+      const canModerate=joined&&Boolean(db.prepare('SELECT 1 FROM community_moderators WHERE course_id=? AND user_id=?').get(courseId,actor.id));
+      return {course:{id:target.id,title:target.title,code:target.code},joined,memberCount,canModerate};
     },
     joinCommunity(actor,courseId){
       communityAccess(actor,courseId);
@@ -972,9 +1274,12 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       if(replyTo!==null&&(typeof replyTo!=='string'||replyTo.length>80))throw error('INVALID_REPLY',422);
       const body=text.trim(),requestHash=sha(JSON.stringify({courseId,topicId,replyTo,body}));
       return transaction(()=>{
+        communityAccess(actor,courseId,true);
         const previous=db.prepare('SELECT * FROM community_posts WHERE author_id=? AND request_key=?').get(actor.id,creationKey);
         if(previous){
           if(previous.request_hash!==requestHash)throw error('IDEMPOTENCY_CONFLICT',409);
+          if(previous.hidden_at||(previous.parent_id&&db.prepare('SELECT hidden_at FROM community_posts WHERE id=?').get(previous.parent_id)?.hidden_at))
+            throw error('POST_NOT_FOUND',404);
           return {post:{id:previous.id,courseId:previous.course_id,authorId:previous.author_id,
             topicId:previous.topic_id,parentId:previous.parent_id,body:previous.body,createdAt:previous.created_at},replayed:true};
         }
@@ -988,6 +1293,11 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         db.prepare('INSERT INTO community_posts(id,course_id,topic_id,author_id,parent_id,body,request_key,request_hash,created_at) VALUES(?,?,?,?,?,?,?,?,?)')
           .run(id,courseId,topicId,actor.id,replyTo,body,creationKey,requestHash,createdAt);
         audit(actor.id,'community.post.created',id,{courseId,replyTo});
+        if(replyTo){
+          const parent=db.prepare('SELECT author_id FROM community_posts WHERE id=?').get(replyTo);
+          if(db.prepare('SELECT 1 FROM community_members WHERE course_id=? AND user_id=?').get(courseId,parent.author_id))
+            notify(parent.author_id,actor.id,'community_reply',id,courseId);
+        }
         return {post:{id,courseId,topicId,authorId:actor.id,parentId:replyTo,body,createdAt},replayed:false};
       });
     },
@@ -995,7 +1305,8 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       requireVerified(actor);
       if(typeof reason!=='string'||reason.trim().length<10||reason.trim().length>1000)throw error('INVALID_REPORT',422);
       return transaction(()=>{
-        const post=db.prepare('SELECT * FROM community_posts WHERE id=? AND hidden_at IS NULL').get(postId);
+        const post=db.prepare(`SELECT p.* FROM community_posts p WHERE p.id=? AND p.hidden_at IS NULL
+          AND (p.parent_id IS NULL OR EXISTS(SELECT 1 FROM community_posts parent WHERE parent.id=p.parent_id AND parent.course_id=p.course_id AND parent.hidden_at IS NULL))`).get(postId);
         if(!post)throw error('POST_NOT_FOUND',404);
         communityAccess(actor,post.course_id,true);
         if(post.author_id===actor.id)throw error('CANNOT_REPORT_SELF',403);

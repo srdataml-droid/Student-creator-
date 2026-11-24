@@ -256,6 +256,93 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     await viewerPage.getByRole('button',{name:'+ Follow creator'}).click();
     await expect(viewerPage.getByRole('button',{name:/Following/})).toBeVisible();
 
+    // Week 4: actual browser interactions, independent cookies, no mocked responses.
+    await viewerPage.goto('/');
+    await viewerPage.getByRole('button',{name:'Following',exact:true}).click();
+    await expect(viewerPage.getByRole('heading',{name:title})).toBeVisible();
+    await creatorPage.goto('/lessons/'+lessonId);
+    await expect(creatorPage.getByText(comment)).toBeVisible();
+    await creatorPage.getByRole('button',{name:'Reply',exact:true}).click();
+    const replyText='Independent creator reply '+suffix;
+    await creatorPage.getByLabel('Your reply',{exact:true}).fill(replyText);
+    await creatorPage.getByRole('button',{name:'Post comment',exact:true}).click();
+    await expect(creatorPage.getByText(replyText,{exact:true})).toBeVisible();
+
+    await readJson(await creator.request.post('/api/local/messages/preference',{data:{allowMessages:true}}));
+    const privateText='Private study question '+suffix;
+    await viewerPage.goto('/messages/'+creatorId);
+    await viewerPage.getByLabel('Message (max 2,000 characters)').fill(privateText);
+    await viewerPage.getByRole('button',{name:'Send message',exact:true}).click();
+    await expect(viewerPage.getByText(privateText,{exact:true})).toBeVisible();
+    await creatorPage.bringToFront();
+    await creatorPage.goto('/messages');
+    await expect(creatorPage.getByText('1 unread',{exact:true})).toBeVisible();
+    await creatorPage.getByRole('link',{name:'Conversation '+viewerId.slice(0,8)+'…'}).click();
+    await expect(creatorPage.getByText(privateText,{exact:true})).toBeVisible();
+    await expect.poll(async()=>{
+      const {inbox}=await readJson(await creator.request.get('/api/local/messages/inbox'));
+      return inbox.find(t=>t.peerId===viewerId)?.unreadCount;
+    }).toBe(0);
+    await creatorPage.goto('/notifications');
+    await expect(creatorPage.getByRole('link',{name:'New private message'})).toBeVisible();
+    const privateNotice=creatorPage.getByRole('listitem').filter({hasText:'New private message'});
+    await privateNotice.getByRole('button',{name:'Mark as read'}).click();
+    await expect(privateNotice.getByRole('button',{name:'Mark as read'})).toHaveCount(0);
+    await creatorPage.getByLabel('Direct messages',{exact:true}).uncheck();
+    await creatorPage.getByRole('button',{name:'Save preferences'}).click();
+    await expect.poll(async()=>(await readJson(await creator.request.get('/api/local/notifications/preferences'))).preferences.messages).toBe(false);
+    await viewerPage.goto('/messages/'+creatorId);
+    const silentText='Another question without an alert '+suffix;
+    await viewerPage.getByLabel('Message (max 2,000 characters)').fill(silentText);
+    await viewerPage.getByRole('button',{name:'Send message',exact:true}).click();
+    await expect(viewerPage.getByText(silentText,{exact:true})).toBeVisible();
+    const notes=await readJson(await creator.request.get('/api/local/notifications'));
+    expect(notes.notifications.filter(n=>n.kind==='message')).toHaveLength(1);
+    await creatorPage.goto('/messages/'+viewerId);
+    await expect(creatorPage.getByText(silentText,{exact:true})).toBeVisible();
+    creatorPage.once('dialog',d=>d.accept());
+    await creatorPage.getByRole('button',{name:'Block contact',exact:true}).click();
+    await expect(creatorPage.getByRole('button',{name:'Unblock contact',exact:true})).toBeVisible();
+    expect((await viewer.request.post('/api/local/messages/'+creatorId,{data:{text:'Blocked attempt'}})).status()).toBe(403);
+    creatorPage.once('dialog',d=>d.accept());
+    await creatorPage.getByRole('button',{name:'Unblock contact',exact:true}).click();
+    await expect(creatorPage.getByRole('button',{name:'Block contact',exact:true})).toBeVisible();
+
+    await viewerPage.goto('/creators/'+creatorId);
+    await viewerPage.getByRole('button',{name:'Report account',exact:true}).click();
+    await viewerPage.getByLabel('Report category').selectOption('spam');
+    await viewerPage.getByLabel('Explain what happened').fill('Synthetic browser account report '+suffix);
+    await viewerPage.getByRole('button',{name:'Send report',exact:true}).click();
+    await expect(viewerPage.getByText('Account report submitted for independent review.')).toBeVisible();
+    expect((await viewer.request.get('/api/local/admin/user-reports')).status()).toBe(403);
+    expect((await readJson(await admin.request.get('/api/local/admin/user-reports'))).reports.some(r=>r.targetId===creatorId)).toBe(true);
+
+    for(const page of [viewerPage,creatorPage]){
+      await page.goto('/communities/'+courseId);
+      await page.getByRole('button',{name:'Join discussion',exact:true}).click();
+      await expect(page.getByRole('button',{name:'Leave discussion',exact:true})).toBeVisible();
+    }
+    await viewerPage.locator('#communityText').fill('Synthetic private community question '+suffix);
+    await viewerPage.getByRole('button',{name:'Post to class',exact:true}).click();
+    await expect(viewerPage.getByText('Synthetic private community question '+suffix,{exact:true})).toBeVisible();
+    await adminPage.goto('/manage');
+    await adminPage.locator('#moderator-course').selectOption(courseId);
+    await adminPage.locator('#moderator-student').selectOption(creatorId);
+    await adminPage.locator('#moderator-reason').fill('Synthetic course moderator assignment');
+    await adminPage.getByRole('button',{name:'Save community role'}).click();
+    await expect(adminPage.getByText('Community role updated.')).toBeVisible();
+    await creatorPage.goto('/communities/'+courseId);
+    await expect(creatorPage.getByRole('button',{name:'Hide contribution',exact:true})).toBeVisible();
+    creatorPage.once('dialog',d=>d.accept('Synthetic moderated content'));
+    await creatorPage.getByRole('button',{name:'Hide contribution',exact:true}).click();
+    await expect(creatorPage.getByText('No discussions yet.',{exact:false})).toBeVisible();
+    await creatorPage.getByRole('button',{name:'Leave discussion',exact:true}).click();
+    await creatorPage.getByRole('button',{name:'Join discussion',exact:true}).click();
+    await expect(creatorPage.getByRole('button',{name:'Leave discussion',exact:true})).toBeVisible();
+    expect((await readJson(await creator.request.get('/api/local/courses/'+courseId+'/community'))).status.canModerate).toBe(false);
+    expect((await request.get(BASE+'/api/local/courses/'+courseId+'/community')).status()).toBe(401);
+    console.log('browser-alpha: social feed, lesson reply, text chat, private notifications, reports and course moderation passed');
+
     // Independent permission flags: comment-only denial must not block authorized viewing.
     const commentOnly=await creator.request.post(`/api/local/creators/${creatorId}/restrictions/${viewerId}`,{
       data:{view:false,comment:true,message:false},
@@ -282,6 +369,12 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     expect((await viewer.request.get(`/api/local/lessons/${lessonId}/notes`)).status()).toBe(403);
     expect((await viewer.request.get(`/api/local/lessons/${lessonId}`)).status()).toBe(403);
     expect((await viewer.request.get(`/api/local/lessons/${lessonId}/comments`)).status()).toBe(403);
+    await viewerPage.goto('/');
+    await expect(viewerPage.getByRole('heading',{name:title,exact:true})).toHaveCount(0);
+    await viewerPage.goto('/search?q='+encodeURIComponent(title));
+    await expect(viewerPage.getByRole('heading',{name:title,exact:true})).toHaveCount(0);
+    await expect(viewerPage.getByRole('heading',{name:'0 approved results for “'+title+'”',exact:true})).toBeVisible();
+    await expect(viewerPage.getByRole('link',{name:title,exact:true})).toHaveCount(0);
     await viewerPage.goto(`/lessons/${lessonId}`);
     await expect(viewerPage.getByText('Full posts require verified student membership',{exact:false})).toBeVisible();
     // The real local backend is tested with a secret invitation code in Node;

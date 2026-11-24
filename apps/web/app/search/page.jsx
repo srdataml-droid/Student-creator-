@@ -1,6 +1,6 @@
 
 import Link from 'next/link';
-import {isLocalMode,getLocalPublicCourses,getLocalPublicInstitutions,getLocalTopics,searchLocalPublishedLessons} from '../../lib/local-public.mjs';
+import {isLocalMode,getLocalPublicCourses,getLocalPublicInstitutions,getLocalTopics,searchLocalPublishedLessons,getLocalDiscoveryActor,getLocalCreatorDiscovery} from '../../lib/local-public.mjs';
 export const dynamic='force-dynamic';
 export const metadata={title:'Find lessons | Campus Learning'};
 export default async function SearchPage({searchParams}){
@@ -10,12 +10,16 @@ export default async function SearchPage({searchParams}){
  const courseId=typeof params.courseId==='string'?params.courseId:'';
  const topicId=typeof params.topicId==='string'?params.topicId:'';
  const enabled=isLocalMode();
- let schools=[],courses=[],topics=[],results=[],error='';
+ let schools=[],courses=[],topics=[],results=[],creators=[],error='';
  if(enabled)try{
    schools=getLocalPublicInstitutions();
    courses=getLocalPublicCourses();
    if(courseId)topics=getLocalTopics(courseId);
-   if(q)results=searchLocalPublishedLessons({q,institutionId:institutionId||null,courseId:courseId||null,topicId:topicId||null});
+   if(q){
+    const filters={q,institutionId:institutionId||null,courseId:courseId||null,topicId:topicId||null},actor=await getLocalDiscoveryActor();
+    results=searchLocalPublishedLessons(filters,actor);
+    creators=getLocalCreatorDiscovery(actor,filters);
+   }
  }catch(e){error=['INVALID_SEARCH','INVALID_SEARCH_FILTER','INVALID_SEARCH_LIMIT'].includes(e?.code)?'Invalid search or mismatched filters. Enter 2–80 characters.':'Search is temporarily unavailable. Please try again.';}
  return <main id="main" className="main">
   <section className="hero compact"><p className="eyebrow">Learn through original explanations</p><h1>Search approved lessons.</h1><p className="intro">Find student-created learning resources across universities, courses and topics. Drafts and rejected materials never appear here.</p></section>
@@ -28,6 +32,7 @@ export default async function SearchPage({searchParams}){
     <button className="primary-link" type="submit">Search lessons</button></form></section>
    {error?<p role="alert" className="status">{error}</p>:!q?<p role="status" className="status">Enter a course or lesson keyword above.</p>:<section aria-labelledby="results-title" className="course-section"><h2 id="results-title">{results.length} approved result{results.length===1?'':'s'} for “{q}”</h2>
     {results.length===0?<p className="status">No approved lessons matched. Try fewer filters or another keyword.</p>:<ul className="lesson-list">{results.map(item=><li key={item.id} className="lesson"><p className="code">{item.institutionName} · {item.courseCode}{item.hasVideo?' · Video':''}</p><h3><Link href={'/lessons/'+item.id}>{item.title}</Link></h3><p>{item.previewText||item.description}</p><p className="hint">{item.courseTitle}</p></li>)}</ul>}</section>}
+   {!error&&q&&creators.length>0&&<section className="course-section" aria-label="Matching creators"><h2>Matching creators</h2><ul className="lesson-list">{creators.map(c=><li className="lesson" key={c.id}><h3><Link href={'/creators/'+c.id}>{c.displayName||'Student creator'}</Link></h3><p>{c.handle?'@'+c.handle+' · ':''}{c.institutionName}</p><p>{c.bio}</p></li>)}</ul></section>}
   </>}
  </main>;
 }
