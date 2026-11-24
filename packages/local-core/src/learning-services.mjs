@@ -234,20 +234,54 @@ export function createLearningServices({db,transaction,audit,error,requireVerifi
       return {...result,role:grant.role,classId:id};
     },
     async recordVerifiedPresence(event){
+      // Preexisting test-only provider adapter: never exposed as a browser route.
       if(!providerPresenceVerifier||typeof providerPresenceVerifier.verify!=='function'||!(await providerPresenceVerifier.verify(event)))
         throw error('LIVEKIT_WEBHOOK_UNVERIFIED',403);
-      const {eventId,classId,userId,kind}=event;
-      if(typeof eventId!=='string'||!uuid.test(eventId)||typeof classId!=='string'||!uuid.test(classId)||
-         typeof userId!=='string'||!uuid.test(userId)||!['joined','left'].includes(kind))throw error('INVALID_PRESENCE_EVENT',422);
-      const cls=db.prepare('SELECT status,host_id FROM interactive_classes WHERE id=?').get(classId);
+      return this.persistProviderPresence(event);
+    },
+    persistProviderPresence(event){
+      // Called only by trusted server code after a signed provider event is validated.
+      const {eventId,classId,userId,kind}=event??{};
+      if(typeof eventId!=='string'||eventId.length<8||eventId.length>128||
+         !/^[A-Za-z0-9_-]+$/.test(eventId)||typeof classId!=='string'||!uuid.test(classId)||
+         typeof userId!=='string'||!uuid.test(userId)||!['joined','left'].includes(kind))
+        throw error('INVALID_PRESENCE_EVENT',422);
+      const cls=db.prepare('SELECT c.status,c.host_id,c.price_kobo,s.institution_id FROM interactive_classes c JOIN courses s ON s.id=c.course_id WHERE c.id=?').get(classId);
       if(!cls||cls.status!=='room_open')throw error('CLASS_NOT_LIVE',409);
-      if(userId!==cls.host_id&&!db.prepare("SELECT 1 FROM interactive_class_enrollments WHERE class_id=? AND student_id=? AND status='enrolled'").get(classId,userId))throw error('NOT_ENROLLED',403);
+      const user=db.prepare('SELECT institution_id,verified_at,suspended FROM users WHERE id=? AND role=\'student\'').get(userId);
+      if(!user||!user.verified_at||user.suspended||user.institution_id!==cls.institution_id)
+        throw error('VERIFICATION_REQUIRED',403);
+      if(userId!==cls.host_id){
+        if(!db.prepare("SELECT 1 FROM interactive_class_enrollments WHERE class_id=? AND student_id=? AND status='enrolled'").get(classId,userId))
+          throw error('NOT_ENROLLED',403);
+        if(kind==='joined'&&cls.price_kobo>0&&!paid({id:userId},'class',classId))
+          throw error('PAYMENT_ENTITLEMENT_REQUIRED',402);
+        if(kind==='joined'&&db.prepare('SELECT 1 FROM creator_restrictions WHERE creator_id=? AND viewer_id=? AND deny_view=1').get(cls.host_id,userId))
+          throw error('CREATOR_ACCESS_RESTRICTED',403);
+      }
       return transaction(()=>{
         const changed=db.prepare('INSERT OR IGNORE INTO interactive_class_presence(provider_event_id,class_id,student_id,kind,created_at) VALUES(?,?,?,?,?)')
           .run(eventId,classId,userId,kind,timestamp()).changes;
         if(changed)audit(userId,'class.presence.'+kind,classId);
         return {recorded:Boolean(changed),replayed:!changed};
       });
+    },
+    async recordSignedLiveKitWebhook(rawBody,authorization,roomService){
+      if(!roomService||typeof roomService.verifyWebhook!=='function')
+        throw error('LIVEKIT_NOT_CONFIGURED',503);
+      // Must authenticate exact raw bytes and JWT sha256 BEFORE any JSON fields are trusted.
+      const event=roomService.verifyWebhook(rawBody,authorization);
+      if(!['participant_joined','participant_left'].includes(event.event))
+        return {accepted:true,ignored:true};
+      const room=event.room?.name,identity=event.participant?.identity;
+      if(typeof room!=='string'||!/^wk-class-[0-9a-f-]{36}$/i.test(room)||
+         typeof identity!=='string'||!/^student-[0-9a-f-]{36}$/i.test(identity))
+        return {accepted:true,ignored:true};
+      const result=this.persistProviderPresence({
+        eventId:event.id,classId:room.slice('wk-class-'.length),
+        userId:identity.slice('student-'.length),kind:event.event==='participant_joined'?'joined':'left'
+      });
+      return {accepted:true,...result};
     },
     classAttendance(actor,id){
       const row=classRow(actor,id);
