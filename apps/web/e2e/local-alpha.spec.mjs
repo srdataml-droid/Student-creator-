@@ -149,6 +149,32 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     await expect(feedPost.getByRole('heading',{name:title})).toBeVisible();
     await expect(feedPost.getByRole('button',{name:'Enable playback'})).toBeVisible();
     await expect(feedPost.locator('video')).toHaveCount(0);
+    // Measure the protected, populated feed on a genuinely constrained
+    // Chromium network simulation. No video grant or bytes until requested.
+    const cdp=await viewer.newCDPSession(viewerPage);
+    try{
+      await cdp.send('Network.enable');
+      await cdp.send('Network.setCacheDisabled',{cacheDisabled:true});
+      await cdp.send('Network.emulateNetworkConditions',{offline:false,latency:150,downloadThroughput:200000,uploadThroughput:75000});
+      await viewerPage.setViewportSize({width:360,height:780});
+      await viewerPage.reload({waitUntil:'load',timeout:45000});
+      await expect(feedPost.getByRole('button',{name:'Enable playback'})).toBeVisible({timeout:15000});
+      const performance=await viewerPage.evaluate(()=>{
+        const entries=[...performance.getEntriesByType('navigation'),...performance.getEntriesByType('resource')];
+        return {transferredBytes:entries.reduce((n,e)=>n+(e.transferSize||0),0),domContentLoadedMs:Math.round(performance.getEntriesByType('navigation')[0].domContentLoadedEventEnd),width:document.documentElement.scrollWidth,viewport:innerWidth};
+      });
+      console.log('browser-alpha throttled feed metrics',JSON.stringify(performance));
+      expect(performance.transferredBytes).toBeGreaterThan(0);
+      expect(performance.transferredBytes).toBeLessThanOrEqual(2*1024*1024);
+      expect(performance.domContentLoadedMs).toBeGreaterThan(0);
+      expect(performance.domContentLoadedMs).toBeLessThanOrEqual(20000);
+      expect(performance.width).toBeLessThanOrEqual(performance.viewport+1);
+    }finally{
+      await cdp.send('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});
+      await cdp.send('Network.setCacheDisabled',{cacheDisabled:false});
+      await cdp.detach();
+      await viewerPage.setViewportSize({width:1280,height:800});
+    }
     await viewerPage.goto(`/lessons/${lessonId}`);
     viewerPage.off('request',trackEagerMedia);
     expect(eagerMediaRequests).toEqual([]);
