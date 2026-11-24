@@ -345,3 +345,20 @@ test('mobile navigation announces the current route and supports small screens',
     await expect(nav).not.toBeVisible();
   }finally{await context.close();}
 });
+
+test('missing page has a keyboard-reachable recovery route',async({browser})=>{
+  const context=await browser.newContext({baseURL:BASE,viewport:{width:360,height:780}});
+  try{
+    const page=await context.newPage();
+    const response=await page.goto('/not-a-student-creators-route');
+    expect(response.status()).toBe(404);
+    const main=page.getByRole('main');
+    await expect(main.getByRole('heading',{name:'This page is unavailable.'})).toBeVisible();
+    const home=main.getByRole('link',{name:'Go home'});
+    await home.focus();
+    await expect(home).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(BASE+'/');
+    await expect(page.getByRole('heading',{name:'The student feed',exact:false})).toBeVisible();
+  }finally{await context.close();}
+});
