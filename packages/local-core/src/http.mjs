@@ -203,6 +203,8 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
         if(segments.length===3&&segments[0]==='courses'&&segments[2]==='community'){
           if(!actor)return unauthorized();const status=store.communityStatus(actor,segments[1]);return responses({status,posts:status.joined?store.communityPosts(actor,segments[1]):[]});
         }
+        if(path==='notifications'){if(!actor)return unauthorized();return responses({notifications:store.notifications(actor)});}
+        if(path==='notifications/preferences'){if(!actor)return unauthorized();return responses({preferences:store.notificationPreferences(actor)});}
         if(path==='messages/inbox'){if(!actor)return unauthorized();return responses({inbox:store.inbox(actor)});}
         if(segments.length===2&&segments[0]==='messages'&&segments[1]!=='inbox'){
           if(!actor)return unauthorized();
@@ -398,6 +400,11 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
       if(segments.length===3&&segments[0]==='messages'&&segments[2]==='read'){
         if(Object.keys(body).length!==1||!Object.hasOwn(body,'messageIds'))return fail('UNEXPECTED_BODY',400);
         return responses(store.markMessagesRead(actor,segments[1],body.messageIds));
+      }
+      if(path==='notifications/preferences')return responses({preferences:store.updateNotificationPreferences(actor,body)});
+      if(segments.length===3&&segments[0]==='notifications'&&segments[2]==='read'){
+        if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
+        return responses(store.markNotificationRead(actor,segments[1]));
       }
       if(path==='messages/preference')return responses({preference:store.setMessagePreference(actor,body.allowMessages)});
       if(segments.length===2&&segments[0]==='messages'&&!['preference','report','inbox'].includes(segments[1]))return responses({message:store.sendMessage(actor,segments[1],body.text)},201);

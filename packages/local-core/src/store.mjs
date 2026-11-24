@@ -139,6 +139,19 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
       read_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS social_notification_preferences(
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      messages INTEGER NOT NULL CHECK(messages IN(0,1)), social INTEGER NOT NULL CHECK(social IN(0,1)),
+      community INTEGER NOT NULL CHECK(community IN(0,1))
+    );
+    CREATE TABLE IF NOT EXISTS social_notifications(
+      id TEXT PRIMARY KEY,recipient_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      actor_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      kind TEXT NOT NULL CHECK(kind IN('message','follow','like','comment','community_reply')),
+      event_id TEXT NOT NULL,target_id TEXT NOT NULL,created_at TEXT NOT NULL,read_at TEXT,
+      UNIQUE(recipient_id,actor_id,kind,event_id),CHECK(recipient_id<>actor_id)
+    );
+    CREATE INDEX IF NOT EXISTS social_notifications_recipient ON social_notifications(recipient_id,created_at DESC,id DESC);
     CREATE TABLE IF NOT EXISTS user_blocks(blocker_id TEXT NOT NULL REFERENCES users(id),blocked_id TEXT NOT NULL REFERENCES users(id),created_at TEXT NOT NULL,PRIMARY KEY(blocker_id,blocked_id));
     -- Distinct per-creator permissions; unlike a DM block, these scopes are independent.
     CREATE TABLE IF NOT EXISTS creator_restrictions(
@@ -217,6 +230,17 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
   }
   function audit(actor,action,resource,detail={}){
     db.prepare('INSERT INTO audit_events VALUES(?,?,?,?,?,?)').run(randomUUID(),actor,action,resource,JSON.stringify(detail),stamp());
+  }
+  function notify(recipient,actor,kind,event,target){
+    if(recipient===actor)return;
+    const recipientRow=db.prepare("SELECT id FROM users WHERE id=? AND role='student' AND verified_at IS NOT NULL AND suspended=0").get(recipient);
+    if(!recipientRow||!affiliations.eligible(recipient))return;
+    const preference=db.prepare('SELECT messages,social,community FROM social_notification_preferences WHERE user_id=?').get(recipient);
+    const group=kind==='message'?'messages':kind==='community_reply'?'community':'social';
+    if(preference&&preference[group]===0)return;
+    if(db.prepare('SELECT 1 FROM user_blocks WHERE (blocker_id=? AND blocked_id=?) OR (blocker_id=? AND blocked_id=?)').get(recipient,actor,actor,recipient))return;
+    db.prepare('INSERT OR IGNORE INTO social_notifications(id,recipient_id,actor_id,kind,event_id,target_id,created_at) VALUES(?,?,?,?,?,?,?)')
+      .run(randomUUID(),recipient,actor,kind,event,target,stamp());
   }
   function communityAccess(actor,courseId,requireMembership=false){
     requireVerified(actor);
@@ -671,6 +695,8 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         if(recent>=60)throw error('LIKE_RATE_LIMIT',429);
         db.prepare('INSERT INTO lesson_likes(user_id,lesson_id,created_at) VALUES(?,?,?)').run(actor.id,lessonId,stamp());
         audit(actor.id,'lesson.liked',lessonId);
+        const owner=db.prepare('SELECT creator_id FROM lessons WHERE id=?').get(lessonId).creator_id;
+        notify(owner,actor.id,'like',lessonId,lessonId);
         return {liked:true,replayed:false};
       });
     },
@@ -715,6 +741,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         db.prepare('INSERT INTO lesson_comments(id,lesson_id,author_id,body,creation_key,creation_hash,created_at) VALUES(?,?,?,?,?,?,?)')
           .run(commentId,id,actor.id,body,creationKey,hash,createdAt);
         audit(actor.id,'lesson.comment.created',commentId,{lessonId:id});
+        notify(target.creatorId,actor.id,'comment',commentId,id);
         return {comment:{id:commentId,lessonId:id,authorId:actor.id,body,createdAt},replayed:false};
       });
     },
@@ -831,7 +858,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       if(!store.publicCreator(creatorId))throw error('CREATOR_UNAVAILABLE',404);
       return transaction(()=>{
         const result=db.prepare('INSERT OR IGNORE INTO creator_follows(follower_id,creator_id,created_at) VALUES(?,?,?)').run(actor.id,creatorId,stamp());
-        if(result.changes)audit(actor.id,'creator.followed',creatorId);
+        if(result.changes){audit(actor.id,'creator.followed',creatorId);notify(creatorId,actor.id,'follow',creatorId,creatorId);}
         return {creatorId,following:true,replayed:result.changes===0};
       });
     },
@@ -921,6 +948,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         if(recent>=30)throw error('MESSAGE_RATE_LIMIT',429);
         const id=randomUUID(),createdAt=stamp();db.prepare('INSERT INTO messages VALUES(?,?,?,?,?)').run(id,actor.id,recipientId,body.trim(),createdAt);
         audit(actor.id,'message.sent',id,{recipientId});
+        notify(recipientId,actor.id,'message',id,actor.id);
         return {id,senderId:actor.id,recipientId,body:body.trim(),createdAt};
       });
     },
@@ -945,6 +973,46 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       const more=rows.length>limit;
       if(more)rows.pop();
       return {nextBefore:more?rows.at(-1).id:null,messages:rows.reverse()};
+    },
+    notificationPreferences(actor){
+      requireVerified(actor);
+      const row=db.prepare('SELECT messages,social,community FROM social_notification_preferences WHERE user_id=?').get(actor.id);
+      return row?{messages:Boolean(row.messages),social:Boolean(row.social),community:Boolean(row.community)}:{messages:true,social:true,community:true};
+    },
+    updateNotificationPreferences(actor,input){
+      requireVerified(actor);
+      const keys=['messages','social','community'];
+      if(!input||Object.keys(input).length!==3||keys.some(k=>typeof input[k]!=='boolean'))throw error('INVALID_NOTIFICATION_PREFERENCES',422);
+      return transaction(()=>{
+        db.prepare(`INSERT INTO social_notification_preferences VALUES(?,?,?,?) ON CONFLICT(user_id)
+          DO UPDATE SET messages=excluded.messages,social=excluded.social,community=excluded.community`)
+          .run(actor.id,...keys.map(k=>Number(input[k])));
+        return store.notificationPreferences(actor);
+      });
+    },
+    notifications(actor){
+      requireVerified(actor);
+      // No body snippets, emails, identity evidence, or foreign notification state.
+      // A community reply is visible only while its course remains active, campus-scoped and joined.
+      return db.prepare(`SELECT n.id,n.kind,n.target_id AS targetId,n.created_at AS createdAt,n.read_at AS readAt
+        FROM social_notifications n WHERE n.recipient_id=? AND
+        (n.kind<>'community_reply' OR EXISTS(
+          SELECT 1 FROM community_members m JOIN courses c ON c.id=m.course_id JOIN community_posts p ON p.id=n.event_id
+          JOIN community_posts parent ON parent.id=p.parent_id
+          WHERE m.user_id=n.recipient_id AND m.course_id=n.target_id AND c.active=1 AND c.institution_id=?
+          AND p.course_id=c.id AND p.hidden_at IS NULL AND parent.hidden_at IS NULL))
+        ORDER BY n.created_at DESC,n.id DESC LIMIT 100`).all(actor.id,actor.institutionId);
+    },
+    markNotificationRead(actor,id){
+      requireVerified(actor);
+      if(typeof id!=='string'||id.length!==36)throw error('NOTIFICATION_NOT_FOUND',404);
+      return transaction(()=>{
+        if(!db.prepare('SELECT 1 FROM social_notifications WHERE recipient_id=? AND id=?').get(actor.id,id))
+          throw error('NOTIFICATION_NOT_FOUND',404);
+        const marked=db.prepare('UPDATE social_notifications SET read_at=? WHERE recipient_id=? AND id=? AND read_at IS NULL')
+          .run(stamp(),actor.id,id).changes;
+        return {marked};
+      });
     },
     markMessagesRead(actor,peerId,ids){
       requireVerified(actor);
@@ -1064,6 +1132,11 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         db.prepare('INSERT INTO community_posts(id,course_id,topic_id,author_id,parent_id,body,request_key,request_hash,created_at) VALUES(?,?,?,?,?,?,?,?,?)')
           .run(id,courseId,topicId,actor.id,replyTo,body,creationKey,requestHash,createdAt);
         audit(actor.id,'community.post.created',id,{courseId,replyTo});
+        if(replyTo){
+          const parent=db.prepare('SELECT author_id FROM community_posts WHERE id=?').get(replyTo);
+          if(db.prepare('SELECT 1 FROM community_members WHERE course_id=? AND user_id=?').get(courseId,parent.author_id))
+            notify(parent.author_id,actor.id,'community_reply',id,courseId);
+        }
         return {post:{id,courseId,topicId,authorId:actor.id,parentId:replyTo,body,createdAt},replayed:false};
       });
     },

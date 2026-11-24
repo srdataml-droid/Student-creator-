@@ -230,3 +230,38 @@ test('DM unread state is recipient-only, atomic, replay-safe and private',async(
   assert.ok(outbound.data.messages.every(m=>!Object.hasOwn(m,'readAt')));
  }finally{x.close();}
 });
+
+test('in-app notifications are recipient-private, preference-aware, read-idempotent and contain no message body',async()=>{
+ const x=setup();try{
+  const s=await begin(x);await x.request('admin/verify','POST',{userId:s.user},s.owner);
+  const lid=(await x.request('lessons/drafts','POST',lessonBody(s.course),s.student)).data.lesson.id;
+  await x.request(`lessons/${lid}/submit`,'POST',{},s.student);
+  await x.request(`lessons/${lid}/review`,'POST',{decision:'approve',reason:'Original work accepted'},s.owner);
+  await x.request('messages/preference','POST',{allowMessages:true},s.student);
+  const email='notification-reader@campus.test',password='Strong Reader Password 1234';
+  const readerId=(await x.request('auth/register','POST',{email,password,institutionId:s.institution})).data.user.id;
+  await x.request('admin/verify','POST',{userId:readerId},s.owner);
+  const reader=await login(x,email,password);
+  const list=async(token)=>(await x.request('notifications','GET',undefined,token)).data.notifications;
+  assert.equal((await x.request('notifications')).status,401);
+  assert.equal((await x.request('notifications','GET',undefined,s.owner)).status,403);
+  assert.deepEqual((await x.request('notifications/preferences','GET',undefined,s.student)).data.preferences,{messages:true,social:true,community:true});
+  assert.equal((await x.request(`messages/${s.user}`,'POST',{text:'Private text not in notifications'},reader)).status,201);
+  assert.equal((await x.request(`creators/${s.user}/follow`,'POST',{},reader)).status,200);
+  assert.equal((await x.request(`creators/${s.user}/follow`,'POST',{},reader)).status,200);
+  const entries=await list(s.student);assert.equal(entries.length,2);
+  assert.equal(JSON.stringify(entries).includes('Private text not in notifications'),false);
+  assert.equal((await list(reader)).length,0);
+  const id=entries.find(n=>n.kind==='message').id;
+  assert.equal((await x.request(`notifications/${id}/read`,'POST',{},reader)).status,404);
+  assert.equal((await x.request(`notifications/${id}/read`,'POST',{},s.student)).data.marked,1);
+  assert.equal((await x.request(`notifications/${id}/read`,'POST',{},s.student)).data.marked,0);
+  assert.ok((await list(s.student)).find(n=>n.id===id).readAt);
+  assert.equal((await x.request('notifications/preferences','POST',{messages:false,social:false,community:true,userId:readerId},s.student)).status,422);
+  assert.equal((await x.request('notifications/preferences','POST',{messages:false,social:false,community:true},s.student)).status,200);
+  assert.equal((await x.request(`messages/${s.user}`,'POST',{text:'Still delivered, not notified'},reader)).status,201);
+  assert.equal((await x.request(`lessons/${lid}/like`,'POST',{},reader)).status,201);
+  assert.equal((await list(s.student)).length,2);
+  assert.equal((await x.request(`messages/${readerId}`,'GET',undefined,s.student)).data.messages.length,2);
+ }finally{x.close();}
+});
