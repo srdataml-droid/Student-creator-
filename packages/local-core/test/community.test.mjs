@@ -117,3 +117,44 @@ test('previous local SQLite files migrate additively; community membership/posts
     try{assert.equal(reopened.communityPosts({id:d.alice.id,role:'student',institutionId:d.school,verifiedAt:new Date().toISOString(),suspended:false},d.course)[0].id,created);}finally{reopened.close();}
   }finally{if(!closed)x.store.close();rmSync(x.path.substring(0,x.path.lastIndexOf('/')),{recursive:true,force:true});}
 });
+
+test('course moderator role is assigned only by platform admin and lost when membership ends',async()=>{
+ const x=fixture();try{
+  const d=await x.bootstrap();
+  const role=(course,user)=>`admin/community-moderators/${course}/${user}`;
+  const grant={enabled:true,reason:'Trusted course moderator'};
+  assert.equal((await x.request(role(d.course,d.alice.id),'POST',grant,d.alice.token)).status,403);
+  assert.equal((await x.request(role(d.course,d.alice.id),'POST',grant,d.admin)).status,403);
+  await x.request(`courses/${d.course}/join`,'POST',{},d.alice.token);
+  await x.request(`courses/${d.course}/join`,'POST',{},d.bob.token);
+  await x.request(`courses/${d.otherCourse}/join`,'POST',{},d.mallory.token);
+  assert.equal((await x.request(role(d.course,d.mallory.id),'POST',grant,d.admin)).status,403);
+  assert.equal((await x.request(role(d.course,d.alice.id),'POST',grant,d.admin)).status,200);
+  assert.equal((await x.request(role(d.course,d.alice.id),'POST',grant,d.admin)).data.moderator.replayed,true);
+  const feed=async(token)=>(await x.request(`courses/${d.course}/community`,'GET',undefined,token)).data;
+  assert.equal((await feed(d.alice.token)).status.canModerate,true);assert.equal((await feed(d.bob.token)).status.canModerate,false);
+  const parent=(await x.request(`courses/${d.course}/posts`,'POST',body(100),d.bob.token)).data.post;
+  const reply=(await x.request(`courses/${d.course}/posts`,'POST',body(101,{replyTo:parent.id}),d.alice.token)).data.post;
+  const foreign=(await x.request(`courses/${d.otherCourse}/posts`,'POST',body(102),d.mallory.token)).data.post;
+  const hide=(course,id,token)=>x.request(`courses/${course}/posts/${id}/hide`,'POST',{reason:'Violates course rules'},token);
+  assert.equal((await hide(d.course,parent.id,d.bob.token)).status,403);
+  assert.equal((await hide(d.course,foreign.id,d.alice.token)).status,404);
+  assert.equal((await hide(d.otherCourse,foreign.id,d.alice.token)).status,404);
+  assert.equal((await hide(d.course,reply.id,d.alice.token)).status,403);
+  assert.equal((await x.request('admin/community-reports','GET',undefined,d.alice.token)).status,403);
+  assert.equal((await hide(d.course,parent.id,d.alice.token)).status,200);
+  assert.equal((await hide(d.course,parent.id,d.alice.token)).data.post.replayed,true);
+  assert.equal((await feed(d.bob.token)).posts.length,0);
+  assert.equal((await x.request(`courses/${d.course}/posts`,'POST',body(100),d.bob.token)).status,404);
+  assert.equal((await x.request(`courses/${d.course}/posts`,'POST',body(101,{replyTo:parent.id}),d.alice.token)).status,404);
+  const notifications=await x.request('notifications','GET',undefined,d.bob.token);
+  assert.equal(notifications.data.notifications.length,0,'hidden parent makes reply notification invisible');
+  await x.request(`courses/${d.course}/leave`,'POST',{},d.alice.token);
+  await x.request(`courses/${d.course}/join`,'POST',{},d.alice.token);
+  assert.equal((await feed(d.alice.token)).status.canModerate,false);
+  assert.equal((await hide(d.course,parent.id,d.alice.token)).status,403);
+  await x.request(role(d.course,d.alice.id),'POST',grant,d.admin);
+  assert.equal((await x.request(role(d.course,d.alice.id),'POST',{enabled:false,reason:'Role withdrawn'},d.admin)).status,200);
+  assert.equal((await feed(d.alice.token)).status.canModerate,false);
+ }finally{x.close();}
+});

@@ -169,6 +169,11 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
       course_id TEXT NOT NULL REFERENCES courses(id),user_id TEXT NOT NULL REFERENCES users(id),
       joined_at TEXT NOT NULL,PRIMARY KEY(course_id,user_id)
     );
+    CREATE TABLE IF NOT EXISTS community_moderators(
+      course_id TEXT NOT NULL,user_id TEXT NOT NULL,assigned_by TEXT NOT NULL REFERENCES users(id),assigned_at TEXT NOT NULL,
+      PRIMARY KEY(course_id,user_id),
+      FOREIGN KEY(course_id,user_id) REFERENCES community_members(course_id,user_id) ON DELETE CASCADE
+    );
     CREATE TABLE IF NOT EXISTS community_posts(
       id TEXT PRIMARY KEY,course_id TEXT NOT NULL REFERENCES courses(id),topic_id TEXT REFERENCES topics(id),
       author_id TEXT NOT NULL REFERENCES users(id),parent_id TEXT REFERENCES community_posts(id),
@@ -1078,10 +1083,46 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         audit(actor.id,'message.report.resolved',reportId);return {id:reportId,status:'reviewed'};
       });
     },
+    setCommunityModerator(actor,courseId,userId,input){
+      requireAdmin(actor);
+      if(!input||Object.keys(input).length!==2||typeof input.enabled!=='boolean'||typeof input.reason!=='string'||input.reason.trim().length<5||input.reason.trim().length>1000)
+        throw error('INVALID_DECISION',422);
+      return transaction(()=>{
+        const target=store.getCourse(courseId);
+        if(!target)throw error('COMMUNITY_NOT_FOUND',404);
+        let changed;
+        if(input.enabled){
+          const member=db.prepare("SELECT u.id FROM community_members m JOIN users u ON u.id=m.user_id WHERE m.course_id=? AND m.user_id=? AND u.institution_id=? AND u.role='student' AND u.verified_at IS NOT NULL AND u.suspended=0").get(courseId,userId,target.institutionId);
+          if(!member||!affiliations.eligible(userId))throw error('MEMBERSHIP_REQUIRED',403);
+          changed=db.prepare('INSERT OR IGNORE INTO community_moderators VALUES(?,?,?,?)').run(courseId,userId,actor.id,stamp()).changes;
+        }else{
+          changed=db.prepare('DELETE FROM community_moderators WHERE course_id=? AND user_id=?').run(courseId,userId).changes;
+        }
+        if(changed)audit(actor.id,input.enabled?'community.moderator.assigned':'community.moderator.revoked',courseId,{userId,reason:input.reason.trim()});
+        return {userId,courseId,enabled:input.enabled,replayed:changed===0};
+      });
+    },
+    hideCommunityPost(actor,courseId,postId,input){
+      communityAccess(actor,courseId,true);
+      if(!input||Object.keys(input).length!==1||typeof input.reason!=='string'||input.reason.trim().length<5||input.reason.trim().length>1000)
+        throw error('INVALID_DECISION',422);
+      return transaction(()=>{
+        communityAccess(actor,courseId,true);
+        if(!db.prepare('SELECT 1 FROM community_moderators WHERE course_id=? AND user_id=?').get(courseId,actor.id))
+          throw error('COMMUNITY_MODERATOR_REQUIRED',403);
+        const post=db.prepare('SELECT id,author_id,hidden_at FROM community_posts WHERE id=? AND course_id=?').get(postId,courseId);
+        if(!post)throw error('POST_NOT_FOUND',404);
+        if(post.author_id===actor.id)throw error('CONFLICT_OF_INTEREST',403);
+        const changed=db.prepare('UPDATE community_posts SET hidden_at=? WHERE id=? AND course_id=? AND hidden_at IS NULL').run(stamp(),postId,courseId).changes;
+        if(changed)audit(actor.id,'community.moderator.post.hidden',postId,{courseId,reason:input.reason.trim()});
+        return {id:postId,hidden:true,replayed:changed===0};
+      });
+    },
     communityStatus(actor,courseId){
       const {target,joined}=communityAccess(actor,courseId);
       const memberCount=db.prepare('SELECT count(*) n FROM community_members WHERE course_id=?').get(courseId).n;
-      return {course:{id:target.id,title:target.title,code:target.code},joined,memberCount};
+      const canModerate=joined&&Boolean(db.prepare('SELECT 1 FROM community_moderators WHERE course_id=? AND user_id=?').get(courseId,actor.id));
+      return {course:{id:target.id,title:target.title,code:target.code},joined,memberCount,canModerate};
     },
     joinCommunity(actor,courseId){
       communityAccess(actor,courseId);
@@ -1119,6 +1160,8 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
         const previous=db.prepare('SELECT * FROM community_posts WHERE author_id=? AND request_key=?').get(actor.id,creationKey);
         if(previous){
           if(previous.request_hash!==requestHash)throw error('IDEMPOTENCY_CONFLICT',409);
+          if(previous.hidden_at||(previous.parent_id&&db.prepare('SELECT hidden_at FROM community_posts WHERE id=?').get(previous.parent_id)?.hidden_at))
+            throw error('POST_NOT_FOUND',404);
           return {post:{id:previous.id,courseId:previous.course_id,authorId:previous.author_id,
             topicId:previous.topic_id,parentId:previous.parent_id,body:previous.body,createdAt:previous.created_at},replayed:true};
         }

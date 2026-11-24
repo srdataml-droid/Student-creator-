@@ -20,3 +20,6 @@ History commit 8e80f597da47edb75e8efca059eb1dc8c69222b6: all five CI jobs succee
 
 ## Fourth increment: in-app notifications
 Transactional events for messages, follows, likes, lesson comments and community replies; recipient-only list/acknowledgement, strict category preferences, no message text/identity data, no external delivery. Community notifications are membership-, campus- and visible-post-scoped at read time. Defaults on for in-app only; preference changes apply prospectively. No push/email. Original code: upstream Zulip search returned no suitable reference; no source imported. New tests cover privacy, preferences, replay and message delivery independence; exact-head CI pending.
+
+## Fifth increment: course moderator permissions
+Platform admin assigns/revokes a verified joined student's limited per-course moderation role; membership FK automatically revokes on leave. Moderators may hide another member's contribution with recorded reason but cannot access platform report queues, assign roles, change membership, or moderate across courses. Hidden parent/child content cannot be returned via old idempotency keys. UI role controls and negative tests added. Reviewed Discourse GPL-2.0 license and category moderator lockout test at 7c5f9696a4bce4ff48603192ca9d40fcd979dfa3; no source imported or executed. Exact-head CI pending.

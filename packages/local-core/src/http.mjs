@@ -379,6 +379,10 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
         if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
         return responses({session:store.completeStudySession(actor,segments[1])});
       }
+      if(segments.length===4&&segments[0]==='admin'&&segments[1]==='community-moderators')
+        return responses({moderator:store.setCommunityModerator(actor,segments[2],segments[3],body)});
+      if(segments.length===5&&segments[0]==='courses'&&segments[2]==='posts'&&segments[4]==='hide')
+        return responses({post:store.hideCommunityPost(actor,segments[1],segments[3],body)});
       if(segments.length===3&&segments[0]==='courses'&&segments[2]==='join'){
         if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
         return responses({membership:store.joinCommunity(actor,segments[1])});
