@@ -65,7 +65,7 @@ test('paid classes: immutable server order, sandbox checkout, verified entitleme
   assert.equal(cls.status,201);const id=cls.data.class.id;
   assert.equal((await x.send('classes/'+id+'/orders','POST',{requestKey:'wk06-paid-test-key-001'},a.student.token)).status,403);
   assert.equal((await x.send('classes/'+id+'/enroll','POST',{},a.student.token)).status,200);
-  assert.equal((await x.send('classes/'+id+'/orders','POST',{requestKey:'wk06-paid-test-key-001'},a.host.token)).status,409);
+  assert.equal((await x.send('classes/'+id+'/orders','POST',{requestKey:'wk06-paid-test-key-001'},a.host.token)).status,403);
   const created=await x.send('classes/'+id+'/orders','POST',{requestKey:'wk06-paid-test-key-001'},a.student.token);
   assert.equal(created.status,201);
   const reference=created.data.order.reference;
