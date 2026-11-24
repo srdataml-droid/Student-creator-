@@ -1,6 +1,7 @@
 /** Local SQLite commerce only. Synthetic settlement is NOT a Paystack callback. */
 import {randomBytes,createHash} from 'node:crypto';
 import {migrateCommerce} from './commerce-schema.mjs';
+import {readCreatorJournal} from './creator-journal.mjs';
 import {decodeVerifiedPaystackWebhookV1} from '../../payment-core/src/webhooks.mjs';
 import {quoteLessonPurchase,validateVerifiedCharge} from '../../payment-core/src/payments.mjs';
 export function createLocalCommerce({db,transaction,audit,error,requireVerified,requireCreatorAction}){
@@ -184,7 +185,7 @@ export function createLocalCommerce({db,transaction,audit,error,requireVerified,
  function ownOrders(actor){requireVerified(actor);return db.prepare('SELECT * FROM purchase_orders WHERE buyer_id=? ORDER BY created_at DESC LIMIT 100').all(actor.id).map(snapshot);}
  function creatorEarnings(actor){
   requireVerified(actor);
-  const r=db.prepare("SELECT COALESCE(SUM(creator_share_kobo),0) AS pending,COUNT(*) AS count FROM purchase_orders WHERE creator_id=? AND status='paid' AND payment_state='paid'").get(actor.id);
+  const r=readCreatorJournal(db,actor.id);
   return {currency:'NGN',creatorPendingKobo:r.pending,paidOrders:r.count,payoutEnabled:false,commissionApproved:false};
  }
  function lessonAccess(actor,id){
