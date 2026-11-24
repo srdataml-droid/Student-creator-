@@ -45,9 +45,9 @@ function fixture(){
   }
   return {admin,course,...Object.fromEntries(['host','student','extra'].map((k,i)=>[k,people[i]]))};
  }
- function classPayload(tag,priceKobo=30000){
+ function classPayload(tag,priceKobo=30000,offsetMinutes=0){
   return {title:'Original paid workshop '+tag,description:'Tutoring of original student practice only',
-    startsAt:new Date(Date.now()+8*60000).toISOString(),endsAt:new Date(Date.now()+69*60000).toISOString(),
+    startsAt:new Date(Date.now()+(8+offsetMinutes)*60000).toISOString(),endsAt:new Date(Date.now()+(69+offsetMinutes)*60000).toISOString(),
     priceKobo,capacity:12,creationKey:'learning-paid-class-'+tag+'-unique'};
  }
  function pay(reference,amountKobo,transactionId=null,options={}){
@@ -150,7 +150,7 @@ test('two orders cannot use one provider receipt and invalid provider checkout U
  try{
    const a=await x.setup();
    const c1=await x.send('courses/'+a.course.id+'/classes','POST',x.classPayload('second'),a.host.token);
-   const c2=await x.send('courses/'+a.course.id+'/classes','POST',x.classPayload('third'),a.host.token);
+   const c2=await x.send('courses/'+a.course.id+'/classes','POST',x.classPayload('third',30000,90),a.host.token);
    for(const c of [c1,c2])assert.equal((await x.send('classes/'+c.data.class.id+'/enroll','POST',{},a.student.token)).status,200);
    const o1=await x.send('classes/'+c1.data.class.id+'/orders','POST',{requestKey:'wk06-class-order-one'},a.student.token);
    const o2=await x.send('classes/'+c2.data.class.id+'/orders','POST',{requestKey:'wk06-class-order-two'},a.student.token);
