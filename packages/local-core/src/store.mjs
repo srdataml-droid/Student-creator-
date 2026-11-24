@@ -134,6 +134,11 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     CREATE INDEX IF NOT EXISTS lessons_discovery ON lessons(course_id,status,published_at);
     CREATE TABLE IF NOT EXISTS messages(id TEXT PRIMARY KEY,sender_id TEXT NOT NULL REFERENCES users(id),recipient_id TEXT NOT NULL REFERENCES users(id),body TEXT NOT NULL CHECK(length(body) BETWEEN 1 AND 2000),created_at TEXT NOT NULL);
     CREATE INDEX IF NOT EXISTS messages_pair ON messages(sender_id,recipient_id,created_at);
+    CREATE INDEX IF NOT EXISTS messages_recipient ON messages(recipient_id,sender_id);
+    CREATE TABLE IF NOT EXISTS message_reads(
+      message_id TEXT PRIMARY KEY REFERENCES messages(id) ON DELETE CASCADE,
+      read_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS user_blocks(blocker_id TEXT NOT NULL REFERENCES users(id),blocked_id TEXT NOT NULL REFERENCES users(id),created_at TEXT NOT NULL,PRIMARY KEY(blocker_id,blocked_id));
     -- Distinct per-creator permissions; unlike a DM block, these scopes are independent.
     CREATE TABLE IF NOT EXISTS creator_restrictions(
@@ -888,12 +893,30 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
          WHERE (sender_id=? AND recipient_id=?) OR (sender_id=? AND recipient_id=?) ORDER BY created_at DESC LIMIT 100`).all(actor.id,peerId,peerId,actor.id);
       return rows.reverse();
     },
+    markMessagesRead(actor,peerId,ids){
+      requireVerified(actor);
+      if(!Array.isArray(ids)||ids.length<1||ids.length>100||ids.some(id=>typeof id!=='string'||id.length!==36)||new Set(ids).size!==ids.length)
+        throw error('INVALID_MESSAGE_IDS',422);
+      return transaction(()=>{
+        const owned=db.prepare('SELECT 1 FROM messages WHERE id=? AND sender_id=? AND recipient_id=?');
+        // Validate every ID before changing any state; never acknowledge outbound or foreign messages.
+        for(const id of ids)if(!owned.get(id,peerId,actor.id))throw error('MESSAGE_NOT_FOUND',404);
+        const mark=db.prepare('INSERT OR IGNORE INTO message_reads(message_id,read_at) VALUES(?,?)');
+        const at=stamp();
+        let marked=0;
+        for(const id of ids)marked+=mark.run(id,at).changes;
+        return {marked};
+      });
+    },
     inbox(actor){
       requireVerified(actor);
-      return db.prepare(`SELECT peerId,MAX(createdAt) AS lastMessageAt FROM (
-        SELECT recipient_id AS peerId,created_at AS createdAt FROM messages WHERE sender_id=?
-        UNION ALL SELECT sender_id AS peerId,created_at AS createdAt FROM messages WHERE recipient_id=?
-      ) GROUP BY peerId ORDER BY lastMessageAt DESC LIMIT 50`).all(actor.id,actor.id);
+      return db.prepare(`SELECT peerId,MAX(createdAt) AS lastMessageAt,SUM(unread) AS unreadCount FROM (
+        SELECT recipient_id AS peerId,created_at AS createdAt,0 AS unread FROM messages WHERE sender_id=?
+        UNION ALL
+        SELECT m.sender_id AS peerId,m.created_at AS createdAt,
+          CASE WHEN r.message_id IS NULL THEN 1 ELSE 0 END AS unread
+          FROM messages m LEFT JOIN message_reads r ON r.message_id=m.id WHERE m.recipient_id=?
+      ) GROUP BY peerId ORDER BY lastMessageAt DESC,peerId LIMIT 50`).all(actor.id,actor.id);
     },
     isContactBlocked(actor,otherId){
       requireVerified(actor);

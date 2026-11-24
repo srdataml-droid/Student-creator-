@@ -177,3 +177,45 @@ test('reported messages are visible only to admin and can be resolved with an au
   assert.equal((await x.request(`messages/${readerId}`,'GET',undefined,s.student)).data.blocked,false);
  }finally{x.close();}
 });
+
+test('DM unread state is recipient-only, atomic, replay-safe and private',async()=>{
+ const x=setup();try{
+  const s=await begin(x);await x.request('admin/verify','POST',{userId:s.user},s.owner);
+  const lid=(await x.request('lessons/drafts','POST',lessonBody(s.course),s.student)).data.lesson.id;
+  await x.request(`lessons/${lid}/submit`,'POST',{},s.student);
+  assert.equal((await x.request(`lessons/${lid}/review`,'POST',{decision:'approve',reason:'Original work accepted'},s.owner)).status,200);
+  assert.equal((await x.request('messages/preference','POST',{allowMessages:true},s.student)).status,200);
+  async function reader(name){
+   const email=name+'@campus.test',password='Strong Reader Password 1234';
+   const id=(await x.request('auth/register','POST',{email,password,institutionId:s.institution})).data.user.id;
+   await x.request('admin/verify','POST',{userId:id},s.owner);
+   return {id,token:await login(x,email,password)};
+  }
+  const a=await reader('unread-a'),b=await reader('unread-b');
+  const send=async(t,text)=>(await x.request(`messages/${s.user}`,'POST',{text},t)).data.message.id;
+  const one=await send(a.token,'First private question'),two=await send(a.token,'Second private question'),foreign=await send(b.token,'Another conversation');
+  const count=async(t,peer)=>(await x.request('messages/inbox','GET',undefined,t)).data.inbox.find(v=>v.peerId===peer)?.unreadCount;
+  const mark=(peer,ids,t,origin)=>x.request(`messages/${peer}/read`,'POST',{messageIds:ids},t,origin);
+  assert.equal(await count(s.student,a.id),2);assert.equal(await count(s.student,b.id),1);
+  assert.equal(await count(a.token,s.user),0);
+  const history=await x.request(`messages/${a.id}`,'GET',undefined,s.student);
+  assert.equal(history.data.messages.length,2);
+  assert.equal(await count(s.student,a.id),2,'GET does not mutate read state');
+  assert.equal((await x.request(`messages/${a.id}`,'GET',undefined,b.token)).data.messages.length,0);
+  assert.equal((await mark(a.id,[one],undefined)).status,401);
+  assert.equal((await mark(s.user,[one],a.token)).status,404,'sender cannot mark its outbound message');
+  assert.equal((await mark(a.id,[one],b.token)).status,404,'third party cannot mutate read state');
+  assert.equal((await mark(a.id,[one,foreign],s.student)).status,404,'mixed peers rejected atomically');
+  assert.equal(await count(s.student,a.id),2);
+  assert.equal((await mark(a.id,[one,one],s.student)).status,422);
+  assert.equal((await mark(a.id,[one],s.student,'https://foreign.invalid')).status,403);
+  assert.equal((await mark(a.id,[one],s.student)).data.marked,1);
+  assert.equal((await mark(a.id,[one],s.student)).data.marked,0);
+  assert.equal(await count(s.student,a.id),1);
+  assert.equal((await mark(a.id,[two],s.student)).data.marked,1);
+  assert.equal(await count(s.student,a.id),0);
+  assert.equal(await count(s.student,b.id),1);
+  const outbound=await x.request(`messages/${s.user}`,'GET',undefined,a.token);
+  assert.ok(outbound.data.messages.every(m=>!Object.hasOwn(m,'readAt')));
+ }finally{x.close();}
+});

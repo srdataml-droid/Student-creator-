@@ -382,6 +382,10 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
       if(segments.length===3&&segments[0]==='admin'&&segments[1]==='community-reports'){
         return responses({result:store.resolveCommunityReport(actor,segments[2],body)});
       }
+      if(segments.length===3&&segments[0]==='messages'&&segments[2]==='read'){
+        if(Object.keys(body).length!==1||!Object.hasOwn(body,'messageIds'))return fail('UNEXPECTED_BODY',400);
+        return responses(store.markMessagesRead(actor,segments[1],body.messageIds));
+      }
       if(path==='messages/preference')return responses({preference:store.setMessagePreference(actor,body.allowMessages)});
       if(segments.length===2&&segments[0]==='messages'&&!['preference','report','inbox'].includes(segments[1]))return responses({message:store.sendMessage(actor,segments[1],body.text)},201);
       if(segments.length===3&&segments[0]==='messages'&&segments[2]==='block')return responses({result:store.blockContact(actor,segments[1])});
