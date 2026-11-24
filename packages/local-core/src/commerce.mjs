@@ -2,6 +2,7 @@
 import {randomBytes,createHash} from 'node:crypto';
 import {migrateCommerce} from './commerce-schema.mjs';
 import {readCreatorJournal} from './creator-journal.mjs';
+import {initializeCheckoutSession} from './checkout-session.mjs';
 import {decodeVerifiedPaystackWebhookV1} from '../../payment-core/src/webhooks.mjs';
 import {quoteLessonPurchase,validateVerifiedCharge} from '../../payment-core/src/payments.mjs';
 export function createLocalCommerce({db,transaction,audit,error,requireVerified,requireCreatorAction}){
@@ -156,7 +157,7 @@ export function createLocalCommerce({db,transaction,audit,error,requireVerified,
   if(row.payment_state!=='pending')throw error('ALREADY_PURCHASED',409);
   requireCreatorAction(actor,row.creator_id,'view');
   if(gateway?.environment!=='test'||typeof gateway.initialize!=='function')throw error('SANDBOX_PAYMENTS_UNAVAILABLE',503);
-  return gateway.initialize({reference:row.reference,buyerEmail:row.buyer_email,amountKobo:row.amount_kobo,domain:'test'});
+  return initializeCheckoutSession(db,{reference:row.reference,buyerEmail:row.buyer_email,amountKobo:row.amount_kobo,domain:'test'},gateway,error);
  }
  async function confirmSandboxOrder(actor,reference,gateway){return reconcilePurchase(actor,reference,gateway);}
  function applySyntheticRefund(reference,{refundReference,providerTransactionId}={}){

@@ -1,6 +1,8 @@
+import {migrateCheckoutSessions} from './checkout-session.mjs';
 /** Additive, transactional local migrations. PostgreSQL draft is not the runtime. */
 export function migrateCommerce(db,transaction){
  transaction(()=>{
+  migrateCheckoutSessions(db);
   const columns=new Set(db.prepare('PRAGMA table_info(purchase_orders)').all().map(r=>r.name));
   for(const [name,definition] of Object.entries({currency:"TEXT NOT NULL DEFAULT 'NGN' CHECK(currency='NGN')",environment:"TEXT NOT NULL DEFAULT 'test' CHECK(environment='test')",platform_fee_bps:'INTEGER NOT NULL DEFAULT 0 CHECK(platform_fee_bps=0)',terms_version:"TEXT NOT NULL DEFAULT 'synthetic-v1'",payment_state:"TEXT NOT NULL DEFAULT 'pending' CHECK(payment_state IN ('pending','paid','refunded','chargeback'))",fee_policy:"TEXT NOT NULL DEFAULT 'unapproved-no-commission'"})){
    if(!columns.has(name))db.exec(`ALTER TABLE purchase_orders ADD COLUMN ${name} ${definition}`);
