@@ -253,7 +253,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
   };
   const learning=createLearningServices({db,transaction,audit,error,requireVerified,requireCreatorAction,paymentEntitlements:classEntitlements,providerPresenceVerifier,clock:learningClock});
   learningPayments=createLearningPayments({db,transaction,audit,error,requireVerified,requireCreatorAction});
-  const learningEmail=createLocalLearningEmail({db,transaction,audit,error,requireVerified});
+  const learningEmail=createLocalLearningEmail({db,transaction,audit,error,requireVerified,clock:learningClock});
   const withVideo=(row)=>row?{...lesson(row),priceKobo:commerce.price(row.id),hasVideo:Boolean(db.prepare('SELECT 1 FROM lesson_videos WHERE lesson_id=?').get(row.id)),hasCaptions:Boolean(db.prepare('SELECT 1 FROM lesson_captions WHERE lesson_id=?').get(row.id)),likeCount:db.prepare('SELECT COUNT(*) AS n FROM lesson_likes WHERE lesson_id=?').get(row.id).n}:null;
   function editableVideoLesson(actor,id){
     requireVerified(actor);
