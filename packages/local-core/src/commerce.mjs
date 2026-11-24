@@ -305,6 +305,11 @@ export function createLocalCommerce({db,transaction,audit,error,requireVerified,
   if(!actor)throw error('AUTH_REQUIRED',401);
   return db.prepare("SELECT d.case_key AS caseKey,d.order_reference AS reference,d.kind,d.status,d.resolution,d.created_at AS createdAt FROM payment_disputes d JOIN purchase_orders o ON o.reference=d.order_reference WHERE o.buyer_id=? ORDER BY d.created_at").all(actor.id);
  }
+ function financialReviewQueue(actor){
+  requireFinance(actor);
+  // Operational metadata only; no buyer email, payout destination, or ledger rows.
+  return db.prepare("SELECT case_key AS caseKey,order_reference AS reference,kind,status,created_at AS createdAt FROM payment_disputes WHERE status='open' ORDER BY created_at,case_key LIMIT 100").all();
+ }
  function resolveDispute(actor,key,resolution){
   requireFinance(actor);
   if(typeof resolution!=='string'||resolution.trim().length<10||resolution.length>500)throw error('INVALID_RESOLUTION',422);
@@ -315,5 +320,5 @@ export function createLocalCommerce({db,transaction,audit,error,requireVerified,
    audit(actor.id,'purchase.dispute.resolved',row.order_reference,{caseKey:key});return {replayed:false};
   });
  }
- return Object.freeze({price,setPrice,requireAccess,createOrder,applyVerifiedTestCharge:testVerification,applySyntheticRefund,ownOrders,creatorEarnings,lessonAccess,orderStatus,sandboxCheckout,confirmSandboxOrder,reconcilePurchase,simulateReversal,receiveWebhook,drainInbox,recoverPending,reconciliation,recordRestrictedPurchases,disputes,resolveDispute});
+ return Object.freeze({price,setPrice,requireAccess,createOrder,applyVerifiedTestCharge:testVerification,applySyntheticRefund,ownOrders,creatorEarnings,lessonAccess,orderStatus,sandboxCheckout,confirmSandboxOrder,reconcilePurchase,simulateReversal,receiveWebhook,drainInbox,recoverPending,reconciliation,recordRestrictedPurchases,disputes,financialReviewQueue,resolveDispute});
 }
