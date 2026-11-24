@@ -8,6 +8,7 @@ import {Readable} from 'node:stream';
 import {createPaystackClient,PaystackGatewayError} from '../../payment-core/src/paystack-client.mjs';
 import {classTokenIssuerFromEnv} from './livekit-class-tokens.mjs';
 import {liveKitRoomServiceFromEnv} from './livekit-room-service.mjs';
+import {learningEmailFromEnv} from './learning-email.mjs';
 const MAX_BODY=32768;
 const RESTRICTED=Symbol('restricted');
 const responses=(data,status=200,headers={})=>Response.json(data,{status,headers:{'cache-control':'no-store','x-content-type-options':'nosniff','referrer-policy':'no-referrer',...headers}});
@@ -55,7 +56,7 @@ const allowed=(s)=>s&&typeof s==='string'&&s.length<100;
  * Only standalone localhost use. No payment provider, no staging credentials.
  * @param {object} store - an open local SQLite store
  */
-export function createLocalHandler(store,{sandboxGateway,payments=null,emailDelivery=null,classTokenIssuer=null,liveKitRoomService=null}={}){
+export function createLocalHandler(store,{sandboxGateway,payments=null,emailDelivery=null,classTokenIssuer=null,liveKitRoomService=null,learningEmailDelivery=null}={}){
   // Explicit synthetic transport only. No real email or local debug token endpoint.
   const mail=process.env.NODE_ENV!=='production'&&emailDelivery?.environment==='synthetic'&&typeof emailDelivery.send==='function'?emailDelivery:null;
   async function sendChallenge(challenge){
@@ -67,6 +68,7 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
   const gateway=process.env.NODE_ENV==='production'?null:(payments?.gateway??(sandboxGateway===undefined?(process.env.PAYSTACK_TEST_SECRET_KEY?createPaystackClient({secretKey:process.env.PAYSTACK_TEST_SECRET_KEY,environment:'test'}):null):sandboxGateway));
   const signingSecrets=payments?.signingSecrets??(process.env.PAYSTACK_WEBHOOK_KEY_ID&&process.env.PAYSTACK_WEBHOOK_SIGNING_SECRET?[{id:process.env.PAYSTACK_WEBHOOK_KEY_ID,secret:process.env.PAYSTACK_WEBHOOK_SIGNING_SECRET}]:[]);
   const liveRooms=liveKitRoomService??liveKitRoomServiceFromEnv();
+  const sendLearningEmail=learningEmailDelivery??learningEmailFromEnv();
   return async function handle(request,segments=[]){
     try{
       const method=request.method.toUpperCase(),path=segments.join('/');
@@ -263,6 +265,9 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
         }
         if(segments.length===2&&segments[0]==='learning-requests'){
           if(!actor)return unauthorized();return responses({request:store.helpDetail(actor,segments[1])});
+        }
+        if(path==='me/learning-email-preferences'){
+          if(!actor)return unauthorized();return responses({preferences:store.learningEmailPreferences(actor)});
         }
         if(path==='me/learning-notifications'){
           if(!actor)return unauthorized();return responses({notifications:store.notifications(actor)});
@@ -495,6 +500,14 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
         if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
         if(!gateway)return fail('SANDBOX_PAYMENTS_UNAVAILABLE',503);
         return responses({events:await store.drainSignedLearningInbox(actor,gateway)});
+      }
+      if(path==='me/learning-email-preferences'){
+        if(Object.keys(body).some(k=>k!=='emailOptIn'))return fail('UNEXPECTED_BODY',400);
+        return responses({preferences:store.setLearningEmailPreference(actor,body.emailOptIn)});
+      }
+      if(path==='admin/learning-emails/drain'){
+        if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
+        return responses({delivery:await store.drainLearningEmailOutbox(actor,sendLearningEmail)});
       }
       if(path==='admin/learning-reminders/queue'){
         if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
