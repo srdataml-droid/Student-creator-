@@ -370,9 +370,11 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     expect((await viewer.request.get(`/api/local/lessons/${lessonId}`)).status()).toBe(403);
     expect((await viewer.request.get(`/api/local/lessons/${lessonId}/comments`)).status()).toBe(403);
     await viewerPage.goto('/');
-    await expect(viewerPage.getByRole('heading',{name:title})).toHaveCount(0);
+    await expect(viewerPage.getByRole('heading',{name:title,exact:true})).toHaveCount(0);
     await viewerPage.goto('/search?q='+encodeURIComponent(title));
-    await expect(viewerPage.getByRole('heading',{name:title})).toHaveCount(0);
+    await expect(viewerPage.getByRole('heading',{name:title,exact:true})).toHaveCount(0);
+    await expect(viewerPage.getByRole('heading',{name:'0 approved results for “'+title+'”',exact:true})).toBeVisible();
+    await expect(viewerPage.getByRole('link',{name:title,exact:true})).toHaveCount(0);
     await viewerPage.goto(`/lessons/${lessonId}`);
     await expect(viewerPage.getByText('Full posts require verified student membership',{exact:false})).toBeVisible();
     // The real local backend is tested with a secret invitation code in Node;

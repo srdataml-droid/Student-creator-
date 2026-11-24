@@ -38,3 +38,5 @@ Pair-scoped inbox pagination with an actor-owned peer cursor; rejects unrelated 
 
 ## Tenth increment: actual browser social acceptance
 Extended existing isolated Chromium flow to exercise server-ranked following feed, lesson reply, DM delivery, unread acknowledgments, notification mark/preferences, contact block/unblock, account report, administrator role assignment, course moderator hide/leave/rejoin and creator preview restriction from actual UI. Synthetic accounts only; no new service credentials. Exact-head browser CI pending.
+
+- Browser acceptance run 45502380159: 288 unit tests passed; web build and database contract passed. All new social browser interactions passed, but a final blocked-search assertion matched the query-echo heading via substring matching. Replaced it with exact heading/link assertions and an explicit zero-results assertion; rerun required.
