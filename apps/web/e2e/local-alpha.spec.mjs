@@ -301,3 +301,27 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     await Promise.all([admin.close(),creator.close(),viewer.close()]);
   }
 });
+
+
+test('mobile shell communicates offline state and recovers without replaying actions', async ({browser}) => {
+  const context = await browser.newContext({baseURL: BASE, viewport: {width: 360, height: 780}});
+  try {
+    const page = await context.newPage();
+    await page.goto('/');
+    await expect(page.getByRole('navigation', {name: 'Mobile navigation'})).toBeVisible();
+    const offline = page.getByText("You're offline.", {exact: false});
+    await expect(offline).toHaveCount(0);
+    await context.setOffline(true);
+    await expect(offline).toBeVisible();
+    await context.setOffline(false);
+    await expect(offline).toHaveCount(0);
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('link', {name:'Skip to content'})).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/#main$/);
+    const width = await page.evaluate(() => ({viewport: window.innerWidth, document: document.documentElement.scrollWidth}));
+    expect(width.document).toBeLessThanOrEqual(width.viewport + 1);
+  } finally {
+    await context.close();
+  }
+});
