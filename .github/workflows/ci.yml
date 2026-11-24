@@ -30,6 +30,9 @@ jobs:
       - name: Install from committed lockfile
         working-directory: apps/web
         run: npm ci --no-audit --no-fund
+      - name: Audit locked production dependencies (high and critical)
+        working-directory: apps/web
+        run: npm audit --omit=dev --audit-level=high
       - name: Build Next.js app without production credentials
         working-directory: apps/web
         run: npm run build
