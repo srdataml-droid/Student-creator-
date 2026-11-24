@@ -10,11 +10,25 @@ const isSet=(v)=>typeof v==='string'&&v.trim().length>0;
 const bindings=Object.freeze({
   supabaseUrl:['SUPABASE_URL','supabase_url'],
   supabasePublishableKey:['SUPABASE_PUBLISHABLE_KEY','supabase_publishable_key'],
-  supabaseSecretKey:['SUPABASE_SECRET_KEY','supabase_secret_key'],
+  supabaseSecretKey:['SUPABASE_SECRET_KEY','supabase_secret_key','superbase_secret_key'],
+  supabaseConnectionString:['SUPABASE_CONNECTION_STRING','supabase_connection_string'],
+  supabaseJwksUrl:['SUPABASE_JWKS_URL','supabase_jwks_url'],
   livekitUrl:['LIVEKIT_URL','livekit_project_url'],
   livekitApiKey:['LIVEKIT_API_KEY','livekit_apikey'],
+  livekitProjectId:['LIVEKIT_PROJECT_ID','livekit_project_id'],
+  livekitSip:['LIVEKIT_SIP','livekit_sip'],
   resendApiKey:['RESEND_API_KEY','resend_api'],
-  paystackTestKey:['PAYSTACK_TEST_SECRET_KEY','paystack_secret_key']
+  paystackTestKey:['PAYSTACK_TEST_SECRET_KEY','paystack_secret_key'],
+  paystackPublicKey:['PAYSTACK_PUBLIC_KEY','paystack_public_key'],
+  // These names are mapped as opaque candidates, NOT assumed to be the
+  // corresponding Mux API or signing credential until their roles are verified.
+  muxSigningKeyCandidate:['MUX_SIGNING_KEY','mux_signing_key'],
+  muxSigningSecretCandidate:['MUX_SIGNING_SECRET_KEY','mux_signing_secret_key','mux_sigining_secret_key'],
+  muxTokenId:['MUX_TOKEN_ID','mux_token_id'],
+  muxApi:['MUX_API','mux_api'],
+  muxEnvironmentKey:['MUX_ENV_KEY','mux_env_key'],
+  muxEnvironmentId:['MUX_ENV_ID','mux_env_id'],
+  muxSecretKey:['MUX_SECRET_KEY','mux_secret_key']
 });
 
 function read(env,field){
@@ -62,21 +76,52 @@ export function resolveWeek1ProviderEnvironment(env={}){
  const supabaseSecretKey=read(env,'supabaseSecretKey');
  if(!/^sb_secret_[A-Za-z0-9_-]{12,}$/.test(supabaseSecretKey||''))
   throw fail('SUPABASE_SERVER_SECRET_REQUIRED');
+ const connectionString=read(env,'supabaseConnectionString');
+ // A PostgreSQL connection string is never sent to the client or used without
+ // separate hostname/certificate and privilege validation by a server adapter.
+ const jwksUrl=read(env,'supabaseJwksUrl');
+ if(jwksUrl){
+  try{
+   const u=new URL(jwksUrl);
+   if(u.protocol!=='https:'||u.username||u.password||u.port||
+    u.hostname!==env.STUDENT_CREATORS_PROJECT_REF+'.supabase.co'||
+    u.pathname!=='/auth/v1/.well-known/jwks.json'||u.search||u.hash)
+    throw Error('invalid');
+  }catch{throw fail('SUPABASE_JWKS_PROJECT_MISMATCH');}
+ }
  const livekitUrl=read(env,'livekitUrl');
  if(livekitUrl&&!matchLivekitUrl(livekitUrl))throw fail('LIVEKIT_WSS_URL_REQUIRED');
  const livekitApiKey=read(env,'livekitApiKey');
  const resendApiKey=read(env,'resendApiKey');
+ const livekitProjectId=read(env,'livekitProjectId');
+ const livekitSip=read(env,'livekitSip');
  const paystackTestKey=read(env,'paystackTestKey');
+ const paystackPublicKey=read(env,'paystackPublicKey');
+ if(paystackPublicKey&&!/^pk_test_[A-Za-z0-9]+$/.test(paystackPublicKey))
+  throw fail('PAYSTACK_TEST_PUBLIC_KEY_ONLY');
  // Never accept live Paystack keys under an ambiguous historical name.
  if(paystackTestKey&&!/^sk_test_[A-Za-z0-9]+$/.test(paystackTestKey))
   throw fail('PAYSTACK_TEST_ONLY');
- // Mux signing aliases are deliberately NOT guessed: some existing Vercel
- // variables mean an API token, some mean a playback JWT key ID/private key.
+ // Preserve ALL founder-chosen Mux names without guessing signing-key roles.
+ // API token identifiers, signing key IDs and RSA private keys are different;
+ // the hosted adapter must validate each role before performing any calls.
+ const mux=Object.freeze({
+  signingKeyCandidate:read(env,'muxSigningKeyCandidate'),
+  signingSecretCandidate:read(env,'muxSigningSecretCandidate'),
+  tokenId:read(env,'muxTokenId'),
+  api:read(env,'muxApi'),
+  environmentKey:read(env,'muxEnvironmentKey'),
+  environmentId:read(env,'muxEnvironmentId'),
+  secretKey:read(env,'muxSecretKey')
+ });
  return Object.freeze({
-  supabase:Object.freeze({url:supabaseUrl,publishableKey:supabasePublishableKey,secretKey:supabaseSecretKey}),
-  livekit:Object.freeze({url:livekitUrl,apiKey:livekitApiKey}),
+  supabase:Object.freeze({url:supabaseUrl,publishableKey:supabasePublishableKey,
+   secretKey:supabaseSecretKey,connectionStringConfigured:Boolean(connectionString),jwksUrl}),
+  livekit:Object.freeze({url:livekitUrl,apiKey:livekitApiKey,
+   projectId:livekitProjectId,sip:livekitSip}),
   resend:Object.freeze({apiKey:resendApiKey}),
-  paystack:Object.freeze({testKey:paystackTestKey}),
+  paystack:Object.freeze({testKey:paystackTestKey,publicKey:paystackPublicKey}),
+  mux,
   allowedModes:Object.freeze({registration:false,realPayments:false}),
   muxSigningConfigured:false
  });
