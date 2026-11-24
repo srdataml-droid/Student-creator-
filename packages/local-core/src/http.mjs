@@ -114,6 +114,13 @@ export function createLocalHandler(store,{sandboxGateway,payments=null}={}){
       if(method==='GET'){
         if(path==='health')return responses({state:'local',database:'sqlite',providerPayments:false,sandboxCheckoutEnabled:Boolean(gateway),pilotInviteOnly:store.pilotInviteOnly()});
         if(path==='me')return actor?responses({user:actor}):fail('AUTH_REQUIRED',401);
+        if(path==='me/institution-affiliation'){if(!actor)return unauthorized();return responses({affiliation:store.institutionAffiliation(actor,actor.id)});}
+        if(path==='me/verification-appeals'){if(!actor)return unauthorized();return responses({appeals:store.myVerificationAppeals(actor)});}
+        if(path==='admin/identity/revalidation-due'){if(!actor)return unauthorized();return responses({due:store.dueAffiliationRevalidations(actor)});}
+        if(segments.length===3&&segments[0]==='admin'&&segments[1]==='institution-integrations'){
+          if(!actor)return unauthorized();const integration=store.getInstitutionIntegration(actor,segments[2]);
+          return integration?responses({integration}):fail('INTEGRATION_NOT_FOUND',404);
+        }
         if(path==='following'){if(!actor)return unauthorized();return responses({creators:store.followingCreators(actor)});}
         if(segments.length===3&&segments[0]==='creators'&&segments[2]==='follow'){
           if(!actor)return unauthorized();
@@ -207,7 +214,25 @@ export function createLocalHandler(store,{sandboxGateway,payments=null}={}){
         return responses({user:result.user},200,{'set-cookie':`${SESSION_COOKIE}=${result.token}; HttpOnly; SameSite=Lax; Path=/; Max-Age=604800${secure}`});
       }
       if(!actor)return unauthorized();
-      if(segments.length===3&&segments[0]==='orders'&&['checkout','confirm'].includes(segments[2])){
+      if(path==='me/verification-appeals'){
+         if(Object.keys(body).some(k=>k!=='reason'))return fail('UNEXPECTED_BODY',400);
+         const appeal=store.submitVerificationAppeal(actor,body.reason);
+         return responses({appeal},appeal.replayed?200:201);
+       }
+       if(path==='admin/institution-integrations'){
+         if(Object.keys(body).some(k=>!['institutionId','providerId','kind','issuer','audience','endpoint'].includes(k)))return fail('UNEXPECTED_BODY',400);
+         return responses({integration:store.addInstitutionIntegration(actor,body)},201);
+       }
+       if(segments.length===4&&segments[0]==='admin'&&segments[1]==='institution-integrations'&&['enable-synthetic','disable'].includes(segments[3])){
+         if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
+         const integration=segments[3]==='enable-synthetic'?store.enableSyntheticInstitution(actor,segments[2]):store.disableInstitutionIntegration(actor,segments[2]);
+         return responses({integration});
+       }
+       if(segments.length===3&&segments[0]==='admin'&&segments[1]==='verification-appeals'){
+         if(Object.keys(body).some(k=>!['decision','note'].includes(k)))return fail('UNEXPECTED_BODY',400);
+         return responses({appeal:store.reviewVerificationAppeal(actor,segments[2],body)});
+       }
+       if(segments.length===3&&segments[0]==='orders'&&['checkout','confirm'].includes(segments[2])){
          if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
          if(!gateway){store.getPurchaseOrder(actor,segments[1]);return fail('SANDBOX_PAYMENTS_UNAVAILABLE',503);}
          if(segments[2]==='checkout')return responses({checkout:await store.sandboxCheckout(actor,segments[1],gateway)});
