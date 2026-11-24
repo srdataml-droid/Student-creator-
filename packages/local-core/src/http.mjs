@@ -230,6 +230,13 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
         if(segments.length===3&&segments[0]==='creators'&&segments[2]==='availability'){
           if(!actor)return unauthorized();return responses({availability:store.availability(actor,segments[1])});
         }
+        if(path==='me/learning-orders'){if(!actor)return unauthorized();return responses({orders:store.myLearningOrders(actor)});}
+        if(segments.length===2&&segments[0]==='learning-orders'){
+          if(!actor)return unauthorized();return responses({order:store.learningOrder(actor,segments[1])});
+        }
+        if(segments.length===3&&segments[0]==='admin'&&segments[1]==='learning-ledger'){
+          if(!actor)return unauthorized();return responses({ledger:store.learningLedger(actor,segments[2])});
+        }
         if(path==='me/classes'){if(!actor)return unauthorized();return responses({classes:store.myClasses(actor)});}
         if(path==='me/learning-requests'){
           if(!actor)return unauthorized();return responses({requests:store.myHelp(actor)});
@@ -368,6 +375,27 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
         const secure=new URL(request.url).protocol==='https:'?'; Secure':'';
         const mediaCookie=`campus_playback_${id}=${grant.token}; Path=/api/local/lessons/${id}/video; HttpOnly; SameSite=Strict; Max-Age=300${secure}`;
         return responses({expiresAt:grant.expiresAt,watermark:grant.watermark},200,{'set-cookie':mediaCookie});
+      }
+      // Verified test-mode Paystack payments use immutable server snapshots, not a browser success flag.
+      if(segments.length===3&&segments[0]==='classes'&&segments[2]==='orders'){
+        if(Object.keys(body).some(k=>k!=='requestKey'))return fail('UNEXPECTED_BODY',400);
+        const order=store.createLearningOrder(actor,'class',segments[1],body.requestKey);
+        return responses({order},order.replayed?200:201);
+      }
+      if(segments.length===3&&segments[0]==='learning-requests'&&segments[2]==='orders'){
+        if(Object.keys(body).some(k=>k!=='requestKey'))return fail('UNEXPECTED_BODY',400);
+        const order=store.createLearningOrder(actor,'service',segments[1],body.requestKey);
+        return responses({order},order.replayed?200:201);
+      }
+      if(segments.length===3&&segments[0]==='learning-orders'&&['checkout','confirm'].includes(segments[2])){
+        if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
+        if(!gateway){store.learningOrder(actor,segments[1]);return fail('SANDBOX_PAYMENTS_UNAVAILABLE',503);}
+        if(segments[2]==='checkout')return responses({checkout:await store.learningCheckout(actor,segments[1],gateway)});
+        return responses({order:await store.learningConfirm(actor,segments[1],gateway)});
+      }
+      if(segments.length===4&&segments[0]==='admin'&&segments[1]==='learning-payments'&&segments[3]==='simulate-reversal'){
+        if(Object.keys(body).some(k=>!['kind','reason','key'].includes(k)))return fail('UNEXPECTED_BODY',400);
+        return responses({order:store.simulateLearningReversal(actor,segments[2],body)});
       }
       // Week 6: money-related authorization is checked against server entitlements, not POST data.
       if(segments.length===3&&segments[0]==='courses'&&segments[2]==='classes'){
