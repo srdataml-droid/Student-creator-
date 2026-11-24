@@ -209,6 +209,7 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
         if(segments.length===3&&segments[0]==='creators'&&segments[2]==='availability'){
           if(!actor)return unauthorized();return responses({availability:store.availability(actor,segments[1])});
         }
+        if(path==='me/classes'){if(!actor)return unauthorized();return responses({classes:store.myClasses(actor)});}
         if(path==='me/learning-requests'){
           if(!actor)return unauthorized();return responses({requests:store.myHelp(actor)});
         }
