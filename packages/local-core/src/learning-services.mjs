@@ -144,6 +144,14 @@ export function createLearningServices({db,transaction,audit,error,requireVerifi
         return {classId:id,enrolled:false,replayed:change===0,refundReviewRequested:Boolean(change&&row.price_kobo>0)};
       });
     },
+    preflightOpenClass(actor,id){
+      const row=classRow(actor,id);
+      if(row.host_id!==actor.id)throw error('FORBIDDEN',403);
+      if(row.status!=='scheduled'&&row.status!=='room_open')throw error('CLASS_CLOSED',409);
+      if(now()<Date.parse(row.starts_at)-15*60000||now()>Date.parse(row.ends_at))
+        throw error('CLASS_NOT_READY',409);
+      return {roomName:row.room_name,capacity:row.capacity,alreadyOpen:row.status==='room_open'};
+    },
     openClass(actor,id){
       const row=classRow(actor,id);
       if(row.host_id!==actor.id)throw error('FORBIDDEN',403);
@@ -168,6 +176,21 @@ export function createLearningServices({db,transaction,audit,error,requireVerifi
           .run(id,row.room_name,timestamp());
         audit(actor.id,'class.finished',id);
         return {id,status:'completed',replayed:false};
+      });
+    },
+    async closeClassRoomProvider(actor,id,roomService){
+      const row=classRow(actor,id);
+      if(row.host_id!==actor.id)throw error('FORBIDDEN',403);
+      if(!['cancelled','completed'].includes(row.status))throw error('CLASS_NOT_CLOSED',409);
+      if(!roomService||typeof roomService.deleteRoom!=='function')throw error('LIVEKIT_ROOM_SERVICE_NOT_CONFIGURED',503);
+      // Closing the provider room is best-effort, with durable retry on network failure.
+      // Existing signed tokens may remain valid for their remaining TTL.
+      await roomService.deleteRoom(row.room_name);
+      return transaction(()=>{
+        db.prepare("UPDATE learning_room_closures SET state='done',attempts=attempts+1,updated_at=? WHERE class_id=? AND state='pending'")
+          .run(timestamp(),id);
+        audit(actor.id,'class.room.provider_close.confirmed',id);
+        return {providerClosed:true};
       });
     },
     // Only a trusted server worker can drain this durable outbox using Week 1 RoomService.
