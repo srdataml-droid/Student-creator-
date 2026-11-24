@@ -35,3 +35,6 @@ Private categorized reports against public creators or established message conta
 
 ## Ninth increment: inbox and abuse boundary tests
 Pair-scoped inbox pagination with an actor-owned peer cursor; rejects unrelated cursor IDs, invalid bounds and spoofed message sender fields. Blocks limited to established contacts/public creators, existing blocks idempotent. Verified-student membership rechecked inside community post write transaction, hidden child reporting denied. New tests exercise 30-message/hour throttling, blocked contacts, forged sender, inbox paging and hidden child reports. Exact-head CI pending.
+
+## Tenth increment: actual browser social acceptance
+Extended existing isolated Chromium flow to exercise server-ranked following feed, lesson reply, DM delivery, unread acknowledgments, notification mark/preferences, contact block/unblock, account report, administrator role assignment, course moderator hide/leave/rejoin and creator preview restriction from actual UI. Synthetic accounts only; no new service credentials. Exact-head browser CI pending.
