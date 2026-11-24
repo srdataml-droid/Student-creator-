@@ -482,6 +482,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     confirmEmailVerification:accountEmail.confirmVerification,
     requestPasswordRecovery:accountEmail.requestRecovery,
     resetPassword:accountEmail.resetPassword,
+    cancelEmailChallenge:accountEmail.cancelChallenge,
     listStudentAccounts(sessionToken){
       requireAdmin(store.getSession(sessionToken));
       // Minimal private operator view, bounded for the one-student alpha.
