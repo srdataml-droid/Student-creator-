@@ -40,6 +40,12 @@ test('synthetic verified payment through protected playback and refund',async({b
   }else{
     console.warn('Synthetic CI validates paid-media authorization, byte ranges, watermark and refund, NOT video codec decoding. Run a separate real Android/Chrome media acceptance.');
   }
+  // Renewing an authorization must NOT remount the HTMLMediaElement or
+  // reset its playback clock. The fixture's codec is verified separately.
+  await page.locator('video').evaluate(v=>{window.__beforeRenewVideo=v;});
+  await page.getByRole('button',{name:'Renew video access'}).click();
+  await expect(page.getByRole('button',{name:'Renew video access'})).toBeVisible();
+  expect(await page.locator('video').evaluate(v=>window.__beforeRenewVideo===v)).toBe(true);
   const watermark=page.getByTestId('playback-watermark');
   await expect(watermark).toBeVisible();await expect(watermark).toHaveText(/^WK-[a-f0-9]{12} · [a-f0-9]{8}$/);
   expect(await watermark.textContent()).not.toContain('@');
