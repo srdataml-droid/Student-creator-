@@ -59,9 +59,15 @@ export function createLiveKitRoomService({url,apiKey,apiSecret,clock=()=>Date.no
       if(!CLASS_ROOM.test(name))throw fail('INVALID_ROOM_GRANT',422);
       return rpc('DeleteRoom',{room:name},{roomCreate:true},{allowMissing:true});
     },
-    async removeParticipant(name,identity){
+    async removeParticipant(name,identity,{revokeTokenTs=null}={}){
       if(!CLASS_ROOM.test(name)||!IDENTITY.test(identity))throw fail('INVALID_ROOM_GRANT',422);
-      return rpc('RemoveParticipant',{room:name,identity},{roomAdmin:true,room:name},{allowMissing:true});
+      if(revokeTokenTs!==null&&(!Number.isSafeInteger(revokeTokenTs)||revokeTokenTs<1))
+        throw fail('INVALID_ROOM_GRANT',422);
+      // The provider accepts protobuf int64 JSON as a decimal string.
+      // Explicit cutoff prevents an already issued token rejoining after removal.
+      return rpc('RemoveParticipant',
+        {room:name,identity,...(revokeTokenTs===null?{}:{revokeTokenTs:String(revokeTokenTs)})},
+        {roomAdmin:true,room:name},{allowMissing:true});
     },
     verifyWebhook(body,authorization){
       const raw=Buffer.isBuffer(body)?body:typeof body==='string'?Buffer.from(body):null;
