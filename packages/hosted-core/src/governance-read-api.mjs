@@ -46,6 +46,8 @@ async function readCommandBody(request){
  return body&&typeof body==='object'&&!Array.isArray(body)?body:null;
 }
 function commandFor(path){
+ if(path==='identity/appeals')return {name:'week7_institution_appeal_queue',scope:'verification.review',allowed:['limit']};
+ if(/^identity\/appeals\/[0-9a-f-]{36}\/review$/i.test(path))return {name:'week7_review_institution_appeal',scope:'verification.review',allowed:['decision','note']};
  if(path==='learning/disputes'||path==='learning/refunds')return {name:'week7_learning_review_queue',scope:path.endsWith('disputes')?'content.moderate':'finance.review',allowed:['limit']};
  if(/^learning\/disputes\/[0-9a-f-]{36}\/resolve$/i.test(path))return {name:'week7_resolve_learning_dispute',scope:'content.moderate',allowed:['outcome','note']};
  if(/^learning\/refunds\/[0-9a-f-]{36}\/record$/i.test(path))return {name:'week7_record_learning_refund_review',scope:'finance.review',allowed:['note']};
@@ -63,6 +65,10 @@ function validateCommand(cmd,body,path,actorId){
  if(Object.keys(body).some(key=>!cmd.allowed.includes(key)))return null;
  const id=path.split('/')[1];
  switch(cmd.name){
+  case 'week7_institution_appeal_queue':
+   return (body.limit===undefined||Number.isInteger(body.limit)&&body.limit>=1&&body.limit<=100)?{_actor:actorId,_limit:body.limit??50}:null;
+  case 'week7_review_institution_appeal':
+   return UUID.test(path.split('/')[2])&&['review_requested','rejected'].includes(body.decision)&&hasText(body.note,10,500)?{_actor:actorId,_id:path.split('/')[2],_decision:body.decision,_note:body.note.trim()}:null;
   case 'week7_learning_review_queue':
    return (body.limit===undefined||Number.isInteger(body.limit)&&body.limit>=1&&body.limit<=100)?{_actor:actorId,_kind:path.endsWith('disputes')?'disputes':'refunds',_limit:body.limit??50}:null;
   case 'week7_resolve_learning_dispute':
@@ -147,6 +153,7 @@ export function createHostedGovernanceHandler({getEnv=()=>process.env,fetcher=fe
      if(!res.ok){
        const detail=await res.json().catch(()=>({}));
        const safeCodes={
+         APPEAL_ALREADY_REVIEWED:[409,'APPEAL_ALREADY_REVIEWED'],
          LEARNING_REVIEW_CONFLICT:[409,'LEARNING_REVIEW_CONFLICT'],
          GOVERNANCE_RATE_LIMIT:[429,'GOVERNANCE_RATE_LIMIT'],
          INCIDENT_STATE_CONFLICT:[409,'INVALID_STATE'],

@@ -191,6 +191,11 @@ jobs:
           psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-learning-refund-reopen.sql
           psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-learning-review.test.sql
 
+      - name: Verify hosted institutional appeals
+        run: |
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-institution-appeals.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-institution-appeals.test.sql
+
       - name: Restore disposable PostgreSQL backup into isolated database
         env:
           PG_CONTAINER: ${{ job.services.postgres.id }}
