@@ -11,7 +11,7 @@ const states=['initializing','waiting','processing','ready','errored','cancelled
 function validOrigin(value){
  try{const u=new URL(value);return u.protocol==='https:'&&u.origin===value&&!u.username&&!u.password&&!!u.hostname;}catch{return false;}
 }
-function safeUploadUrl(value){
+export function safeUploadUrl(value){
  try{const u=new URL(value);if(u.protocol!=='https:'||u.username||u.password||u.port||u.hash||!u.search||
  !(u.hostname==='storage.googleapis.com'||u.hostname.endsWith('.storage.googleapis.com')||u.hostname.endsWith('.mux.com')||u.hostname.endsWith('.amazonaws.com')))
  throw unavailable();return u.toString();}catch{throw unavailable();}
@@ -38,13 +38,13 @@ export function createMuxTestClient({tokenId,tokenSecret,origin,fetcher=fetch}={
   getAsset:id=>{if(!ID.test(id))throw unavailable();return call('assets/'+id);}
  };
 }
-function validUpload(data,reservation,uploadId){
+export function validUpload(data,reservation,uploadId){
  const settings=data?.new_asset_settings;
  return ID.test(data?.id??'')&&(!uploadId||data.id===uploadId)&&settings?.passthrough===reservation&&
  Array.isArray(settings.playback_policies)&&settings.playback_policies.length===1&&settings.playback_policies[0]==='signed'&&
- data.test!==false&&settings.test!==false;
+ data.test===true&&settings.test!==false;
 }
-function assetSnapshot(asset,reservation,uploadId,assetId){
+export function assetSnapshot(asset,reservation,uploadId,assetId){
  if(asset?.id!==assetId||asset.passthrough!==reservation||asset.upload_id!==uploadId||asset.test!==true||
  (Array.isArray(asset.playback_ids)&&asset.playback_ids.some(p=>p?.policy!=='signed')))
  return {state:'unsafe',assetId,playbackId:null};

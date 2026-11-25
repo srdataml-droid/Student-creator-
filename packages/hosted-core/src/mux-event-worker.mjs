@@ -27,7 +27,7 @@ export async function processMuxEvent({queue,mux,store}){
     if(upload.id!==asset.upload_id||upload.asset_id!==asset.id||upload.new_asset_settings?.passthrough!==asset.passthrough)throw unavailable();
    }
    const reservation=upload.new_asset_settings?.passthrough;
-   if(!UUID.test(reservation??'')||upload.test===false||upload.new_asset_settings?.test===false)throw unavailable();
+   if(!UUID.test(reservation??'')||upload.test!==true||upload.new_asset_settings?.test===false)throw unavailable();
    await reconcileMuxUpload({mux,store,row:{id:reservation},upload});
    outcome='processed';
   }
