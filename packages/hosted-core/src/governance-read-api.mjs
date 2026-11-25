@@ -46,6 +46,8 @@ async function readCommandBody(request){
  return body&&typeof body==='object'&&!Array.isArray(body)?body:null;
 }
 function commandFor(path){
+ if(path==='identity/manual-revalidation')return {name:'week7_manual_revalidation_queue',scope:'verification.review',allowed:['limit']};
+ if(/^identity\/requests\/[0-9a-f-]{36}\/review$/i.test(path))return {name:'week7_review_manual_identity',scope:'verification.review',allowed:['decision','note','days']};
  if(path==='copyright/claims')return {name:'week7_copyright_queue',scope:'copyright.review',allowed:['limit']};
  if(/^copyright\/claims\/[0-9a-f-]{36}\/review$/i.test(path))return {name:'week7_review_copyright',scope:'copyright.review',allowed:['decision','note']};
  if(path==='finance/report')return {name:'week7_finance_report',scope:'finance.review',allowed:['from','to']};
@@ -81,6 +83,9 @@ function validateCommand(cmd,body,path,actorId){
    return UUID.test(path.split('/')[2])&&['under_review','approved_for_manual_fulfilment','declined'].includes(body.decision)&&hasText(body.note,10,500)?{_actor:actorId,_id:path.split('/')[2],_decision:body.decision,_note:body.note.trim()}:null;
   case 'week7_copyright_queue':
   case 'week7_privacy_queue':
+  case 'week7_review_manual_identity':
+   return UUID.test(path.split('/')[2])&&['approve','reject','revoke'].includes(body.decision)&&hasText(body.note,10,500)&&(body.decision==='approve'?Number.isInteger(body.days)&&body.days>=1&&body.days<=730:body.days===undefined)?{_actor:actorId,_id:path.split('/')[2],_decision:body.decision,_note:body.note.trim(),_days:body.days??null}:null;
+  case 'week7_manual_revalidation_queue':
   case 'week7_identity_queue':
   case 'week7_identity_revalidation_queue':
   case 'week7_institution_appeal_queue':
@@ -173,6 +178,8 @@ export function createHostedGovernanceHandler({getEnv=()=>process.env,fetcher=fe
        const safeCodes={
          COPYRIGHT_REVIEW_CONFLICT:[409,'COPYRIGHT_REVIEW_CONFLICT'],
          PRIVACY_REVIEW_CONFLICT:[409,'PRIVACY_REVIEW_CONFLICT'],
+         IDENTITY_REVIEW_CONFLICT:[409,'IDENTITY_REVIEW_CONFLICT'],
+         IDENTITY_POLICY_REQUIRED:[403,'IDENTITY_POLICY_REQUIRED'],
          APPEAL_ALREADY_REVIEWED:[409,'APPEAL_ALREADY_REVIEWED'],
          LEARNING_REVIEW_CONFLICT:[409,'LEARNING_REVIEW_CONFLICT'],
          GOVERNANCE_RATE_LIMIT:[429,'GOVERNANCE_RATE_LIMIT'],
