@@ -9,7 +9,7 @@ CREATE TABLE public.mux_event_details (
  FOREIGN KEY(provider,event_id) REFERENCES public.webhook_events(provider,stable_event_key) ON DELETE RESTRICT
 );
 ALTER TABLE public.mux_event_details ENABLE ROW LEVEL SECURITY;
-REVOKE ALL ON public.mux_event_details FROM PUBLIC,anon,authenticated;
+REVOKE ALL ON public.mux_event_details FROM PUBLIC,anon,authenticated,service_role;
 GRANT SELECT,INSERT ON public.mux_event_details TO service_role;
 
 CREATE FUNCTION public.record_verified_mux_delivery(_event_id text,_digest text,_event_type text,_resource_id text)
