@@ -61,3 +61,6 @@ Account and recipient-only message reports, duplicate and hourly quota checks, a
 
 ## Seventeenth increment: hosted message paging
 Read-only invoker RPCs for paged history and inbox, bounded result sizes, actor-owned keyset cursors, private unread counts from RLS-visible recipient acknowledgments, and own contact-block indicator. Tests reject cross-pair cursors and unrelated history reads. Existing local paging implementation supplied the reference; no external code copied. Exact-head CI pending; hosted runtime remains unwired.
+
+## Eighteenth increment: hosted authenticated data adapter
+Server-only factory reuses Week 1 verified bearer/session/eligibility boundary and sends only publishable key + user token to fixed Supabase Data API operations. Strict per-operation fields, bounded inputs/output, no arbitrary route or service role, sanitized errors. Feed, creator discovery/follows, inbox/thread, messages/read/block, communities, comments/replies, likes, notifications, account/message report paths. Tests are injected transport tests, not actual Supabase Auth. The Next.js hosted session route and live staging migration remain blocked on shared Week 1/2 session and review gates; staff adapter integration is separate. No external code copied.
