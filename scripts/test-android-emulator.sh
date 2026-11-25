@@ -97,7 +97,8 @@ done
 [[ "$booted" == true ]]
 timeout 60 "$adb" -s "$serial" install apps/android/app/build/outputs/apk/debug/app-debug.apk
 timeout 60 "$adb" -s "$serial" install apps/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
-timeout 45 "$adb" -s "$serial" shell am instrument -w org.worthkind.studentcreators.internal.test/org.worthkind.studentcreators.CatalogSmokeInstrumentation | tee "$tmp/result.txt"
-grep -Fq 'ANDROID_CATALOG_SMOKE_PASS' "$tmp/result.txt"
-grep -Fq 'INSTRUMENTATION_CODE: -1' "$tmp/result.txt"
+# Raw instrumentation output exposes the platform result code as well as the
+# explicit assertion marker. Do not accept the marker alone.
+timeout 60 "$adb" -s "$serial" shell am instrument -w -r org.worthkind.studentcreators.internal.test/org.worthkind.studentcreators.CatalogSmokeInstrumentation | tee "$tmp/result.txt"
+bash scripts/verify-android-instrumentation-result.sh "$tmp/result.txt"
 echo "Android emulator instrumentation passed (synthetic, unconfigured native app only)."
