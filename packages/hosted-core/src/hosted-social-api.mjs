@@ -32,6 +32,8 @@ function mapError(status,data){
 }
 function operation(name,input,actor){
  switch(name){
+ case 'draftPrice':{const b=shape(input,['contentId']);return rpc('get_draft_price',{_content:id(b.contentId)});}
+ case 'setDraftPrice':{const b=shape(input,['contentId','amountKobo']);if(!Number.isSafeInteger(b.amountKobo)||b.amountKobo<0||b.amountKobo>1000000000||(b.amountKobo>0&&b.amountKobo<20000))throw fault('INVALID_INPUT',422);return rpc('set_draft_price',{_content:id(b.contentId),_amount:b.amountKobo});}
  case 'myPayouts':shape(input,[]);return rpc('creator_payout_request',{_action:'list'});
  case 'requestPayout':{const b=shape(input,['amountKobo','requestKey']);if(!Number.isSafeInteger(b.amountKobo)||b.amountKobo<1)throw fault('INVALID_INPUT',422);return rpc('creator_payout_request',{_action:'request',_amount:b.amountKobo,_key:key(b.requestKey)});}
  case 'cancelPayout':{const b=shape(input,['requestId']);return rpc('creator_payout_request',{_action:'cancel',_id:id(b.requestId)});}
