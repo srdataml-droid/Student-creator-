@@ -5,9 +5,9 @@ SELECT set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111'
 SELECT public.social_message_action('preference',_enabled=>true);
 SELECT set_config('request.jwt.claim.sub','22222222-2222-4222-8222-222222222222',true);
 SELECT public.social_message_action('send','11111111-1111-4111-8111-111111111111','Revocation fixture message');
-DO $ BEGIN IF (SELECT count(*) FROM public.social_messages)<>1 THEN RAISE EXCEPTION 'active session cannot read own history'; END IF;
+DO $$ BEGIN IF (SELECT count(*) FROM public.social_messages)<>1 THEN RAISE EXCEPTION 'active session cannot read own history'; END IF;
  IF public.social_session_state()->>'student'<>'true' OR public.social_session_state()->>'admin'<>'false' OR public.social_session_state()->>'userId'<>'22222222-2222-4222-8222-222222222222' THEN RAISE EXCEPTION 'student state incorrect'; END IF;
-END $;
+END $$;
 SELECT set_config('request.jwt.claim.session_id','11111111-1111-4111-8111-111111111111',true);
 DO $$ BEGIN
  IF student_social_private.active_session() OR (SELECT count(*) FROM public.social_messages)<>0 THEN RAISE EXCEPTION 'foreign session accepted'; END IF;
@@ -36,7 +36,7 @@ UPDATE public.platform_staff SET role='admin' WHERE user_id='99999999-9999-4999-
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','99999999-9999-4999-8999-999999999999',true);
 SELECT set_config('request.jwt.claim.session_id','99999999-9999-4999-8999-999999999999',true);
-DO $ BEGIN IF public.social_session_state()->>'admin'<>'true' OR public.social_session_state()->>'student'<>'false' THEN RAISE EXCEPTION 'admin role state incorrect'; END IF; END $;
+DO $$ BEGIN IF public.social_session_state()->>'admin'<>'true' OR public.social_session_state()->>'student'<>'false' THEN RAISE EXCEPTION 'admin role state incorrect'; END IF; END $$;
 SELECT public.social_report_queue('message');
 RESET ROLE;
 DELETE FROM auth.sessions WHERE user_id='99999999-9999-4999-8999-999999999999';

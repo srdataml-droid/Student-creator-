@@ -7,7 +7,7 @@ GRANT USAGE ON SCHEMA student_social_private TO authenticated;
 -- A valid signed JWT alone is insufficient after sign-out. Session lookup is
 -- scoped to the JWT subject, never caller-supplied user_id; no auth row is returned.
 CREATE FUNCTION student_social_private.active_session() RETURNS boolean
-LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path='' AS $
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path='' AS $$
 DECLARE actor uuid:=auth.uid(); claim text:=auth.jwt()->>'session_id'; sid uuid;
 BEGIN
  IF actor IS NULL OR claim IS NULL OR claim !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}
@@ -110,7 +110,7 @@ COMMIT;
  THEN RETURN false; END IF;
  sid:=claim::uuid;
  RETURN EXISTS(SELECT 1 FROM auth.sessions s WHERE s.id=sid AND s.user_id=actor AND (s.not_after IS NULL OR s.not_after>now()));
-END $;
+END $$;
 REVOKE ALL ON FUNCTION student_social_private.active_session() FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION student_social_private.active_session() TO authenticated;
 
