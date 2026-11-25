@@ -250,6 +250,23 @@ jobs:
           docker exec -i "$PG_CONTAINER" pg_restore -U postgres --dbname=campus_ci_restore --exit-on-error < "$dump"
           docker exec -i "$PG_CONTAINER" psql -U postgres -d campus_ci_restore -v ON_ERROR_STOP=1 < db/tests/backup_restore_assert.sql
 
+      - name: Restore production-shaped financial database into isolated CI target
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          export PGDATABASE=campus_ci_live
+          test -n "$PG_CONTAINER"
+          umask 077
+          dump="$RUNNER_TEMP/student-creators-live-schema.dump"
+          trap 'rm -f "$dump"' EXIT
+          psql -v ON_ERROR_STOP=1 -f db/tests/backup_restore_live_fixture.sql
+          docker exec "$PG_CONTAINER" pg_dump -U postgres -d campus_ci_live --format=custom > "$dump"
+          test -s "$dump"
+          docker exec "$PG_CONTAINER" createdb -U postgres campus_ci_live_restore
+          docker exec -i "$PG_CONTAINER" pg_restore -U postgres --dbname=campus_ci_live_restore --exit-on-error < "$dump"
+          docker exec -i "$PG_CONTAINER" psql -U postgres -d campus_ci_live_restore -v ON_ERROR_STOP=1 < db/tests/backup_restore_live_assert.sql
+
   browser-alpha:
     runs-on: ubuntu-24.04
     timeout-minutes: 15

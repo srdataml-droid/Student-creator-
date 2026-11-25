@@ -1,0 +1,21 @@
+BEGIN;
+DO $ BEGIN IF current_database()<>'campus_ci_live' THEN RAISE EXCEPTION 'Not disposable live CI source'; END IF; END $;
+INSERT INTO auth.users(id,email,email_confirmed_at) VALUES('f3010000-0000-4000-8000-000000000001','restore-creator@example.invalid',now()),('f3010000-0000-4000-8000-000000000002','restore-buyer@example.invalid',now()),('f3010000-0000-4000-8000-000000000003','restore-reviewer@example.invalid',now());
+INSERT INTO public.institutions(id,slug,name) VALUES('f3020000-0000-4000-8000-000000000001','fixture-restore-live-30','Synthetic');
+INSERT INTO public.departments(id,institution_id,slug,name) VALUES('f3030000-0000-4000-8000-000000000001','f3020000-0000-4000-8000-000000000001','fixture','Synthetic');
+INSERT INTO public.courses(id,institution_id,department_id,code,title) VALUES('f3040000-0000-4000-8000-000000000001','f3020000-0000-4000-8000-000000000001','f3030000-0000-4000-8000-000000000001','REST30','Synthetic');
+INSERT INTO public.student_profiles(user_id,institution_id,display_name,verified_at) SELECT id,'f3020000-0000-4000-8000-000000000001','Synthetic',now() FROM auth.users WHERE id IN ('f3010000-0000-4000-8000-000000000001','f3010000-0000-4000-8000-000000000002');
+INSERT INTO public.content_items(id,creator_id,institution_id,course_id,title,rights_attested_at,creation_key,creation_hash,status,reviewer_id,review_reason,reviewed_at,published_at) VALUES('f3050000-0000-4000-8000-000000000001','f3010000-0000-4000-8000-000000000001','f3020000-0000-4000-8000-000000000001','f3040000-0000-4000-8000-000000000001','Synthetic payment lesson',now(),'fixture-restore-live-30',repeat('a',64),'published','f3010000-0000-4000-8000-000000000003','Synthetic approval',now(),now());
+INSERT INTO public.mux_video_uploads(content_id,creator_id,state,upload_id,asset_id,playback_id) VALUES('f3050000-0000-4000-8000-000000000001','f3010000-0000-4000-8000-000000000001','ready','restore_live_upload','restore_live_asset','restore_live_playback');
+INSERT INTO public.content_assets(content_id,private_object_key,mime_type,bytes,processing_status,scan_verdict) VALUES('f3050000-0000-4000-8000-000000000001','private/mux/restore_live_asset','video/mp4',100,'ready','clean');
+INSERT INTO public.listings(content_id,creator_id,price_kobo) VALUES('f3050000-0000-4000-8000-000000000001','f3010000-0000-4000-8000-000000000001',20000);
+INSERT INTO auth.sessions(id,user_id,not_after) VALUES('f3060000-0000-4000-8000-000000000001','f3010000-0000-4000-8000-000000000002',now()+interval '1 hour');
+UPDATE live_finance.runtime_gate SET allow_checkout=true,terms_version='fixture-restore-v1',refund_policy_version='fixture-restore-refund',platform_fee_bps=1000,fee_bearer='platform',license_seconds=3600,approved_at=now() WHERE singleton;
+DO $$ DECLARE o jsonb; BEGIN
+ o:=public.reserve_live_paystack_checkout('f3010000-0000-4000-8000-000000000002','f3050000-0000-4000-8000-000000000001','fixture-restore-live-key','fixture-restore-v1');
+ IF o IS NULL THEN RAISE EXCEPTION 'Restore fixture order missing'; END IF;
+ PERFORM public.live_apply_charge(o->>'reference','9700022221',20000,'NGN','live','restore-buyer@example.invalid',100);
+ PERFORM public.enqueue_live_reversal_event('refund.processed','9700022222',repeat('d',64));
+END $$;
+UPDATE live_finance.runtime_gate SET allow_checkout=false WHERE singleton;
+COMMIT;
