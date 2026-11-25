@@ -157,3 +157,39 @@ jobs:
           done
           curl -fsS http://localhost:3000/api/local/health >/dev/null
           (cd apps/web && npx playwright test --config=playwright.payment.config.mjs --workers=1 --reporter=line)
+
+  browser-hosted-frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install locked frontend and disposable Chromium
+        working-directory: apps/web
+        run: |
+          npm ci --no-audit --no-fund
+          npm install --no-save --no-package-lock --no-audit --no-fund @playwright/test@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Hosted UI contract test without provider credentials
+        env:
+          APP_DATA_MODE: hosted
+          STUDENT_CREATORS_STAGING_APPROVED: 'true'
+          STUDENT_CREATORS_DISTRIBUTION_CHANNEL: independent_web
+          STUDENT_CREATORS_PAYSTACK_TEST_ENABLED: 'true'
+          STUDENT_CREATORS_REAL_PAYMENT_ENABLED: 'false'
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: |
+          set -euo pipefail
+          npm run build --prefix apps/web
+          npm run start --prefix apps/web -- -p 3000 > "$RUNNER_TEMP/hosted-ui-browser.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 45); do
+            if curl -fsS http://localhost:3000/sign-in >/dev/null 2>&1; then break; fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then cat "$RUNNER_TEMP/hosted-ui-browser.log"; exit 1; fi
+            sleep 1
+          done
+          curl -fsS http://localhost:3000/sign-in >/dev/null
+          (cd apps/web && npx playwright test e2e/hosted-frontend.spec.mjs --workers=1 --reporter=line --trace=retain-on-failure)
