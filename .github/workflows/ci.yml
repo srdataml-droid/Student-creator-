@@ -137,6 +137,29 @@ jobs:
             done
           )
 
+      - name: Verify hosted social contracts on disposable database
+        run: |
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-messaging.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-messaging.test.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-communities.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-communities.test.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-discovery.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-discovery.test.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-comments.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-comments.test.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-notifications.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-notifications.test.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-reports.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-reports.test.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-message-pages.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-message-pages.test.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-restrictions.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-restrictions.test.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-session-rls.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-session-rls.test.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-likes.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-likes.test.sql
+
       - name: Restore disposable PostgreSQL backup into isolated database
         env:
           PG_CONTAINER: ${{ job.services.postgres.id }}
