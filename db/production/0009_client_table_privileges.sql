@@ -1,0 +1,4 @@
+-- RLS controls row access, not TRUNCATE. Client roles do not need table DDL privileges.
+REVOKE TRUNCATE, REFERENCES, TRIGGER ON TABLE public.audit_events, public.content_assets, public.content_items, public.content_likes, public.course_topics, public.courses, public.departments, public.entitlements, public.institutions, public.ledger_entries, public.listings, public.orders, public.payment_attempts, public.platform_staff, public.student_profiles, public.verification_requests, public.webhook_events FROM PUBLIC, anon, authenticated;
+-- These tables intentionally have no client RLS policies; writes must use trusted backends.
+REVOKE ALL PRIVILEGES ON TABLE public.audit_events, public.content_assets, public.ledger_entries, public.payment_attempts, public.platform_staff, public.webhook_events FROM PUBLIC, anon, authenticated;
