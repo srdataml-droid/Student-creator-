@@ -30,6 +30,7 @@ export default function ClassRoom(){
  const [message,setMessage]=useState(''),[error,setError]=useState('');
  const [role,setRole]=useState(null),[camera,setCamera]=useState(false),[mic,setMic]=useState(false),[share,setShare]=useState(false);
  const [remoteCount,setRemoteCount]=useState(0);
+ const [attendance,setAttendance]=useState([]),[removeReasons,setRemoveReasons]=useState({});
  const mediaRef=useRef(null),roomRef=useRef(null),mounted=useRef(true);
  useEffect(()=>{
    mounted.current=true;
@@ -44,6 +45,21 @@ export default function ClassRoom(){
      if(mediaRef.current)mediaRef.current.replaceChildren();
    };
  },[classId]);
+ async function refreshAttendance(){
+   try{const result=await api('classes/'+classId+'/attendance');setAttendance(result.attendance||[]);}
+   catch(e){setError(friendlyError(e));}
+ }
+ async function removeAttendee(studentId){
+   const reason=(removeReasons[studentId]||'').trim();
+   if(reason.length<8){setError('Add a reason of at least eight characters.');return;}
+   setBusy(true);setError('');
+   try{
+     const response=await api('classes/'+classId+'/remove-participant',{method:'POST',body:{studentId,reason}});
+     setMessage(response.removal?.providerRemoved?'Participant removed from the live room.':'Participant access revoked; provider disconnection is queued for retry.');
+     await refreshAttendance();
+   }catch(e){setError(friendlyError(e));}
+   finally{setBusy(false);}
+ }
  function leave(){
    const room=roomRef.current;roomRef.current=null;
    if(room)room.disconnect();
@@ -91,6 +107,7 @@ export default function ClassRoom(){
      await room.connect(grant.url,grant.token,{autoSubscribe:true});
      if(!mounted.current){await room.disconnect();return;}
      roomRef.current=room;setRole(grant.role);setState('connected');
+     if(grant.role==='host')void refreshAttendance();
      setMessage(grant.role==='host'?'Connected as host. Turn on your microphone and camera when ready.':'Connected as a participant. You can hear and watch the host.');
    }catch(e){
      try{await room?.disconnect();}catch{}
@@ -148,7 +165,21 @@ export default function ClassRoom(){
        </div>
        <div ref={mediaRef} className="livekit-remote-tracks" aria-label="Remote class audio and video" style={{display:'grid',gridTemplateColumns:'repeat(auto-fit,minmax(220px,1fr))',gap:12,margin:'20px 0'}}/>
        {remoteCount===0&&<p className="status">{state==='connected'?(role==='host'?'No learners are publishing video. You control the class camera and microphone.':'Waiting for the host to share audio or video.'): 'Video and audio will appear after an authorized connection.'}</p>}
-       {isHost&&<p className="hint">You are the class host. Only the host may publish camera, microphone or screen in this first release.</p>}
+       {isHost&&<>
+         <p className="hint">You are the class host. Only the host may publish camera, microphone or screen in this first release.</p>
+         <div className="button-row"><button type="button" className="quiet-button" disabled={busy} onClick={refreshAttendance}>Refresh verified attendance</button></div>
+         <ul className="lesson-list" aria-label="Verified classroom attendance">
+           {attendance.map(item=><li className="lesson" key={item.studentId}>
+             <p className="hint">Student {item.studentId.slice(0,8)} · Verified provider joins: {item.providerEvents} · {item.enrollmentStatus}</p>
+             {item.enrollmentStatus==='enrolled'&&<>
+               <label htmlFor={'class-remove-'+item.studentId}>Reason for ending this student's participation</label>
+               <input id={'class-remove-'+item.studentId} value={removeReasons[item.studentId]||''} minLength={8} maxLength={500}
+                 onChange={e=>setRemoveReasons(x=>({...x,[item.studentId]:e.target.value}))}/>
+               <button type="button" className="quiet-button" disabled={busy} onClick={()=>removeAttendee(item.studentId)}>Remove participant</button>
+             </>}
+           </li>)}
+         </ul>
+       </>}
        {!isHost&&details.hostId&&<Link className="secondary-link" href={'/messages/'+details.hostId}>Ask the creator a question</Link>}
      </section>
    </>}
