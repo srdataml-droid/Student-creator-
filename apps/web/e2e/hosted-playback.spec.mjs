@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
 const actor='11111111-1111-4111-8111-111111111111',lesson='22222222-2222-4222-8222-222222222222';
-test('authorized HLS fixture loads real media in browser and stops on expired grant',async({browser})=>{
+test('authorized HLS fixture loads real media and tears down on route change',async({browser})=>{
  const dir=process.env.HLS_FIXTURE_DIR;
  if(!dir)throw Error('HLS_FIXTURE_DIR required');
  const context=await browser.newContext({baseURL:'http://localhost:3000',viewport:{width:390,height:844}});
