@@ -37,7 +37,7 @@ BEGIN
  DELETE FROM public.hosted_auth_attempts WHERE created_at<now()-interval '24 hours';
  IF (SELECT count(*) FROM public.hosted_auth_attempts WHERE created_at>now()-interval '1 hour')>=120
  OR (SELECT count(*) FROM public.hosted_auth_attempts WHERE kind=_kind AND request_digest=_digest AND created_at>now()-interval '1 hour')>=
- CASE WHEN _kind='refresh' THEN 30 ELSE 8 END THEN RETURN false; END IF;
+ (CASE WHEN _kind='refresh' THEN 30 ELSE 8 END) THEN RETURN false; END IF;
  INSERT INTO public.hosted_auth_attempts(kind,request_digest) VALUES(_kind,_digest);
  RETURN true;
 END $$;
@@ -64,7 +64,7 @@ BEGIN
  PERFORM pg_advisory_xact_lock(7821172026);
  IF _eligible IS NOT TRUE THEN RETURN true; END IF;
  UPDATE public.hosted_recovery_jobs SET state='uncertain',lease_id=NULL
- WHERE state='claimed' AND claimed_at<now()-interval '5 minutes';
+ WHERE (state='claimed' AND claimed_at<now()-interval '5 minutes') OR (state='pending' AND created_at<=now()-interval '10 minutes');
  IF EXISTS(SELECT 1 FROM public.hosted_recovery_jobs WHERE recipient_digest=_recipient
  AND (state IN ('pending','claimed') OR created_at>now()-interval '5 minutes'))
  OR (SELECT count(*) FROM public.hosted_recovery_jobs WHERE recipient_digest=_recipient AND created_at>now()-interval '1 hour')>=3
