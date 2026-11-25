@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import {HostedLesson} from '../../HostedSocialWorkspace.jsx';
 import {notFound} from 'next/navigation';
 import {getLocalViewablePublishedLesson,getLocalPublicCreator,getLocalPublishedPricePreview,isLocalMode} from '../../../lib/local-public.mjs';
 import BookmarkButton from './BookmarkButton.jsx';
@@ -9,7 +10,7 @@ import PurchasePanel from './PurchasePanel.jsx';
 export const dynamic='force-dynamic';
 export default async function LessonPage({params}){
  const {lessonId}=await params;
- if(!isLocalMode())return notFound();
+ if(!isLocalMode())return <HostedLesson lessonId={lessonId}/>;
  let lesson;try{lesson=await getLocalViewablePublishedLesson(lessonId);}catch(error){
    if(error?.status===404)return notFound();
    if(error?.status===402){
