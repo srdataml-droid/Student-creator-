@@ -49,6 +49,15 @@ export function createHostedPaystackWebhook({store,signingSecrets,domain='test',
   if(request.method!=='POST')return json(405,{error:'METHOD_NOT_ALLOWED'});
   let raw,event;
   try{raw=await readRaw(request,1048576);const v1=request.headers.get('paystack-signature');event=v1?decodeVerifiedPaystackWebhookV1(raw,v1,signingSecrets):decodeVerifiedLegacyWebhook(raw,request.headers.get('x-paystack-signature'),legacySecrets);}catch{return json(401,{error:'INVALID_SIGNATURE_OR_BODY'});}
+  if(domain==='live'&&['transfer.success','transfer.failed','transfer.reversed'].includes(event.event)){
+   const d=event.data;
+   // Other merchants' or manually-created transfers are not application jobs.
+   if(d?.domain!=='live'||typeof d.reference!=='string')return json(400,{error:'INVALID_TRANSFER_EVENT'});
+   if(!/^pt_[a-f0-9]{32}$/.test(d.reference))return json(200,{received:true,ignored:true});
+   if(typeof store.recordTransferEvent!=='function')return json(503,{error:'TRANSFER_INBOX_UNAVAILABLE'});
+   try{const result=await store.recordTransferEvent(d.reference,event.event,createHash('sha256').update(raw).digest('hex'));if(result==='unknown')return json(200,{received:true,ignored:true});if(!['accepted','duplicate'].includes(result))throw unavailable();return json(200,{received:true});}
+   catch{return json(503,{error:'TRANSFER_INBOX_UNAVAILABLE'});}
+  }
   if(domain==='live'&&reversalEvents.has(event.event)){
    const digest=createHash('sha256').update(raw).digest('hex');
    const d=event.data;

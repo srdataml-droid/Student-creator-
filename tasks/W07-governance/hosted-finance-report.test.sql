@@ -121,6 +121,8 @@ DO $ DECLARE r uuid;q jsonb;lease uuid;ref text;c uuid:='9b000000-0000-4000-8000
  IF public.claim_payout_transfer(false) IS NOT NULL THEN RAISE EXCEPTION 'Dispatch gate bypass';END IF;
  q:=public.claim_payout_transfer(true);lease:=(q->>'lease')::uuid;ref:=q->>'reference';
  IF q->>'dispatch' IS DISTINCT FROM 'true' OR (q->>'id')::uuid IS DISTINCT FROM r OR lease IS NULL OR public.claim_payout_transfer(true) IS NOT NULL THEN RAISE EXCEPTION 'Transfer lease invalid';END IF;
+ IF jsonb_array_length(public.week7_payout_transfer_queue(a,10)->'items')<1 THEN RAISE EXCEPTION 'Transfer missing from review queue';END IF;
+ IF public.enqueue_payout_transfer_event(ref,'transfer.success',repeat('c',64))<>'accepted' THEN RAISE EXCEPTION 'Transfer wakeup not recorded';END IF;
  IF public.record_payout_transfer_observation(r,gen_random_uuid(),'success','TRF_fixture1234',100) OR NOT public.record_payout_transfer_observation(r,lease,'unknown',NULL,NULL) THEN RAISE EXCEPTION 'Transfer observation invalid';END IF;
  PERFORM public.week7_manage_payout_transfer(a,r,'recheck');
  q:=public.claim_payout_transfer(true);
@@ -131,7 +133,7 @@ DO $ DECLARE r uuid;q jsonb;lease uuid;ref text;c uuid:='9b000000-0000-4000-8000
  PERFORM public.week7_manage_payout_transfer(a,r,'confirm_paid','fixture-bank-confirmation');
  q:=live_finance.payout_balance(c);
  IF q->>'paidKobo'<>'10000' OR q->>'reservedKobo'<>'0' OR q->>'availableKobo'<>'17000' THEN RAISE EXCEPTION 'Paid reconciliation mismatch';END IF;
- PERFORM public.week7_manage_payout_transfer(a,r,'recheck');
+ IF public.enqueue_payout_transfer_event(ref,'transfer.reversed',repeat('a',64))<>'accepted' OR public.enqueue_payout_transfer_event(ref,'transfer.reversed',repeat('b',64))<>'duplicate' THEN RAISE EXCEPTION 'Transfer event replay invalid';END IF;
  q:=public.claim_payout_transfer(false);
  IF NOT public.record_payout_transfer_observation(r,(q->>'lease')::uuid,'reversed','TRF_fixture1234',100) THEN RAISE EXCEPTION 'Late reversal not recorded';END IF;
  IF live_finance.payout_balance(c)->>'availableKobo'<>'17000' THEN RAISE EXCEPTION 'Unconfirmed return released funds';END IF;

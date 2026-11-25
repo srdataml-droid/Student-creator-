@@ -173,3 +173,5 @@ test('payout transfer authorization and bank review are finance scoped and rejec
  const f=simulate({roles:['finance_reviewer']});assert.equal((await send(f,{action:'authorize'})).status,200);assert.ok(f.calls.some(c=>c.url.endsWith('/rpc/week7_manage_payout_transfer')));
  assert.equal((await send(f,{action:'confirm_paid'})).status,422);assert.equal((await send(f,{action:'authorize',amount:2000})).status,422);assert.equal((await send(simulate({roles:['privacy_reviewer']}),{action:'authorize'})).status,403);
 });
+
+test('transfer finance queue supports bounded review and rejects other roles',async()=>{const send=(x,body)=>x.handler(new Request('https://app.example.test/api/governance/finance/payout-transfers',{method:'POST',headers:{authorization:'Bearer '+goodToken,'content-type':'application/json',origin:'https://app.example.test'},body:JSON.stringify(body)}),{segments:['finance','payout-transfers']});const f=simulate({roles:['finance_reviewer']});assert.equal((await send(f,{limit:20})).status,200);assert.equal((await send(f,{limit:101})).status,422);assert.equal((await send(simulate({roles:['privacy_reviewer']}),{})).status,403);});

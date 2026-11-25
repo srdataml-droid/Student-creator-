@@ -24,6 +24,7 @@ export function createLivePaystackRuntime({env=process.env,fetcher=fetch}={}){
   return JSON.parse(await readBoundedGatewayResponse(r,65536,unavailable));
  }
  const store={
+  recordTransferEvent:(reference,event,digest)=>rpc('enqueue_payout_transfer_event',{_reference:reference,_event:event,_digest:digest}),
   recordReversal:(event,id,digest)=>rpc('enqueue_live_reversal_event',{_event:event,_id:id,_digest:digest}),
   claimReversal:()=>rpc('claim_live_reversal_event',{}),
   finishReversal:(event,id,lease,reason)=>rpc('finish_live_reversal_event',{_event:event,_id:id,_lease:lease,_reason:reason}),
