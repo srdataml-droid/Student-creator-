@@ -5,7 +5,7 @@ export function providerId(value){
  const s=typeof value==='number'&&Number.isSafeInteger(value)?String(value):typeof value==='string'?value:'';
  return /^[1-9][0-9]{0,19}$/.test(s)?s:null;
 }
-const referenceId=/^(lc_[0-9a-f]{32}):[0-9a-f]{64}$/;
+const referenceId=/^((?:lc|ll)_[0-9a-f]{32}):[0-9a-f]{64}$/;
 export function validReversalId(event,id){return typeof id==='string'&&(providerId(id)===id||(event==='refund.processed'&&referenceId.test(id)));}
 export function createLiveReversalProvider({key,fetcher=fetch}={}){
  if(!/^sk_live_[A-Za-z0-9]+$/.test(key??''))throw fail();
@@ -55,7 +55,7 @@ export async function processLiveReversal({store,provider}){
  if(!tx)return finish('PROVIDER_EVIDENCE_REVIEW');
  const receipt=await store.reversalReceipt(tx);
  if(!receipt)return finish('RECEIPT_NOT_FOUND');
- if(receipt.domain!=='live'||receipt.transactionId!==tx||!Number.isSafeInteger(receipt.amountKobo)||!/^lc_[0-9a-f]{32}$/.test(receipt.reference??''))return finish('PROVIDER_EVIDENCE_REVIEW');
+ if(receipt.domain!=='live'||receipt.transactionId!==tx||!Number.isSafeInteger(receipt.amountKobo)||!/^(lc|ll)_[0-9a-f]{32}$/.test(receipt.reference??''))return finish('PROVIDER_EVIDENCE_REVIEW');
  if(referenceId.test(e.id)&&(d.verifiedReference!==receipt.reference||d.verifiedReference!==e.id.split(':')[0]||d.verifiedChargeAmount!==receipt.amountKobo))return finish('PROVIDER_EVIDENCE_REVIEW');
  if(d.amount!==receipt.amountKobo)return finish(d.amount<receipt.amountKobo?'PARTIAL_REFUND_REVIEW':'PROVIDER_EVIDENCE_REVIEW');
  try{if(await store.applyRefund(e.id,e.lease,tx,d.amount)!==true)throw fail();}catch{return finish('REVERSAL_CONFLICT');}

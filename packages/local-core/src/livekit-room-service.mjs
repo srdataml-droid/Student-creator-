@@ -47,13 +47,21 @@ export function createLiveKitRoomService({url,apiKey,apiSecret,clock=()=>Date.no
     }catch{throw fail('LIVEKIT_PROVIDER_UNAVAILABLE');}
     if(allowMissing&&response.status===404)return {alreadyGone:true};
     if(!response.ok)throw fail('LIVEKIT_PROVIDER_UNAVAILABLE');
-    try{return await response.json();}catch{return {};}
+    try{return await response.json();}catch{throw fail('LIVEKIT_PROVIDER_UNAVAILABLE');}
   }
   return {
     async createRoom(name,{capacity=12}={}){
       if(!CLASS_ROOM.test(name)||!Number.isInteger(capacity)||capacity<2||capacity>50)
         throw fail('INVALID_ROOM_GRANT',422);
       return rpc('CreateRoom',{name,maxParticipants:capacity,emptyTimeout:900,departureTimeout:90},{roomCreate:true});
+    },
+    async getRoom(name){
+      if(!CLASS_ROOM.test(name))throw fail('INVALID_ROOM_GRANT',422);
+      const result=await rpc('ListRooms',{names:[name]},{roomList:true});
+      if(!result||typeof result!=='object'||Array.isArray(result))throw fail('LIVEKIT_PROVIDER_UNAVAILABLE');
+      const rooms=result.rooms??[];
+      if(!Array.isArray(rooms)||rooms.length>1||rooms.some(r=>r?.name!==name))throw fail('LIVEKIT_PROVIDER_UNAVAILABLE');
+      return rooms[0]??null;
     },
     async deleteRoom(name){
       if(!CLASS_ROOM.test(name))throw fail('INVALID_ROOM_GRANT',422);

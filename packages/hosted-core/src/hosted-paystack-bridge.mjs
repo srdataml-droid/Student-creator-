@@ -7,7 +7,7 @@ import {decodeVerifiedPaystackWebhookV1} from '../../payment-core/src/webhooks.m
 import {readDedicatedSupabaseRuntimeConfig,supabaseServerHeaders} from '../../content-core/src/supabase-runtime-config.mjs';
 const REF='jnkqmlbkkvccnxrgkpno',UUID=/^[0-9a-f-]{36}$/i,REFERENCE=/^sc_[0-9a-f]{32}$/,TX=/^[A-Za-z0-9_-]{1,128}$/;
 const unavailable=()=>new Error('Hosted payment unavailable');
-const refPattern=domain=>domain==='live'?/^lc_[0-9a-f]{32}$/:REFERENCE;
+const refPattern=domain=>domain==='live'?/^(lc|ll)_[0-9a-f]{32}$/:REFERENCE;
 const json=(status,data)=>Response.json(data,{status,headers:{'cache-control':'no-store','referrer-policy':'no-referrer'}});
 function checkoutUrl(value){if(typeof value!=='string'||/[\\\s]/.test(value))throw unavailable();const u=new URL(value);if(u.protocol!=='https:'||!['checkout.paystack.com','paystack.com'].includes(u.hostname)||u.username||u.password||u.port||u.hash||u.href.length>2048)throw unavailable();return u.href;}
 async function readRaw(request,cap){

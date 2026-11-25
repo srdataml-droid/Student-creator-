@@ -98,8 +98,8 @@ function operation(name,input,actor){
  }
  case 'createClass':{
   const b=shape(input,['courseId','startsAt','endsAt','capacity','title','description','creationKey','priceKobo']);
-  if(b.priceKobo!==undefined&&b.priceKobo!==0)throw fault('INVALID_INPUT',422);
-  return rpc('hosted_learning_action',{_action:'create_class',_input:{courseId:id(b.courseId),startsAt:string(b.startsAt,20,35),endsAt:string(b.endsAt,20,35),capacity:integer(b.capacity,50,12),title:string(b.title,5,120),description:string(b.description??'',0,1200),creationKey:key(b.creationKey),priceKobo:0}});
+  if(b.priceKobo!==undefined&&(!Number.isSafeInteger(b.priceKobo)||b.priceKobo<0||b.priceKobo>1000000000||(b.priceKobo>0&&b.priceKobo<20000)))throw fault('INVALID_INPUT',422);
+  return rpc('hosted_learning_action',{_action:'create_class',_input:{courseId:id(b.courseId),startsAt:string(b.startsAt,20,35),endsAt:string(b.endsAt,20,35),capacity:integer(b.capacity,50,12),title:string(b.title,5,120),description:string(b.description??'',0,1200),creationKey:key(b.creationKey),priceKobo:b.priceKobo??0}});
  }
  case 'enrollClass':case 'withdrawClass':case 'openClass':case 'completeClass':{
   const b=shape(input,['classId']);return rpc('hosted_learning_action',{_action:{enrollClass:'enroll',withdrawClass:'withdraw',openClass:'open',completeClass:'complete'}[name],_input:{classId:id(b.classId)}});
@@ -125,6 +125,7 @@ function operation(name,input,actor){
  case 'startHelp':case 'submitHelp':case 'completeHelp':case 'cancelHelp':case 'disputeHelp':{
   const b=shape(input,name==='disputeHelp'?['requestId','reason']:['requestId']);return rpc('hosted_learning_action',{_action:{startHelp:'start_help',submitHelp:'submit_help',completeHelp:'complete_help',cancelHelp:'cancel_help',disputeHelp:'dispute_help'}[name],_input:{requestId:id(b.requestId),...(name==='disputeHelp'?{reason:string(b.reason,10,1000)}:{})}});
  }
+ case 'readLearningNotification':{const b=shape(input,['id']);return rpc('hosted_read_learning_notification',{_id:id(b.id)});}
  case 'learningNotifications':{const b=shape(input,['limit']);return select('learning_notifications','id,kind,resource_id,body,created_at,seen_at',{order:'created_at.desc,id.desc',limit:String(integer(b.limit,100,50))});}
  case 'notifications':{
   const b=shape(input,['limit']);return select('social_notifications','id,kind,target_id,created_at,read_at',{order:'created_at.desc,id.desc',limit:String(integer(b.limit,100,100))});

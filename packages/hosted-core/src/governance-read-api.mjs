@@ -13,7 +13,7 @@ import {readDedicatedSupabaseRuntimeConfig,supabaseServerHeaders} from '../../co
 import {createCurrentSupabaseAuth} from './supabase-current-auth.mjs';
 import {readBoundedGatewayResponse} from '../../payment-core/src/bounded-response.mjs';
 const GOVERNANCE_ROLES=Object.freeze({"governance_owner":["staff.assign","dashboard.read","audit.read","verification.review","content.moderate","community.moderate","copyright.review","privacy.review","finance.review","incident.read","incident.write","retention.propose","retention.review"],"verification_reviewer":["dashboard.read","verification.review"],"content_moderator":["dashboard.read","content.moderate","community.moderate","copyright.review"],"privacy_reviewer":["dashboard.read","privacy.review","retention.propose"],"finance_reviewer":["dashboard.read","finance.review"],"incident_responder":["dashboard.read","incident.read","incident.write"],"auditor":["dashboard.read","audit.read","incident.read"]});
-const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const BEARER=/^Bearer ([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/;
 const HEADERS={'cache-control':'no-store','referrer-policy':'no-referrer','x-content-type-options':'nosniff'};
 const respond=(status,data)=>Response.json(data,{status,headers:HEADERS});
@@ -46,6 +46,9 @@ async function readCommandBody(request){
  return body&&typeof body==='object'&&!Array.isArray(body)?body:null;
 }
 function commandFor(path){
+ if(path==='learning/disputes'||path==='learning/refunds')return {name:'week7_learning_review_queue',scope:path.endsWith('disputes')?'content.moderate':'finance.review',allowed:['limit']};
+ if(/^learning\/disputes\/[0-9a-f-]{36}\/resolve$/i.test(path))return {name:'week7_resolve_learning_dispute',scope:'content.moderate',allowed:['outcome','note']};
+ if(/^learning\/refunds\/[0-9a-f-]{36}\/record$/i.test(path))return {name:'week7_record_learning_refund_review',scope:'finance.review',allowed:['note']};
  if(path==='incidents')return {name:'week7_open_incident',scope:'incident.write',allowed:['category','severity','summary']};
  if(path==='retention')return {name:'week7_propose_retention',scope:'retention.propose',allowed:['dataset','days','rationale']};
  if(path==='roles/assign')return {name:'week7_assign_staff_role',scope:'staff.assign',allowed:['userId','role']};
@@ -60,6 +63,12 @@ function validateCommand(cmd,body,path,actorId){
  if(Object.keys(body).some(key=>!cmd.allowed.includes(key)))return null;
  const id=path.split('/')[1];
  switch(cmd.name){
+  case 'week7_learning_review_queue':
+   return (body.limit===undefined||Number.isInteger(body.limit)&&body.limit>=1&&body.limit<=100)?{_actor:actorId,_kind:path.endsWith('disputes')?'disputes':'refunds',_limit:body.limit??50}:null;
+  case 'week7_resolve_learning_dispute':
+   return UUID.test(path.split('/')[2])&&['resume_guidance','cancel_service'].includes(body.outcome)&&hasText(body.note,10,500)?{_actor:actorId,_id:path.split('/')[2],_outcome:body.outcome,_note:body.note.trim()}:null;
+  case 'week7_record_learning_refund_review':
+   return UUID.test(path.split('/')[2])&&hasText(body.note,10,500)?{_actor:actorId,_id:path.split('/')[2],_note:body.note.trim()}:null;
   case 'week7_open_incident':
    return CATEGORIES.has(body.category)&&SEVERITIES.has(body.severity)&&hasText(body.summary,20,1000)?
      {_actor:actorId,_category:body.category,_severity:body.severity,_summary:body.summary.trim()}:null;
@@ -138,6 +147,7 @@ export function createHostedGovernanceHandler({getEnv=()=>process.env,fetcher=fe
      if(!res.ok){
        const detail=await res.json().catch(()=>({}));
        const safeCodes={
+         LEARNING_REVIEW_CONFLICT:[409,'LEARNING_REVIEW_CONFLICT'],
          GOVERNANCE_RATE_LIMIT:[429,'GOVERNANCE_RATE_LIMIT'],
          INCIDENT_STATE_CONFLICT:[409,'INVALID_STATE'],
          LAST_OWNER_REQUIRED:[409,'LAST_OWNER_REQUIRED'],
