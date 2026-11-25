@@ -55,6 +55,12 @@ export function createLiveKitRoomService({url,apiKey,apiSecret,clock=()=>Date.no
         throw fail('INVALID_ROOM_GRANT',422);
       return rpc('CreateRoom',{name,maxParticipants:capacity,emptyTimeout:900,departureTimeout:90},{roomCreate:true});
     },
+    async getRoom(name){
+      if(!CLASS_ROOM.test(name))throw fail('INVALID_ROOM_GRANT',422);
+      const result=await rpc('ListRooms',{names:[name]},{roomList:true});
+      if(!Array.isArray(result?.rooms)||result.rooms.length>1||result.rooms.some(r=>r?.name!==name))throw fail('LIVEKIT_PROVIDER_UNAVAILABLE');
+      return result.rooms[0]??null;
+    },
     async deleteRoom(name){
       if(!CLASS_ROOM.test(name))throw fail('INVALID_ROOM_GRANT',422);
       return rpc('DeleteRoom',{room:name},{roomCreate:true},{allowMissing:true});

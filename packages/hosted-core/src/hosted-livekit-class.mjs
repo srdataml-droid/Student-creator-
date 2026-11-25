@@ -31,11 +31,14 @@ export function createHostedClassTokenHandler({auth,loadGrant,markReady,issuer,r
   try{
    const user=await auth.getUser(token);if(!user)return json(401,{error:'AUTH_REQUIRED'});
    const grant=await loadGrant(user.id,classId);if(!validGrant(grant,user.id,classId,clock))return json(403,{error:'CLASS_ACCESS_FORBIDDEN'});
-   if(grant.role==='host'&&!grant.ready){
-    const room=await roomService.createRoom(grant.room,{capacity:grant.capacity});
-    if(room?.name!==grant.room)throw unavailable();
+   let room=grant.ready?await roomService.getRoom(grant.room):null;
+   if(!room&&grant.role!=='host')return json(409,{error:'CLASS_ROOM_NOT_READY'});
+   if(!room){
+    room=await roomService.createRoom(grant.room,{capacity:grant.capacity});
+    if(room?.name!==grant.room||(room.maxParticipants??room.max_participants)!==grant.capacity)throw unavailable();
     const fresh=await auth.getUser(token);if(fresh?.id!==user.id||await markReady(user.id,classId)!==true)return json(403,{error:'CLASS_ACCESS_FORBIDDEN'});
    }
+   if(room?.name!==grant.room||(room.maxParticipants??room.max_participants)!==grant.capacity)throw unavailable();
    const currentUser=await auth.getUser(token);if(currentUser?.id!==user.id)return json(401,{error:'AUTH_REQUIRED'});
    const current=await loadGrant(user.id,classId);
    if(!validGrant(current,user.id,classId,clock)||current.ready!==true||current.role!==grant.role||current.capacity!==grant.capacity)return json(403,{error:'CLASS_ACCESS_FORBIDDEN'});
@@ -48,7 +51,7 @@ export function buildHostedClassTokenRoute({getEnv=()=>process.env,fetcher=fetch
  return async(request,context)=>{try{return await createHostedClassTokenHandler(createHostedLearningRuntime({env:getEnv(),fetcher}))(request,context);}catch{return json(503,{error:'LIVEKIT_UNAVAILABLE'});}};
 }
 async function rawBody(request){const reader=request.body?.getReader();if(!reader)throw Error('INVALID_BODY');const parts=[];let bytes=0;try{while(true){const item=await reader.read();if(item.done)break;bytes+=item.value.byteLength;if(bytes>262144)throw Error('BODY_TOO_LARGE');parts.push(Buffer.from(item.value));}return Buffer.concat(parts);}catch(e){void reader.cancel().catch(()=>{});throw e;}finally{reader.releaseLock();}}
-export function createHostedLearningWebhook({roomService,recordPresence}={}){
+export function createHostedLearningWebhook({roomService,recordPresence,loadGrant,clock=()=>Date.now()}={}){
  return async request=>{
   if(request.method!=='POST')return json(405,{error:'METHOD_NOT_ALLOWED'});
   if(Number(request.headers.get('content-length')||0)>262144)return json(413,{error:'BODY_TOO_LARGE'});
@@ -58,15 +61,15 @@ export function createHostedLearningWebhook({roomService,recordPresence}={}){
   if(!kind)return json(200,{accepted:true});
   const room=event.room?.name,identity=event.participant?.identity,id=event.id;
   if(typeof room!=='string'||!room.startsWith('wk-class-')||!UUID.test(room.slice(9))||typeof identity!=='string'||!identity.startsWith('student-')||!UUID.test(identity.slice(8))||typeof id!=='string'||id.length<8||id.length>128)return json(200,{accepted:true});
-  try{await recordPresence(id,room.slice(9),identity.slice(8),kind);return json(200,{accepted:true});}catch{return json(503,{error:'PRESENCE_UNAVAILABLE'});}
+  try{const recorded=await recordPresence(id,room.slice(9),identity.slice(8),kind);if(recorded===false&&kind==='joined'&&loadGrant&&!(await loadGrant(identity.slice(8),room.slice(9))))await roomService.removeParticipant(room,identity,{revokeTokenTs:Math.floor(clock()/1000)});return json(200,{accepted:true});}catch{return json(503,{error:'PRESENCE_UNAVAILABLE'});}
  };
 }
 export function buildHostedLearningWebhook({getEnv=()=>process.env,fetcher=fetch}={}){return async request=>{try{return await createHostedLearningWebhook(createHostedLearningRuntime({env:getEnv(),fetcher}))(request);}catch{return json(503,{error:'LIVEKIT_UNAVAILABLE'});}};}
-export async function processHostedLearningCleanup({claimCleanup,finishCleanup,roomService}){
+export async function processHostedLearningCleanup({claimCleanup,finishCleanup,roomService,clock=()=>Date.now()}){
  const job=await claimCleanup();if(job===null)return {state:'empty'};
  if(!UUID.test(job?.classId??'')||!UUID.test(job?.lease??'')||job.room!=='wk-class-'+job.classId||!['room','participant'].includes(job.kind))throw unavailable();
  let ok=false;
- try{if(job.kind==='room')await roomService.deleteRoom(job.room);else{if(!UUID.test(job.studentId??'')||job.identity!=='student-'+job.studentId||!Number.isSafeInteger(job.revokeTokenTs)||job.revokeTokenTs<1)throw unavailable();await roomService.removeParticipant(job.room,job.identity,{revokeTokenTs:job.revokeTokenTs});}ok=true;}catch{}
+ try{if(job.kind==='room')await roomService.deleteRoom(job.room);else{if(!UUID.test(job.studentId??'')||job.identity!=='student-'+job.studentId||!Number.isSafeInteger(job.revokeTokenTs)||job.revokeTokenTs<1)throw unavailable();await roomService.removeParticipant(job.room,job.identity,{revokeTokenTs:Math.floor(clock()/1000)});}ok=true;}catch{}
  if(await finishCleanup(job,ok)!==true)throw unavailable();
  return {state:ok?'processed':'retry'};
 }
