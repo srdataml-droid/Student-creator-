@@ -1,9 +1,9 @@
-import {readSupabaseRuntimeConfig} from '../../../packages/content-core/src/supabase-runtime-config.mjs';
+import {readDedicatedSupabaseRuntimeConfig} from '../../../packages/content-core/src/supabase-runtime-config.mjs';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const fields='id,creator_id,institution_id,course_id,title,description,preview_text,published_at,status';
 const clean=(v,max)=>typeof v==='string'?v.slice(0,max):'';
 function reader(env,fetcher){
- const config=readSupabaseRuntimeConfig(env);
+ const config=readDedicatedSupabaseRuntimeConfig(env);
  if(!config)throw Error('CATALOG_NOT_CONFIGURED');
  return async(table,params)=>{
   const url=new URL('/rest/v1/'+table,config.url);
