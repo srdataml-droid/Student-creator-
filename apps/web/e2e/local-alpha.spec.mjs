@@ -152,6 +152,31 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     });
     expect(deniedDraft.status()).toBe(403);
 
+    // Real browser appeal workflow: a review request must never grant eligibility.
+    await creatorPage.goto('/verification');
+    await expect(creatorPage.getByRole('heading',{name:'Awaiting manual student review'})).toBeVisible();
+    const appealReason='Please independently review the synthetic campus membership '+suffix;
+    await creatorPage.locator('#verificationReason').fill(appealReason);
+    await creatorPage.getByRole('button',{name:'Request independent review'}).click();
+    await expect(creatorPage.getByText('Your review request was recorded privately.')).toBeVisible();
+    const {appeals}=await readJson(await creator.request.get('/api/local/me/verification-appeals'));
+    expect(appeals.length).toBe(1);
+    const appealId=appeals[0].caseId;
+    expect((await viewer.request.get('/api/local/admin/verification-appeals')).status()).toBe(403);
+    expect((await readJson(await viewer.request.get('/api/local/me/verification-appeals'))).appeals).toEqual([]);
+    await adminPage.goto('/manage');
+    const appealCase=adminPage.getByRole('listitem').filter({hasText:appealReason});
+    await expect(appealCase).toBeVisible();
+    await expect(appealCase.getByRole('button',{name:'Request another review'})).toBeDisabled();
+    await adminPage.locator('#appeal-'+appealId).fill('Independent evidence is still required for this synthetic case.');
+    await appealCase.getByRole('button',{name:'Request another review'}).click();
+    await expect(adminPage.getByText('Appeal decision recorded. Eligibility unchanged.')).toBeVisible();
+    await expect(appealCase).toHaveCount(0);
+    await creatorPage.goto('/verification');
+    await expect(creatorPage.getByRole('heading',{name:'Awaiting manual student review'})).toBeVisible();
+    await expect(creatorPage.getByText('review requested',{exact:true})).toBeVisible();
+    expect((await creator.request.get('/api/local/following')).status()).toBe(403);
+
     const {users}=await readJson(await admin.request.get('/api/local/admin/pending-users'));
     const creatorId=users.find(x=>x.email===creatorEmail)?.id;
     const viewerId=users.find(x=>x.email===viewerEmail)?.id;
