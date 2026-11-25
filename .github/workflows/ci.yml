@@ -15,6 +15,12 @@ jobs:
           node-version: '22'
       - name: Run tests (no dependencies required)
         run: npm test
+      - name: Install disposable ClamAV engine (no production signatures or credentials)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clamav-daemon
+      - name: Verify real clamd engine and worker integration on harmless synthetic signature
+        run: bash scripts/test-clamd-engine.sh
       - name: Verify source artefacts do not contain development secrets
         run: |
           if git ls-files | grep -E '(^|/)(\.env(\..*)?|.*\.pem|.*\.key)$' | grep -vE '\.env\.example$'; then
