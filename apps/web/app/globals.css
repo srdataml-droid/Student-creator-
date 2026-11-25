@@ -465,3 +465,11 @@ button:disabled{opacity:.55;cursor:not-allowed}
   .footer-account-links a{display:inline-flex;align-items:center;min-height:44px;padding:0 8px;text-decoration:underline;text-underline-offset:3px}
   .creator-footer{padding-bottom:calc(90px + env(safe-area-inset-bottom,0px))}
 }
+
+/* Accessible text contrast within the existing light creator palette. */
+.creator-body .creator-footer{color:#56655c}
+.feed-tabs button:not(.active),.post-actions a,.post-actions button,.feed-empty p,.feed-bottom{color:#52645b}
+@media(max-width:760px){
+  .feed-tabs button{min-height:44px}
+  .post-actions :is(a,button){display:inline-flex;align-items:center;min-height:44px}
+}

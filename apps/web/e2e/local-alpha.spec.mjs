@@ -28,6 +28,19 @@ async function join(page,schoolId,email,password){
   await page.getByRole('button',{name:'Create account'}).click();
   await expect(page.getByRole('heading',{name:'Account created'})).toBeVisible();
 }
+// Focused checks for visible form control labels. This is not a full WCAG audit.
+async function assertNamedFormControls(main,route){
+  const unnamed=await main.locator('input:not([type=hidden]),textarea,select').evaluateAll(controls=>
+    controls.filter(el=>{
+      if(!el.getClientRects().length||getComputedStyle(el).visibility==='hidden')return false;
+      if(['submit','reset','button','image'].includes(el.type))return false;
+      const aria=el.getAttribute('aria-label')?.trim();
+      const refs=(el.getAttribute('aria-labelledby')||'').split(/\\s+/).filter(Boolean);
+      return !aria&&!refs.some(id=>document.getElementById(id)?.textContent?.trim())&&
+        !Array.from(el.labels||[]).some(label=>label.textContent?.trim());
+    }).map(el=>({tag:el.tagName,id:el.id,type:el.type})));
+  expect(unnamed,`Missing control labels: ${route}`).toEqual([]);
+}
 async function readJson(response){
   expect(response.ok(),`HTTP ${response.status()} from ${response.url()}`).toBeTruthy();
   return response.json();
@@ -156,18 +169,36 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
       await cdp.send('Network.enable');
       await cdp.send('Network.setCacheDisabled',{cacheDisabled:true});
       await cdp.send('Network.emulateNetworkConditions',{offline:false,latency:150,downloadThroughput:200000,uploadThroughput:75000});
+      await viewerPage.addInitScript(()=>{
+        // Synthetic browser measurement only: no telemetry request or user data.
+        const vitals=window.__wk8Vitals={lcp:0,cls:0};
+        let windowStart=0,last=0,cluster=0;
+        try{new PerformanceObserver(list=>{
+          for(const e of list.getEntries())vitals.lcp=e.startTime;
+        }).observe({type:'largest-contentful-paint',buffered:true});}catch{}
+        try{new PerformanceObserver(list=>{
+          for(const e of list.getEntries()){
+            if(e.hadRecentInput)continue;
+            if(e.startTime-last>1000||e.startTime-windowStart>5000){windowStart=e.startTime;cluster=0;}
+            cluster+=e.value;last=e.startTime;vitals.cls=Math.max(vitals.cls,cluster);
+          }
+        }).observe({type:'layout-shift',buffered:true});}catch{}
+      });
       await viewerPage.setViewportSize({width:360,height:780});
       await viewerPage.reload({waitUntil:'load',timeout:45000});
       await expect(feedPost.getByRole('button',{name:'Enable playback'})).toBeVisible({timeout:15000});
+      await expect.poll(()=>viewerPage.evaluate(()=>window.__wk8Vitals?.lcp||0),{timeout:10000}).toBeGreaterThan(0);
       const performance=await viewerPage.evaluate(()=>{
         const entries=[...performance.getEntriesByType('navigation'),...performance.getEntriesByType('resource')];
-        return {transferredBytes:entries.reduce((n,e)=>n+(e.transferSize||0),0),domContentLoadedMs:Math.round(performance.getEntriesByType('navigation')[0].domContentLoadedEventEnd),width:document.documentElement.scrollWidth,viewport:innerWidth};
+        return {transferredBytes:entries.reduce((n,e)=>n+(e.transferSize||0),0),domContentLoadedMs:Math.round(performance.getEntriesByType('navigation')[0].domContentLoadedEventEnd),width:document.documentElement.scrollWidth,viewport:innerWidth,lcpMs:Math.round(window.__wk8Vitals.lcp),cls:window.__wk8Vitals.cls};
       });
       console.log('browser-alpha throttled feed metrics',JSON.stringify(performance));
       expect(performance.transferredBytes).toBeGreaterThan(0);
       expect(performance.transferredBytes).toBeLessThanOrEqual(2*1024*1024);
       expect(performance.domContentLoadedMs).toBeGreaterThan(0);
       expect(performance.domContentLoadedMs).toBeLessThanOrEqual(20000);
+      expect(performance.lcpMs).toBeLessThanOrEqual(8000);
+      expect(performance.cls).toBeLessThanOrEqual(.25);
       expect(performance.width).toBeLessThanOrEqual(performance.viewport+1);
     }finally{
       await cdp.send('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});
@@ -332,6 +363,7 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
       await targetPage.goto(route);
       const main=targetPage.getByRole('main');
       await expect(main.getByRole('heading',{level:1})).toHaveCount(1);
+      await assertNamedFormControls(main,route);
       for(const width of [320,412,768]){
         await targetPage.setViewportSize({width,height:800});
         const sizes=await targetPage.evaluate(()=>({viewport:innerWidth,document:document.documentElement.scrollWidth,offenders:[...document.querySelectorAll('body *')].filter(el=>{const r=el.getBoundingClientRect();return r.width>0&&r.right>innerWidth+1&&getComputedStyle(el).position!=='absolute';}).slice(0,6).map(el=>({tag:el.tagName,className:String(el.className),right:Math.round(el.getBoundingClientRect().right)}))}));
@@ -541,6 +573,7 @@ test('public and gated page shells reflow at phone, tablet and desktop widths',a
       await expect(main,`main landmark: ${route}`).toBeVisible();
       await expect(main).toHaveAttribute('id','main');
       await expect(main.getByRole('heading',{level:1}),`primary heading: ${route}`).toHaveCount(1);
+      await assertNamedFormControls(main,route);
       for(const width of [320,360,412,768,1280]){
         await page.setViewportSize({width,height:800});
         const sizes=await page.evaluate(()=>({viewport:innerWidth,document:document.documentElement.scrollWidth,offenders:[...document.querySelectorAll('body *')].filter(el=>{const r=el.getBoundingClientRect();return r.width>0&&r.right>innerWidth+1&&getComputedStyle(el).position!=='absolute';}).slice(0,6).map(el=>({tag:el.tagName,className:String(el.className),right:Math.round(el.getBoundingClientRect().right)}))}));
@@ -556,4 +589,13 @@ test('public and gated page shells reflow at phone, tablet and desktop widths',a
     await page.keyboard.press('Enter');
     await expect(page).toHaveURL(new RegExp('/sign-in$'));
   }finally{await context.close();}
+});
+
+
+test('release liveness endpoint is non-cacheable and exposes no provider configuration',async({request})=>{
+  const response=await request.get(BASE+'/api/health');
+  expect(response.status()).toBe(200);
+  expect(response.headers()['cache-control']).toContain('no-store');
+  expect(response.headers()['set-cookie']).toBeUndefined();
+  expect(await response.json()).toEqual({status:'serving',environment:'local',revision:null});
 });
