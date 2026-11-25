@@ -6,7 +6,7 @@ export function providerId(value){
  return /^[1-9][0-9]{0,19}$/.test(s)?s:null;
 }
 const referenceId=/^(lc_[0-9a-f]{32}):[0-9a-f]{64}$/;
-export function validReversalId(event,id){return providerId(id)===id||(event==='refund.processed'&&typeof id==='string'&&referenceId.test(id));}
+export function validReversalId(event,id){return typeof id==='string'&&(providerId(id)===id||(event==='refund.processed'&&referenceId.test(id)));}
 export function createLiveReversalProvider({key,fetcher=fetch}={}){
  if(!/^sk_live_[A-Za-z0-9]+$/.test(key??''))throw fail();
  async function read(path){
@@ -17,6 +17,7 @@ export function createLiveReversalProvider({key,fetcher=fetch}={}){
   return b.data;
  }
  return async(event,id)=>{
+  if(!reversalEvents.has(event)||!validReversalId(event,id))throw fail();
   if(event==='refund.processed'&&referenceId.test(id)){
    const reference=id.split(':')[0];
    const charge=await read('transaction/verify/'+reference);
