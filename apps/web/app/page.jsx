@@ -16,7 +16,7 @@ export default function Home(){
  }catch{ready=false;}
  return <main id="main" className="creator-main modern-home">
   <div className="feed-column">
-   <header className="home-heading"><div><p className="home-eyebrow">Your student community</p><h1>Discover</h1><p>Find original work and learn from fellow students.</p></div><Link href="/studio" className="creator-btn filled">+ Create</Link></header>
+   <h1 className="visually-hidden">Discover student creators</h1>
    <FeedExperience posts={posts} courses={courses} ready={ready}/>
   </div>
   <aside className="creator-aside" aria-label="Discover more">
