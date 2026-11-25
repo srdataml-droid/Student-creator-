@@ -18,7 +18,7 @@ const key=v=>{if(typeof v!=='string'||!/^[A-Za-z0-9_-]{16,128}$/.test(v))throw f
 const rpc=(name,args)=>({path:'rpc/'+name,method:'POST',body:args});
 const select=(name,fields,filters={})=>({path:name+'?'+new URLSearchParams({select:fields,...filters}),method:'GET'});
 const readIds=v=>{if(!Array.isArray(v)||v.length<1||v.length>100||new Set(v).size!==v.length)throw fault('INVALID_INPUT',422);return v.map(id);};
-const rateMessages=new Set(['MESSAGE_RATE_LIMIT','POST_RATE_LIMIT','COMMENT_RATE_LIMIT','FOLLOW_RATE_LIMIT','REPORT_RATE_LIMIT']);
+const rateMessages=new Set(['MESSAGE_RATE_LIMIT','POST_RATE_LIMIT','COMMENT_RATE_LIMIT','FOLLOW_RATE_LIMIT','REPORT_RATE_LIMIT','RESTRICTION_RATE_LIMIT']);
 function mapError(status,data){
  if(status===401)return fault('AUTH_REQUIRED',401);
  if(status===403||data?.code==='42501')return fault('SOCIAL_ACCESS_DENIED',403);
@@ -36,6 +36,10 @@ function operation(name,input,actor){
  }
  case 'follow':case 'unfollow':{
   const b=shape(input,['creatorId']);return rpc('social_follow_action',{_creator:id(b.creatorId),_enabled:name==='follow'});
+ }
+ case 'creatorRestrictions':shape(input,[]);return select('creator_restrictions','viewer_id,deny_view,deny_comment,deny_message,updated_at',{creator_id:'eq.'+actor,order:'updated_at.desc',limit:'250'});
+ case 'setCreatorRestrictions':{
+  const b=shape(input,['viewerId','view','comment','message']);return rpc('social_set_creator_restriction',{_viewer:id(b.viewerId),_view:bool(b.view),_comment:bool(b.comment),_message:bool(b.message)});
  }
  case 'inbox':{
   const b=shape(input,['before','limit']);return rpc('social_inbox_page',{_before:optionalId(b.before),_limit:integer(b.limit,50,50)});

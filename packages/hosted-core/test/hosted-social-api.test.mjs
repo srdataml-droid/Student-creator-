@@ -44,3 +44,8 @@ test('database errors map to safe client outcomes without exposing provider deta
   await assert.rejects(x.run('send',{peerId:peer,text:'question'}),err=>err.status===expected&&!err.message.includes('Sensitive'));
  }
 });
+
+test('creator restriction mutation derives owner from verified token and rejects spoofing',async()=>{
+ const x=fixture();await x.run('setCreatorRestrictions',{viewerId:peer,view:true,comment:false,message:false});assert.deepEqual(JSON.parse(x.calls[1].options.body),{_viewer:peer,_view:true,_comment:false,_message:false});
+ const y=fixture();await assert.rejects(y.run('setCreatorRestrictions',{creatorId:peer,viewerId:actor,view:true,comment:false,message:false}),{status:422});assert.equal(y.calls.length,1);
+});
