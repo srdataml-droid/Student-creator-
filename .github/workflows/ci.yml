@@ -114,6 +114,12 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/tests/hosted_auth_lifecycle.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/0018_week01_session_aware_rls.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/session_aware_rls.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0015_week05_hosted_test_commerce.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/week05_test_commerce.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0016_week05_charge_inbox.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/week05_charge_inbox.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0019_week01_paystack_hosted_bridge.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/paystack_hosted_bridge.sql
 
       - name: Restore disposable PostgreSQL backup into isolated database
         env:

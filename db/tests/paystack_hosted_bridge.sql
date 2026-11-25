@@ -1,0 +1,26 @@
+BEGIN;
+INSERT INTO auth.users(id,email,email_confirmed_at) VALUES('f1910000-0000-4000-8000-000000000001','creator@example.invalid',now()),('f1910000-0000-4000-8000-000000000002','buyer@example.invalid',now()),('f1910000-0000-4000-8000-000000000003','reviewer@example.invalid',now());
+INSERT INTO public.institutions(id,slug,name) VALUES('f1920000-0000-4000-8000-000000000001','fixture-paystack-19','Synthetic');
+INSERT INTO public.departments(id,institution_id,slug,name) VALUES('f1930000-0000-4000-8000-000000000001','f1920000-0000-4000-8000-000000000001','fixture','Synthetic');
+INSERT INTO public.courses(id,institution_id,department_id,code,title) VALUES('f1940000-0000-4000-8000-000000000001','f1920000-0000-4000-8000-000000000001','f1930000-0000-4000-8000-000000000001','PAY19','Synthetic');
+INSERT INTO public.student_profiles(user_id,institution_id,display_name,verified_at) SELECT id,'f1920000-0000-4000-8000-000000000001','Synthetic',now() FROM auth.users WHERE id IN ('f1910000-0000-4000-8000-000000000001','f1910000-0000-4000-8000-000000000002');
+INSERT INTO public.content_items(id,creator_id,institution_id,course_id,title,rights_attested_at,creation_key,creation_hash,status,reviewer_id,review_reason,reviewed_at,published_at) VALUES('f1950000-0000-4000-8000-000000000001','f1910000-0000-4000-8000-000000000001','f1920000-0000-4000-8000-000000000001','f1940000-0000-4000-8000-000000000001','Synthetic payment lesson',now(),'fixture-paystack-19',repeat('a',64),'published','f1910000-0000-4000-8000-000000000003','Synthetic approval',now(),now());
+INSERT INTO public.listings(content_id,creator_id,price_kobo) VALUES('f1950000-0000-4000-8000-000000000001','f1910000-0000-4000-8000-000000000001',20000);
+UPDATE week05_finance.runtime_gate SET allow_test_checkout=true WHERE singleton;
+DO $$ DECLARE b uuid:='f1910000-0000-4000-8000-000000000002'; c uuid:='f1950000-0000-4000-8000-000000000001'; o jsonb; ref text; oid uuid; e jsonb;
+BEGIN
+ IF has_function_privilege('authenticated','public.settle_hosted_paystack_charge(text,uuid,text,bigint,bigint)','EXECUTE') OR has_table_privilege('anon','public.hosted_paystack_checkout','SELECT') THEN RAISE EXCEPTION 'Browser payment mutation or URL leak'; END IF;
+ o:=public.reserve_hosted_paystack_checkout(b,c,'fixture-paystack-key-19');ref:=o->>'reference';oid:=(o->>'orderId')::uuid;
+ IF o->>'create'<>'true' OR o->>'buyerEmail'<>'buyer@example.invalid' OR (o->>'amountKobo')::bigint<>20000 THEN RAISE EXCEPTION 'Order snapshot invalid'; END IF;
+ IF public.reserve_hosted_paystack_checkout(b,c,'fixture-paystack-key-19')->>'create'<>'false' THEN RAISE EXCEPTION 'Duplicate initialization'; END IF;
+ IF NOT public.finish_hosted_paystack_checkout(oid,'https://checkout.paystack.com/fixture') THEN RAISE EXCEPTION 'Checkout finish'; END IF;
+ IF public.record_hosted_paystack_charge(ref,'tx_fixture',repeat('a',64))<>'accepted' OR public.record_hosted_paystack_charge(ref,'tx_fixture',repeat('a',64))<>'duplicate' OR public.record_hosted_paystack_charge(ref,'tx_fixture',repeat('b',64))<>'duplicate' THEN RAISE EXCEPTION 'Inbox replay'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM week05_finance.charge_inbox WHERE transaction_id='tx_fixture' AND payload_sha256=repeat('a',64)) THEN RAISE EXCEPTION 'Canonical inbox or first digest missing'; END IF;
+ e:=public.claim_hosted_paystack_charge();
+ IF public.week05_claim_test_charge() IS NOT NULL THEN RAISE EXCEPTION 'Second worker claimed same charge'; END IF;
+ IF public.settle_hosted_paystack_charge(e->>'key',gen_random_uuid(),'tx_fixture',20000,0) THEN RAISE EXCEPTION 'Wrong lease settled'; END IF;
+ IF EXISTS(SELECT 1 FROM public.entitlements WHERE order_id=oid) THEN RAISE EXCEPTION 'Inbox granted entitlement'; END IF;
+ IF NOT public.settle_hosted_paystack_charge(e->>'key',(e->>'leaseId')::uuid,'tx_fixture',20000,0) THEN RAISE EXCEPTION 'Settlement failed'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM public.entitlements WHERE order_id=oid AND state='active') OR public.claim_hosted_paystack_charge() IS NOT NULL OR NOT EXISTS(SELECT 1 FROM week05_finance.charge_inbox WHERE transaction_id='tx_fixture' AND state='processed') THEN RAISE EXCEPTION 'Atomic settlement failed'; END IF;
+END $$;
+ROLLBACK;

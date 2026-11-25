@@ -8,7 +8,7 @@ const response = () => ({status:true,data:{status:'success',reference:order.refe
 const sign = (body, key='secret') => createHmac('sha512',key).update(body).digest('hex');
 const throwsCode = (fn, code) => assert.throws(fn, e => e instanceof PaymentValidationError && e.code === code);
 
-test('₦200 quote preserves exact kobo and allocates 10% platform fee', () => {let v=quoteLessonPurchase(20000);assert.deepEqual(v,{currency:'NGN',amountKobo:20000,platformFeeBps:1000,platformFeeKobo:2000,creatorGrossShareKobo:18000});});
+test('₦200 quote preserves exact kobo with an explicit illustrative 10% allocation', () => {let v=quoteLessonPurchase(20000,1000);assert.deepEqual(v,{currency:'NGN',amountKobo:20000,platformFeeBps:1000,platformFeeKobo:2000,creatorGrossShareKobo:18000});});
 test('commission and creator allocation conserve the total with odd kobo',()=>{const v=quoteLessonPurchase(20001,1500);assert.equal(v.platformFeeKobo+v.creatorGrossShareKobo,20001);});
 test('reject below-minimum, decimal kobo, unsafe integer and invalid basis points',()=>{throwsCode(()=>quoteLessonPurchase(19999),'BELOW_MINIMUM_PRICE');throwsCode(()=>quoteLessonPurchase(20000.5),'INVALID_AMOUNT');throwsCode(()=>quoteLessonPurchase(Number.MAX_SAFE_INTEGER+1),'INVALID_AMOUNT');throwsCode(()=>quoteLessonPurchase(20000,-1),'INVALID_COMMISSION')});
 test('valid legacy Paystack signature with raw bytes is accepted',()=>{const raw=Buffer.from('{"event":"charge.success","data":{"id":1}}');assert.equal(verifyLegacyPaystackSignature(raw,sign(raw),['secret']),true)});
@@ -24,3 +24,25 @@ test('provider environment mismatch fails closed',()=>{const v=response();v.data
 test('provider buyer mismatch fails closed',()=>{const v=response();v.data.customer.email='attacker@example.com';throwsCode(()=>validateVerifiedCharge(order,v),'BUYER_MISMATCH')});
 test('missing provider ID fails closed',()=>{const v=response();v.data.id=null;throwsCode(()=>validateVerifiedCharge(order,v),'MISSING_TRANSACTION_ID')});
 test('missing order env fails closed',()=>{throwsCode(()=>validateVerifiedCharge({...order,domain:null},response()),'INVALID_ORDER')});
+
+test('commission must be explicit; missing, undefined and null never select a business policy',()=>{
+  for(const value of [undefined,null,'1000',NaN]) throwsCode(()=>quoteLessonPurchase(20000,value),'INVALID_COMMISSION');
+  throwsCode(()=>quoteLessonPurchase(20000),'INVALID_COMMISSION');
+  const zero=quoteLessonPurchase(20000,0);
+  assert.equal(zero.platformFeeKobo,0);
+  assert.equal(zero.creatorGrossShareKobo,20000);
+});
+test('a matching zero or below-minimum provider response cannot authorize a paid order',()=>{
+  for(const amountKobo of [0,19999]){
+    const v=response();v.data.amount=amountKobo;
+    throwsCode(()=>validateVerifiedCharge({...order,amountKobo},v),'BELOW_MINIMUM_PRICE');
+  }
+});
+test('a blank order buyer cannot be verified by a blank provider email',()=>{
+  const v=response();v.data.customer.email=' ';
+  throwsCode(()=>validateVerifiedCharge({...order,buyerEmail:' '},v),'INVALID_ORDER');
+});
+test('legacy webhook must contain an object rather than array data',()=>{
+  const raw='{"event":"charge.success","data":[]}';
+  throwsCode(()=>decodeVerifiedLegacyWebhook(raw,sign(raw),['secret']),'INVALID_EVENT');
+});
