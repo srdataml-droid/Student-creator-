@@ -52,3 +52,6 @@ Current-student-only discovery RPC ranks campus, follow state and recency, retur
 
 ## Fourteenth increment: hosted lesson replies
 Additive parent FK, one-level replies, owner removal and report submission via verified student RPC. Paid entitlement and independent comment restriction are checked before writes. Hidden root also hides its replies; raw request keys/hashes removed from authenticated comment SELECT grants. Rate quota and idempotent creation retained. Tests use existing rollback-only synthetic paid fixtures; exact-head CI pending. No external code copied; this adapts existing local/hosted contracts.
+
+## Fifteenth increment: hosted in-app notification persistence
+Transaction-local notification triggers on new messages, follows, likes, lesson comments/replies and community replies. Preference changes affect subsequent events only. Recipient RLS hides actor/internal event IDs; community/comment events recheck visibility and eligibility. No external push, email or service-key dependency. Rollback-only regression covers event deduplication, foreign read-state denial and notification opt-out without blocking DM delivery. Exact-head CI pending. No external code copied.
