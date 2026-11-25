@@ -37,3 +37,4 @@ fi
 test -s apps/android/app/build/outputs/apk/debug/app-debug.apk
 test -s apps/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 echo "Internal Android debug and instrumentation APKs compiled and lint completed. No release signing or install."
+bash scripts/verify-android-internal-apk.sh
