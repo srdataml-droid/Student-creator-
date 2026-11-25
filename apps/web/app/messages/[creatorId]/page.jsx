@@ -1,8 +1,10 @@
 'use client';
+import {useHostedAccount} from '../../HostedAccountProvider.jsx';
+import {HostedConversation} from '../../HostedSocialWorkspace.jsx';
 import Link from 'next/link';
 import {useEffect,useState} from 'react';
 import {api,friendlyError} from '../../../lib/local-client.js';
-export default function Conversation({params}){
+function LocalConversation({params}){
  const [peer,setPeer]=useState(''),[user,setUser]=useState(null),[messages,setMessages]=useState([]),[blocked,setBlocked]=useState(false),[text,setText]=useState(''),[state,setState]=useState('loading'),[busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  useEffect(()=>{let active=true;async function load(){const {creatorId}=await params;if(!active)return;setPeer(creatorId);try{const m=await api('me');if(!active)return;setUser(m.user);const c=await api(`messages/${creatorId}`);if(active){setMessages(c.messages);setBlocked(c.blocked);setState('ready');}}catch(e){if(active)setState(e.status===401?'signed-out':'unavailable');}}load();return()=>{active=false;};},[params]);
  useEffect(()=>{if(state!=='ready'||!peer)return;let cancelled=false;const timer=setInterval(()=>{api(`messages/${peer}`).then(d=>{if(!cancelled){setMessages(d.messages);setBlocked(d.blocked);}}).catch(()=>{});},8000);return()=>{cancelled=true;clearInterval(timer);};},[peer,state]);
@@ -16,3 +18,5 @@ export default function Conversation({params}){
  <form className="form-stack" onSubmit={send}><label htmlFor="message">Message (max 2,000 characters)</label><textarea id="message" value={text} required maxLength="2000" rows="3" onChange={e=>setText(e.target.value)} placeholder="Could you explain how you approached the worked example?"/><button type="submit" className="primary-link" disabled={busy||blocked||!text.trim()}>{busy?'Sending…':'Send message'}</button></form></div>}
  </main>;
 }
+
+export default function Conversation(props){const account=useHostedAccount();return account?<HostedConversation key={account.session.userId||account.session.state}/>:<LocalConversation {...props}/>;}
