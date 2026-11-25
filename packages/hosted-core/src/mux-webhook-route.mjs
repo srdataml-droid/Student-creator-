@@ -56,10 +56,11 @@ export function buildMuxWebhookRoute({getEnv=()=>process.env,fetcher=fetch}={}){
   try{
    const env=getEnv();
    // This endpoint cannot be enabled incidentally by existing provider aliases.
-   if(env.STUDENT_CREATORS_STAGING_APPROVED!=='true'||env.APP_DATA_MODE!=='hosted'||
+   const live=env.STUDENT_CREATORS_ENVIRONMENT==='production';
+   if((!live&&env.STUDENT_CREATORS_STAGING_APPROVED!=='true')||env.APP_DATA_MODE!=='hosted'||
       env.STUDENT_CREATORS_PROJECT_REF!=='jnkqmlbkkvccnxrgkpno'||
       env.STUDENT_CREATORS_PUBLIC_REGISTRATION!=='false'||
-      env.STUDENT_CREATORS_REAL_PAYMENT_ENABLED!=='false'||
+      (!live&&env.STUDENT_CREATORS_REAL_PAYMENT_ENABLED!=='false')||
       env.STUDENT_CREATORS_MUX_WEBHOOK_ENABLED!=='true')return json(503,'MUX_WEBHOOK_UNAVAILABLE');
    const config=readDedicatedSupabaseRuntimeConfig(env,{server:true});
    if(!config||config.url!=='https://jnkqmlbkkvccnxrgkpno.supabase.co')return json(503,'MUX_WEBHOOK_UNAVAILABLE');

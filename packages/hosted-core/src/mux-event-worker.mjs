@@ -1,4 +1,4 @@
-import {reconcileMuxUpload,createMuxTestClient,createMuxVideoStore} from './mux-video-api.mjs';
+import {reconcileMuxUpload,createMuxTestClient,createMuxVideoStore,muxModeMatches} from './mux-video-api.mjs';
 import {readDedicatedSupabaseRuntimeConfig,supabaseServerHeaders} from '../../content-core/src/supabase-runtime-config.mjs';
 const UUID=/^[0-9a-f-]{36}$/i, ID=/^[A-Za-z0-9_-]{6,128}$/;
 const REF='jnkqmlbkkvccnxrgkpno';
@@ -22,12 +22,12 @@ export async function processMuxEvent({queue,mux,store}){
     if(upload.id!==event.resourceId)throw unavailable();
    }else{
     const asset=await mux.getAsset(event.resourceId);
-    if(asset.id!==event.resourceId||asset.test!==true||!ID.test(asset.upload_id??'')||!UUID.test(asset.passthrough??''))throw unavailable();
+    if(asset.id!==event.resourceId||!muxModeMatches(asset.test,mux.testAsset!==false)||!ID.test(asset.upload_id??'')||!UUID.test(asset.passthrough??''))throw unavailable();
     upload=await mux.getUpload(asset.upload_id);
     if(upload.id!==asset.upload_id||upload.asset_id!==asset.id||upload.new_asset_settings?.passthrough!==asset.passthrough)throw unavailable();
    }
    const reservation=upload.new_asset_settings?.passthrough;
-   if(!UUID.test(reservation??'')||upload.test!==true||upload.new_asset_settings?.test===false)throw unavailable();
+   if(!UUID.test(reservation??'')||!muxModeMatches(upload.test,mux.testAsset!==false)||(mux.testAsset!==false?upload.new_asset_settings?.test===false:!muxModeMatches(upload.new_asset_settings?.test,false)))throw unavailable();
    await reconcileMuxUpload({mux,store,row:{id:reservation},upload});
    outcome='processed';
   }
@@ -36,16 +36,16 @@ export async function processMuxEvent({queue,mux,store}){
  return {state:outcome};
 }
 export function createMuxWorker({env=process.env,fetcher=fetch}={}){
- if(env.APP_DATA_MODE!=='hosted'||env.STUDENT_CREATORS_STAGING_APPROVED!=='true'||env.STUDENT_CREATORS_PROJECT_REF!==REF||
- env.STUDENT_CREATORS_PUBLIC_REGISTRATION!=='false'||env.STUDENT_CREATORS_REAL_PAYMENT_ENABLED!=='false'||
- env.STUDENT_CREATORS_MUX_TEST_VIDEO_ENABLED!=='true'||env.STUDENT_CREATORS_MUX_WEBHOOK_ENABLED!=='true'||
+ const live=env.STUDENT_CREATORS_ENVIRONMENT==='production';
+ if(env.APP_DATA_MODE!=='hosted'||env.STUDENT_CREATORS_PROJECT_REF!==REF||env.STUDENT_CREATORS_PUBLIC_REGISTRATION!=='false'||
+ (live?env.STUDENT_CREATORS_MUX_LIVE_VIDEO_ENABLED!=='true'||env.STUDENT_CREATORS_MUX_TEST_VIDEO_ENABLED==='true':env.STUDENT_CREATORS_STAGING_APPROVED!=='true'||env.STUDENT_CREATORS_REAL_PAYMENT_ENABLED!=='false'||env.STUDENT_CREATORS_MUX_TEST_VIDEO_ENABLED!=='true')||env.STUDENT_CREATORS_MUX_WEBHOOK_ENABLED!=='true'||
  env.STUDENT_CREATORS_MUX_WORKER_ENABLED!=='true')throw unavailable();
  const cfg=readDedicatedSupabaseRuntimeConfig(env,{server:true});
  if(!cfg||cfg.url!=='https://'+REF+'.supabase.co')throw unavailable();
  function alias(names){const vals=names.map(n=>env[n]).filter(v=>typeof v==='string'&&v.trim()).map(v=>v.trim());if(vals.some(v=>v!==vals[0]))throw unavailable();return vals[0];}
- const mux=createMuxTestClient({tokenId:alias(['MUX_TOKEN_ID','mux_token_id']),tokenSecret:alias(['MUX_TOKEN_SECRET','mux_token_secret']),origin:env.STUDENT_CREATORS_MUX_UPLOAD_ORIGIN,fetcher});
- const store=createMuxVideoStore({url:cfg.url,serverKey:cfg.serverKey,fetcher});
+ const mux=createMuxTestClient({tokenId:alias(['MUX_TOKEN_ID','mux_token_id']),tokenSecret:alias(['MUX_TOKEN_SECRET','mux_token_secret']),origin:env.STUDENT_CREATORS_MUX_UPLOAD_ORIGIN,fetcher,testAsset:!live});
+ const store=createMuxVideoStore({url:cfg.url,serverKey:cfg.serverKey,fetcher,testAsset:!live});
  async function rpc(name,body){const r=await fetcher(new URL('/rest/v1/rpc/'+name,cfg.url),{method:'POST',headers:{...supabaseServerHeaders(cfg.serverKey),'content-type':'application/json'},body:JSON.stringify(body),cache:'no-store',redirect:'error',signal:AbortSignal.timeout(8000)});if(!r.ok)throw unavailable();return r.json();}
- const queue={claim:()=>rpc('claim_mux_test_event',{}),finish:(id,lease,outcome)=>rpc('finish_mux_test_event',{_id:id,_lease:lease,_outcome:outcome}),revoke:asset=>rpc('revoke_deleted_mux_test_asset',{_asset:asset})};
+ const queue={claim:()=>rpc('claim_mux_test_event',{}),finish:(id,lease,outcome)=>rpc('finish_mux_test_event',{_id:id,_lease:lease,_outcome:outcome}),revoke:asset=>rpc(live?'revoke_deleted_mux_live_asset':'revoke_deleted_mux_test_asset',{_asset:asset})};
  return ()=>processMuxEvent({queue,mux,store});
 }
