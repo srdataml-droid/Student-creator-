@@ -4,6 +4,9 @@ import android.app.Activity;
 import android.os.Bundle;
 import android.os.Build;
 import android.view.View;
+import android.window.OnBackInvokedCallback;
+import android.window.OnBackInvokedDispatcher;
+import android.annotation.TargetApi;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -30,6 +33,7 @@ public final class MainActivity extends Activity {
     private Integer nextOffset;
     private EditText filter;
     private boolean resettingFilter, startedOnce, loading, interrupted;
+    private Object backCallback;
     private final ArrayList<CatalogPreview.Row> visibleRows = new ArrayList<>();
     private int retryOffset;
     private boolean retryAppend;
@@ -43,6 +47,7 @@ public final class MainActivity extends Activity {
         super.onCreate(state);
         LinearLayout layout = new LinearLayout(this);
         layout.setOrientation(LinearLayout.VERTICAL);
+        layout.setFocusableInTouchMode(true);
         int pad = (int)(16 * getResources().getDisplayMetrics().density);
         layout.setPadding(pad, pad, pad, pad);
         layout.setOnApplyWindowInsetsListener((v, insets) -> {
@@ -78,6 +83,7 @@ public final class MainActivity extends Activity {
         filter.setId(R.id.catalog_filter);
         filter.setSingleLine(true);
         filter.setInputType(InputType.TYPE_CLASS_TEXT);
+        filter.setSaveEnabled(false);
         filter.setFilters(new InputFilter[]{new InputFilter.LengthFilter(80)});
         filter.setHint("Search loaded courses");
         filter.setContentDescription("Search loaded courses");
@@ -101,6 +107,7 @@ public final class MainActivity extends Activity {
             }
         });
         setContentView(layout);
+        layout.requestFocus();
         if (state != null) {
             selectedCourse = state.getString("course");
             selectedTitle = state.getString("title");
@@ -110,6 +117,7 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onStart() {
         super.onStart();
+        updateBackNavigation();
         // A new Activity re-reads public data. A resumed Activity keeps its
         // in-memory pages and only retries an interrupted read on request.
         if (!startedOnce) { startedOnce = true; load(); }
@@ -121,6 +129,7 @@ public final class MainActivity extends Activity {
     }
     @Override protected void onStop() {
         generation++;
+        unregisterBackNavigation();
         if (loading) { interrupted = true; loading = false; }
         if (pending != null) pending.cancel(true);
         super.onStop();
@@ -140,6 +149,27 @@ public final class MainActivity extends Activity {
         selectedCourse = null; selectedTitle = null;
         resetFilter(); load();
     }
+    // Android 16 no longer dispatches the legacy callback for target API 36.
+    // Register only on the course detail screen; the system owns root Back.
+    private void updateBackNavigation() {
+        if (Build.VERSION.SDK_INT >= 33) updateModernBack();
+    }
+    @TargetApi(33)
+    private void updateModernBack() {
+        if (selectedCourse != null && backCallback == null) {
+            OnBackInvokedCallback callback = this::returnToCourses;
+            getOnBackInvokedDispatcher().registerOnBackInvokedCallback(OnBackInvokedDispatcher.PRIORITY_DEFAULT, callback);
+            backCallback = callback;
+        } else if (selectedCourse == null) unregisterBackNavigation();
+    }
+    private void unregisterBackNavigation() {
+        if (Build.VERSION.SDK_INT >= 33 && backCallback != null) unregisterModernBack();
+    }
+    @TargetApi(33)
+    private void unregisterModernBack() {
+        getOnBackInvokedDispatcher().unregisterOnBackInvokedCallback((OnBackInvokedCallback) backCallback);
+        backCallback = null;
+    }
     @Override public void onBackPressed() {
         if (selectedCourse != null) returnToCourses(); else super.onBackPressed();
     }
@@ -158,7 +188,7 @@ public final class MainActivity extends Activity {
         else if (displayed.isEmpty()) status.setText(nextOffset == null ? "No public previews available." : "No previews on this page. Load more to continue.");
         else status.setText(labels.size() + " " + (selectedCourse == null ? "courses shown" : "public previews shown") + (nextOffset == null ? "." : ". More available."));
     }
-    private void load() { displayed.clear(); visibleRows.clear(); nextOffset = null; loadPage(0, false); }
+    private void load() { updateBackNavigation(); displayed.clear(); visibleRows.clear(); nextOffset = null; loadPage(0, false); }
     private void loadPage(int offset, boolean append) {
         retryOffset = offset;
         retryAppend = append;
