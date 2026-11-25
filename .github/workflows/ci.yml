@@ -217,6 +217,11 @@ jobs:
           psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-manual-identity.sql
           psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-manual-identity.test.sql
 
+      - name: Verify independent privacy fulfilment and retention recommendations
+        run: |
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-privacy-fulfilment.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-privacy-fulfilment.test.sql
+
       - name: Restore disposable PostgreSQL backup into isolated database
         env:
           PG_CONTAINER: ${{ job.services.postgres.id }}

@@ -46,6 +46,11 @@ async function readCommandBody(request){
  return body&&typeof body==='object'&&!Array.isArray(body)?body:null;
 }
 function commandFor(path){
+ if(path==='privacy/fulfilment')return {name:'week7_privacy_fulfilment_queue',scope:'privacy.review',allowed:['limit']};
+ if(/^privacy\/requests\/[0-9a-f-]{36}\/record-fulfilment$/i.test(path))return {name:'week7_record_privacy_fulfilment',scope:'privacy.review',allowed:['reference','summary']};
+ if(/^privacy\/requests\/[0-9a-f-]{36}\/confirm-fulfilment$/i.test(path))return {name:'week7_confirm_privacy_fulfilment',scope:'privacy.review',allowed:['note']};
+ if(/^retention\/[0-9a-f-]{36}\/recommend$/i.test(path))return {name:'week7_recommend_retention',scope:'retention.review',allowed:['reason']};
+
  if(path==='finance/access-reviews')return {name:'week7_paid_access_queue',scope:'finance.review',allowed:['limit']};
  if(/^finance\/access-reviews\/[0-9a-f-]{36}\/resolve$/i.test(path))return {name:'week7_resolve_paid_access',scope:'finance.review',allowed:['resolution','note']};
  if(path==='identity/manual-revalidation')return {name:'week7_manual_revalidation_queue',scope:'verification.review',allowed:['limit']};
@@ -89,6 +94,13 @@ function validateCommand(cmd,body,path,actorId){
    return UUID.test(path.split('/')[2])&&['approve','reject','revoke'].includes(body.decision)&&hasText(body.note,10,500)&&(body.decision==='approve'?Number.isInteger(body.days)&&body.days>=1&&body.days<=730:body.days===undefined)?{_actor:actorId,_id:path.split('/')[2],_decision:body.decision,_note:body.note.trim(),_days:body.days??null}:null;
   case 'week7_paid_access_queue':
   case 'week7_copyright_queue':
+  case 'week7_record_privacy_fulfilment':
+   return UUID.test(path.split('/')[2])&&typeof body.reference==='string'&&/^[A-Za-z0-9_.:-]{8,128}$/.test(body.reference)&&hasText(body.summary,20,500)?{_actor:actorId,_id:path.split('/')[2],_reference:body.reference,_summary:body.summary.trim()}:null;
+  case 'week7_confirm_privacy_fulfilment':
+   return UUID.test(path.split('/')[2])&&hasText(body.note,10,500)?{_actor:actorId,_id:path.split('/')[2],_note:body.note.trim()}:null;
+  case 'week7_recommend_retention':
+   return UUID.test(id)&&hasText(body.reason,20,500)?{_actor:actorId,_id:id,_reason:body.reason.trim()}:null;
+  case 'week7_privacy_fulfilment_queue':
   case 'week7_privacy_queue':
   case 'week7_manual_revalidation_queue':
   case 'week7_identity_queue':
@@ -183,6 +195,7 @@ export function createHostedGovernanceHandler({getEnv=()=>process.env,fetcher=fe
        const safeCodes={
          ACCESS_REVIEW_CONFLICT:[409,'ACCESS_REVIEW_CONFLICT'],
          COPYRIGHT_REVIEW_CONFLICT:[409,'COPYRIGHT_REVIEW_CONFLICT'],
+         RETENTION_REVIEW_CONFLICT:[409,'RETENTION_REVIEW_CONFLICT'],
          PRIVACY_REVIEW_CONFLICT:[409,'PRIVACY_REVIEW_CONFLICT'],
          IDENTITY_REVIEW_CONFLICT:[409,'IDENTITY_REVIEW_CONFLICT'],
          IDENTITY_POLICY_REQUIRED:[403,'IDENTITY_POLICY_REQUIRED'],
