@@ -292,3 +292,43 @@ test('cancellation, refused service progress after entitlement reversal, and rem
     assert.equal(notifications.body.notifications.filter(x=>x.kind==='class_reminder'&&x.resourceId===classId).length,1);
   }finally{x.close();}
 });
+
+
+test('host participant removal revokes fresh room grants and retries provider disconnect',async()=>{
+  const x=fixture();
+  try{
+    const a=await x.prepare();
+    const room=await x.call('courses/'+a.course+'/classes','POST',x.schedule(a.course,'participant-removal'),a.host.cookie);
+    assert.equal(room.status,201);
+    const id=room.body.class.id;
+    assert.equal((await x.call('classes/'+id+'/enroll','POST',{},a.viewer.cookie)).status,200);
+    const payload={studentId:a.viewer.id,reason:'Host removed this student after a documented behavior report'};
+    assert.equal((await x.call('classes/'+id+'/remove-participant','POST',payload,a.viewer.cookie)).status,403);
+    const kicked=await x.call('classes/'+id+'/remove-participant','POST',payload,a.host.cookie);
+    assert.equal(kicked.status,200);
+    assert.equal(kicked.body.removal.providerRemovalQueued,true);
+    assert.equal(kicked.body.removal.providerRemoved,false);
+    assert.equal((await x.call('classes/'+id+'/remove-participant','POST',payload,a.host.cookie)).body.removal.replayed,true);
+    const admin=x.store.login('admin@week06.invalid','Strong Synthetic Admin Password 2026').user;
+    let attempts=0;
+    const provider={async removeParticipant(roomName,identity,options){
+      assert.equal(roomName,'wk-class-'+id);
+      assert.equal(identity,'student-'+a.viewer.id);
+      assert.ok(options.revokeTokenTs>0);
+      attempts++;
+      if(attempts===1)throw Error('synthetic temporary provider outage');
+    }};
+    const first=await x.store.drainParticipantRemovals(admin,provider);
+    assert.deepEqual({completed:first.completed,failed:first.failed,remaining:first.remaining},
+      {completed:0,failed:1,remaining:1});
+    const next=await x.store.drainParticipantRemovals(admin,provider);
+    assert.deepEqual({completed:next.completed,failed:next.failed,remaining:next.remaining},
+      {completed:1,failed:0,remaining:0});
+    assert.equal((await x.store.drainParticipantRemovals(admin,provider)).remaining,0);
+    x.clock.ms+=4*60000;
+    assert.equal((await x.call('classes/'+id+'/open','POST',{},a.host.cookie)).status,200);
+    assert.equal((await x.call('classes/'+id+'/room-token','POST',{},a.viewer.cookie)).status,403);
+    assert.equal((await x.call('classes/'+id+'/room-token','POST',{},a.host.cookie)).status,200);
+    assert.equal(attempts,2);
+  }finally{x.close();}
+});
