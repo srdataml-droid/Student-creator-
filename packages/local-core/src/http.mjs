@@ -516,6 +516,12 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
         if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
         return responses({delivery:await store.drainLearningEmailOutbox(actor,sendLearningEmail)});
       }
+      if(path==='admin/learning-classes/expire'){
+        if(Object.keys(body).some(k=>k!=='limit'))return fail('UNEXPECTED_BODY',400);
+        const result=store.expireDueClasses(actor,{limit:body.limit??50});
+        const provider=liveRooms?await store.drainRoomClosures(actor,liveRooms).catch(()=>null):null;
+        return responses({expiry:result,providerCleanup:provider,providerConfigured:Boolean(liveRooms)});
+      }
       if(path==='admin/learning-participant-removals/drain'){
         if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
         return responses({result:await store.drainParticipantRemovals(actor,liveRooms)});
