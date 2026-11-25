@@ -390,3 +390,44 @@ jobs:
           done
           curl -fsS http://localhost:3000/sign-in >/dev/null
           (cd apps/web && npx playwright test e2e/hosted-frontend.spec.mjs --workers=1 --reporter=line --trace=retain-on-failure)
+
+  browser-hosted-playback:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned browser and media fixture tooling
+        working-directory: apps/web
+        run: |
+          npm ci --no-audit --no-fund
+          npm install --no-save --no-package-lock --no-audit --no-fund @playwright/test@1.56.1
+          npx playwright install --with-deps ${{ matrix.browser }}
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+      - name: Test actual local HLS segments, not real provider media
+        env:
+          APP_DATA_MODE: hosted
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: |
+          set -euo pipefail
+          export HLS_FIXTURE_DIR="$RUNNER_TEMP/hls-fixture"
+          mkdir -p "$HLS_FIXTURE_DIR"
+          ffmpeg -hide_banner -loglevel error -f lavfi -i color=c=blue:s=320x180:r=24 -t 6 -c:v libx264 -pix_fmt yuv420p -profile:v baseline -g 48 -sc_threshold 0 -f hls -hls_time 2 -hls_list_size 0 -hls_segment_filename "$HLS_FIXTURE_DIR/segment%03d.ts" "$HLS_FIXTURE_DIR/index.m3u8"
+          npm run build --prefix apps/web
+          npm run start --prefix apps/web -- -p 3000 > "$RUNNER_TEMP/hosted-playback.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 45); do
+            if curl -fsS http://localhost:3000/sign-in >/dev/null 2>&1; then break; fi
+            if ! kill -0 "$pid" 2>/dev/null; then cat "$RUNNER_TEMP/hosted-playback.log"; exit 1; fi
+            sleep 1
+          done
+          curl -fsS http://localhost:3000/sign-in >/dev/null
+          (cd apps/web && npx playwright test e2e/hosted-playback.spec.mjs --browser=${{ matrix.browser }} --workers=1 --reporter=line)
