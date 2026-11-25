@@ -248,3 +248,22 @@
  .creator-body .watch-stage{border-radius:8px}
  .creator-body .watch-video-frame{aspect-ratio:16/9;min-height:0}
 }
+
+/* Keep operational screens visually consistent with the reference's neutral
+   desktop verification form, rather than a separate green/dark theme. */
+.creator-body .admin-console{background:#fff;color:var(--ink);border-color:var(--line);box-shadow:none;border-radius:12px}
+.creator-body .admin-console h1,.creator-body .admin-console h2,.creator-body .admin-console h3{color:var(--ink)}
+.creator-body .admin-console .panel,.creator-body .admin-console .review-list li,.creator-body .admin-console .status{background:#fff;border-color:var(--line);color:var(--ink)}
+.creator-body .admin-console .eyebrow{color:var(--brand-strong)}
+.creator-body .admin-console .intro,.creator-body .admin-console .hint,.creator-body .admin-console .studio-meta,.creator-body .admin-console .form-stack label,.creator-body .admin-console .review-list label{color:var(--muted)}
+.creator-body .admin-console .form-stack input:not([type=checkbox]),.creator-body .admin-console .form-stack select,.creator-body .admin-console .form-stack textarea,.creator-body .admin-console .review-list textarea{background:white;color:var(--ink);border-color:#d5dbe3;color-scheme:light}
+.creator-body .admin-console .review-text{background:#f6f8fa;border-color:var(--line);color:var(--ink)}
+.creator-body .admin-console .studio-meta,.creator-body .admin-console .divider-lite,.creator-body .admin-console .small-list li{border-color:var(--line)}
+.creator-body .admin-console .quiet-button,.creator-body .admin-console .secondary-link{background:#fff;color:var(--ink);border-color:#d8dee7}
+.creator-body .admin-console .pill{background:var(--brand-soft);color:var(--brand-strong)}
+.creator-body .topic-chip.selected{background:var(--brand);border-color:var(--brand)}
+.creator-body .workspace-shortcuts a{color:var(--brand-strong)}
+.creator-body .home-rail-note>a{color:var(--brand-strong)}
+.creator-body .watch-utility .bookmark-action .secondary-link{color:var(--ink)}
+.creator-body .studio-meta{overflow-wrap:anywhere}
+@media(max-width:480px){.creator-body .watch-info{padding:16px}.creator-body .watch-header{gap:10px;flex-wrap:wrap}.creator-body .discovery-card .post-actions a,.creator-body .discovery-card .post-actions button{min-height:44px}}
