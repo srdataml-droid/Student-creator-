@@ -83,3 +83,12 @@ Additional **implemented on `work/week-06`**:
 - Synthetic Node integration and isolated browser tests cover eviction, duplicate/late signed events, provider removal retries, paid refund-review coordination, forced expiry, and participant/host media permission UI. No third-party human has been invited.
 
 **Remaining external acceptance:** dedicated hosted Supabase Auth/API integration from Week 1, approved hosted Week 6 migrations, LiveKit API signing secret and dedicated LiveKit test room, test-mode Paystack provider verification, and two consented verified tester accounts on separate real clients. **Do not solicit a human streaming test or claim completion before a fully running hosted staging site with secure credentials exists.** Test payment and cancel/refund with sandbox-only instruments, not live money. Keep PR #46 draft and reconcile merge conflict without overwriting other Week branches.
+
+
+## 25 Nov 2026 — administrative dispute closure
+
+Week 6 now also records `learning_dispute_decisions` (local SQLite and proposed hosted table) as an administrator-only, immutable decision after **all** complaints on the service have been independently reviewed. A complaint no longer leaves tutoring permanently stuck in `disputed` with no safe way forward. The operator may explicitly select `resume_guidance`, `return_to_review` (student must confirm), or `cancel_service` (payment review only). Resuming paid work requires an active verified service entitlement. Existing decisions cannot be silently changed, and no admin action impersonates the student's completion confirmation or pays money.
+
+Operator UX: `/manage/learning`, linked from `/manage`, displays open reports, cases ready for final service decision, review-only refund queue, and a manual expired-class recovery operation. The new browser smoke test covers private admin access, while server tests cover unauthorized decisions, disputed state transitions and non-rewriteability.
+
+Still blocked on hosted Week 1 infrastructure and real provider secrets/acceptance; this is **not** an invitation to bring external human testers yet.
