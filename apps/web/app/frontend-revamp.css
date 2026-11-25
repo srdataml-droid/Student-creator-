@@ -289,3 +289,5 @@
  .modern-frame .mobile-creator-tabs a span{font-size:.64rem}
 }
 @media(max-width:360px){.modern-frame .mobile-creator-tabs a span{font-size:.58rem}.modern-frame .mobile-creator-tabs a{gap:4px}}
+
+.feed-more{display:flex;justify-content:center;padding:22px 0 6px}.feed-more button{min-width:150px}
