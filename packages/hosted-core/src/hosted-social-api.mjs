@@ -91,6 +91,8 @@ function operation(name,input,actor){
  case 'like':case 'unlike':{
   const b=shape(input,['contentId']);return rpc('social_like_action',{_content:id(b.contentId),_enabled:name==='like'});
  }
+ case 'bookmarks':{const b=shape(input,['limit']);return select('content_bookmarks','content_id,created_at',{order:'created_at.desc,content_id.desc',limit:String(integer(b.limit,100,50))});}
+ case 'bookmark':case 'unbookmark':{const b=shape(input,['contentId']);return rpc('social_bookmark_action',{_content:id(b.contentId),_enabled:name==='bookmark'});}
  case 'classes':{
   const b=shape(input,['courseId','limit']);return select('interactive_classes','id,institution_id,course_id,host_id,title,description,starts_at,ends_at,capacity,price_kobo,currency,status',{...(b.courseId?{course_id:'eq.'+id(b.courseId)}:{}),order:'starts_at.asc,id.asc',limit:String(integer(b.limit,100,50))});
  }
