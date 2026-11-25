@@ -143,6 +143,11 @@ test('signed LiveKit webhook alone can record verified attendance; paid and unve
    assert.deepEqual(events,['CreateRoom','DeleteRoom']);
    assert.equal((await request('classes/'+id+'/room-token','POST',{},host.token)).status,409);
    const late=JSON.stringify({...event,id:randomUUID()});
-   assert.equal((await webhook(late,signEvent(late))).status,409);
+   const lateDelivery=await webhook(late,signEvent(late));
+   assert.equal(lateDelivery.status,200);
+   assert.equal(lateDelivery.data.ignored,true);
+   assert.equal(lateDelivery.data.reason,'CLASS_CLOSED');
+   // Closed-class delivery is authenticated before being ignored.
+   assert.equal((await webhook(late,'forged-provider-token')).status,401);
  }finally{store.close();rmSync(dir,{recursive:true,force:true});}
 });
