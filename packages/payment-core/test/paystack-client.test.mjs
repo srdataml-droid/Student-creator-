@@ -80,3 +80,57 @@ test('aborted provider request reports unknown state requiring reconciliation',a
   const api=createPaystackClient({secretKey:key,environment:'test',fetchImpl:async()=>{throw Object.assign(new Error('aborted'),{name:'AbortError'})}});
   await code(()=>api.verify(order),'GATEWAY_TIMEOUT');
 });
+
+test('live checkout requires both private founder configuration and server authorization before transport',async()=>{
+  const previous=process.env.PAYSTACK_LIVE_PAYMENTS_ENABLED;
+  const priorChannel=process.env.STUDENT_CREATORS_DISTRIBUTION_CHANNEL;
+  process.env.STUDENT_CREATORS_DISTRIBUTION_CHANNEL='independent_web';
+  const liveOrder={...order,domain:'live'};
+  let calls=0;
+  const live=approved=>createPaystackClient({secretKey:'sk_live_mockContractOnly',environment:'live',livePaymentsApproved:approved,fetchImpl:async()=>{calls++;return ok(init())}});
+  try{
+    delete process.env.PAYSTACK_LIVE_PAYMENTS_ENABLED;
+    await code(()=>live(true).initialize(liveOrder),'LIVE_PAYMENTS_DISABLED');
+    process.env.PAYSTACK_LIVE_PAYMENTS_ENABLED='1';
+    await code(()=>live(false).initialize(liveOrder),'LIVE_PAYMENTS_DISABLED');
+    await code(()=>live('true').initialize(liveOrder),'LIVE_PAYMENTS_DISABLED');
+    assert.equal(calls,0);
+    const approved=live(true);
+    await approved.initialize(liveOrder); // mocked transport only
+    assert.equal(calls,1);
+    process.env.PAYSTACK_LIVE_PAYMENTS_ENABLED='0';
+    await code(()=>approved.initialize(liveOrder),'LIVE_PAYMENTS_DISABLED');
+    assert.equal(calls,1);
+  }finally{
+    if(priorChannel===undefined)delete process.env.STUDENT_CREATORS_DISTRIBUTION_CHANNEL;
+    else process.env.STUDENT_CREATORS_DISTRIBUTION_CHANNEL=priorChannel;
+    if(previous===undefined) delete process.env.PAYSTACK_LIVE_PAYMENTS_ENABLED;
+    else process.env.PAYSTACK_LIVE_PAYMENTS_ENABLED=previous;
+  }
+});
+test('live verification remains possible for reconciliation after checkout is disabled (mock only)',async()=>{
+  const api=createPaystackClient({secretKey:'sk_live_mockContractOnly',environment:'live',fetchImpl:async()=>ok({...verified(),domain:'live'})});
+  assert.equal((await api.verify({...order,domain:'live'})).domain,'live');
+});
+test('rejects fresh provider checkout URLs containing credentials or nonstandard HTTPS ports',async()=>{
+  for(const url of ['https://user:pass@checkout.paystack.com/abc','https://checkout.paystack.com:444/abc','https://user@paystack.com/abc']){
+    const api=createPaystackClient({secretKey:key,environment:'test',fetchImpl:async()=>ok(init(url))});
+    await code(()=>api.initialize(order),'BAD_GATEWAY_RESPONSE');
+  }
+});
+
+test('distribution gate denies Play checkout before provider network and does not block reconciliation',async()=>{
+ const prior=process.env.STUDENT_CREATORS_DISTRIBUTION_CHANNEL;
+ let calls=0;
+ try{
+  process.env.STUDENT_CREATORS_DISTRIBUTION_CHANNEL='google_play';
+  const api=createPaystackClient({secretKey:key,environment:'test',fetchImpl:async()=>{calls++;return ok(verified())}});
+  await code(()=>api.initialize(order),'CHECKOUT_DISTRIBUTION_DISABLED');
+  assert.equal(calls,0);
+  assert.equal((await api.verify(order)).providerTransactionId,'123');
+  assert.equal(calls,1);
+ }finally{
+  if(prior===undefined)delete process.env.STUDENT_CREATORS_DISTRIBUTION_CHANNEL;
+  else process.env.STUDENT_CREATORS_DISTRIBUTION_CHANNEL=prior;
+ }
+});

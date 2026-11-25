@@ -47,6 +47,9 @@ test('₦200 synthetic purchase gates access, resists retries, balances journal 
   const first=await req('lessons/'+id+'/orders','POST',{requestKey:'long-request-key-0001'},buyer.token);
   assert.equal(first.status,201);
   const reference=first.data.order.reference;
+  assert.equal((await req('orders/'+reference+'/receipt','GET',undefined,buyer.token)).status,409);
+  assert.equal((await req('orders/'+reference+'/receipt','GET',undefined,other.token)).status,404);
+  assert.equal((await req('orders/'+reference+'/receipt')).status,401);
   assert.equal(first.data.order.status,'pending');
   assert.equal(first.data.order.amountKobo,20000);
   assert.equal(first.data.order.creatorShareKobo,20000);
@@ -83,6 +86,15 @@ test('₦200 synthetic purchase gates access, resists retries, balances journal 
   assert.equal(confirmed[0].status,200);assert.equal(confirmed[1].status,200);
   assert.equal(confirmed[0].data.order.status,'paid');assert.equal(confirmed[1].data.order.status,'paid');
   assert.deepEqual(confirmed.map(x=>x.data.order.replayed).sort(),[false,true]);
+  assert.equal((await req('admin/finance-overview','GET',undefined,buyer.token)).status,403);
+  const overview=(await req('admin/finance-overview','GET',undefined,admin.token)).data.finance;
+  assert.equal(overview.balanced,true);assert.equal(overview.withdrawable,false);assert.equal(overview.grossKobo,20000);
+  const creatorHistory=(await req('my/creator-financial-history','GET',undefined,creator.token)).data.entries;
+  assert.equal(creatorHistory.length,1);assert.equal(creatorHistory[0].deltaKobo,20000);
+  assert.deepEqual((await req('my/creator-financial-history','GET',undefined,other.token)).data.entries,[]);
+  const receipt=(await req('orders/'+reference+'/receipt','GET',undefined,buyer.token)).data.receipt;
+  assert.equal(receipt.amountKobo,20000);assert.equal(receipt.netKobo,20000);assert.equal(receipt.realMoneyCollected,false);
+  assert.equal((await req('orders/'+reference+'/receipt','GET',undefined,other.token)).status,404);
   assert.equal(store.applyVerifiedTestCharge(reference,payment('tr_test_01')).status,'paid');
   assert.equal(store.applyVerifiedTestCharge(reference,payment('tr_test_01')).replayed,true);
   assert.throws(()=>store.applyVerifiedTestCharge(reference,payment('tr_test_02')),{code:'PAYMENT_CONFLICT'});
@@ -115,6 +127,10 @@ test('₦200 synthetic purchase gates access, resists retries, balances journal 
   assert.equal((await req('lessons/'+id,'GET',undefined,buyer.token)).status,200);
   const refund=store.applySyntheticRefund(reference,{refundReference:'rf_test_001',providerTransactionId:'tr_test_01'});
   assert.equal(refund.status,'refunded');
+  const reversed=(await req('orders/'+reference+'/receipt','GET',undefined,buyer.token)).data.receipt;
+  const afterHistory=(await req('my/creator-financial-history','GET',undefined,creator.token)).data.entries;
+  assert.equal(afterHistory.reduce((sum,entry)=>sum+entry.deltaKobo,0),0);
+  assert.equal(reversed.amountKobo,20000);assert.equal(reversed.reversedKobo,20000);assert.equal(reversed.netKobo,0);
   assert.equal(store.applySyntheticRefund(reference,{refundReference:'rf_test_001',providerTransactionId:'tr_test_01'}).replayed,true);
   assert.throws(()=>store.applySyntheticRefund(reference,{refundReference:'rf_test_002',providerTransactionId:'tr_test_01'}),{code:'REFUND_CONFLICT'});
   assert.equal((await req('lessons/'+id,'GET',undefined,buyer.token)).status,402);

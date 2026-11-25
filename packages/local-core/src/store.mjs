@@ -1145,6 +1145,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     sandboxCheckout:commerce.sandboxCheckout,
     confirmSandboxOrder:commerce.confirmSandboxOrder,
     getPurchaseOrder:commerce.orderStatus,
+    getPurchaseReceipt:commerce.purchaseReceipt,
     reconcilePurchase:commerce.reconcilePurchase,
     simulatePaymentReversal:commerce.simulateReversal,
     receivePaymentWebhook:commerce.receiveWebhook,
@@ -1155,6 +1156,8 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     resolvePaymentDispute:commerce.resolveDispute,
     myPurchaseOrders:commerce.ownOrders,
     creatorEarnings:commerce.creatorEarnings,
+    creatorFinancialHistory:commerce.creatorHistory,
+    financeOverview:commerce.financeOverview,
     lessonAccess:commerce.lessonAccess,
     auditCount(){return db.prepare('SELECT count(*) AS n FROM audit_events').get().n;}
   };

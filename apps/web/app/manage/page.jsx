@@ -14,6 +14,7 @@ export default function Manage(){
  {state==='loading'?<p role="status">Loading administration…</p>:state==='signed-out'?<div className="status">Administrator sign-in is required. <Link href="/sign-in">Sign in</Link>.</div>:state==='forbidden'?<p role="alert" className="status">Your account is not an administrator. <Link href="/studio">Go to your studio</Link>.</p>:state==='unavailable'?<p role="alert" className="status">Administration is temporarily unavailable. Please try again.</p>:<>
  <div className="studio-meta"><p>Signed in as <strong>{user.email}</strong> · Administrator</p><button className="quiet-button" onClick={signOut}>Sign out</button></div>
  {message&&<p role="status" className="form-success">{message}</p>}{error&&<p role="alert" className="form-error">{error}</p>}
+ <p><Link className="secondary-link" href="/manage/finance">Financial reconciliation</Link></p>
  <div className="manage-grid">
  <section className="panel"><p className="eyebrow">Step 1</p><h2>Campuses</h2><p className="hint">Manage institutions and their available courses.</p>
  <form className="form-stack" onSubmit={e=>{e.preventDefault();doAction(()=>api('admin/institutions',{method:'POST',body:{name:schoolName}}),'Campus added.');setSchoolName('');}}><label htmlFor="schoolName">School name</label><input id="schoolName" value={schoolName} minLength="3" maxLength="160" required onChange={e=>setSchoolName(e.target.value)}/><button type="submit" disabled={busy} className="primary-link">Add campus</button></form>

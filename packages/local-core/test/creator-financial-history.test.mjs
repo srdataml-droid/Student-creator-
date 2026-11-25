@@ -1,0 +1,15 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {DatabaseSync} from 'node:sqlite';
+import {readCreatorFinancialHistory} from '../src/creator-financial-history.mjs';
+function withDb(fn){const db=new DatabaseSync(':memory:');try{db.exec(`
+ CREATE TABLE purchase_orders(reference TEXT PRIMARY KEY,creator_id TEXT,lesson_id TEXT,environment TEXT,buyer_email TEXT);
+ CREATE TABLE commerce_events(event_key TEXT PRIMARY KEY,order_reference TEXT,kind TEXT,created_at TEXT,state TEXT);
+ CREATE TABLE commerce_lines(event_key TEXT,account TEXT,debit_kobo INTEGER,credit_kobo INTEGER);
+ INSERT INTO purchase_orders VALUES('a','creator-a','lesson-a','test','private@example.invalid'),('b','creator-b','lesson-b','test','other@example.invalid'),('live','creator-a','lesson-live','live','private@example.invalid');
+ INSERT INTO commerce_events VALUES('tx-private-a','a','charge','2026-11-24','posted'),('tx-private-b','b','charge','2026-11-24','posted'),('tx-live','live','charge','2026-11-24','posted'),('draft','a','charge','2026-11-25','draft'),('duplicate','a','duplicate_charge','2026-11-25','posted'),('fee','a','provider_fee','2026-11-25','posted'),('refund','a','reversal','2026-11-26','posted');
+ INSERT INTO commerce_lines VALUES('tx-private-a','creator_payable',0,20000),('tx-private-b','creator_payable',0,30000),('tx-live','creator_payable',0,30000),('draft','creator_payable',0,40000),('duplicate','duplicate_payable',0,20000),('fee','provider_fee_suspense',100,0),('refund','creator_payable',20000,0);
+ `);fn(db);}finally{db.close();}}
+test('only own posted test-mode creator accounting, original charge and compensating reversal',()=>withDb(db=>{const rows=readCreatorFinancialHistory(db,'creator-a');assert.deepEqual(rows.map(r=>[r.reference,r.kind,r.deltaKobo]),[['a','reversal',-20000],['a','charge',20000]]);assert.ok(rows.every(r=>r.currency==='NGN'&&r.environment==='test'&&r.withdrawable===false));assert.equal(rows.reduce((a,r)=>a+r.deltaKobo,0),0);assert.deepEqual(readCreatorFinancialHistory(db,'creator-b').map(r=>r.deltaKobo),[30000]);assert.deepEqual(readCreatorFinancialHistory(db,'missing'),[]);}));
+test('privacy-minimized projection excludes private email, creator identity and PSP ids',()=>withDb(db=>{const rows=readCreatorFinancialHistory(db,'creator-a');assert.deepEqual(Object.keys(rows[0]).sort(),['currency','deltaKobo','environment','kind','lessonId','recordedAt','reference','withdrawable']);assert.ok(!JSON.stringify(rows).includes('private'));assert.deepEqual(readCreatorFinancialHistory(db,"creator-a' OR 1=1 --"),[]);}));
+test('history is deterministically bounded to 100 entries',()=>withDb(db=>{for(let i=0;i<110;i++){const key='more-'+String(i).padStart(3,'0');db.prepare('INSERT INTO commerce_events VALUES(?,?,?,?,?)').run(key,'a','charge','2026-11-30','posted');db.prepare('INSERT INTO commerce_lines VALUES(?,?,?,?)').run(key,'creator_payable',0,20000+i);}const rows=readCreatorFinancialHistory(db,'creator-a');assert.equal(rows.length,100);assert.equal(rows[0].deltaKobo,20109);assert.equal(rows[99].deltaKobo,20010);}));
