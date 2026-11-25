@@ -10,6 +10,7 @@ android {
         applicationId 'org.worthkind.studentcreators.internal'
         minSdk 26
         targetSdk 36
+        testInstrumentationRunner 'org.worthkind.studentcreators.CatalogSmokeInstrumentation'
         versionCode 1
         versionName '0.1.0-internal'
         buildConfigField 'String', 'CATALOG_ORIGIN', '"' + catalogOrigin + '"'

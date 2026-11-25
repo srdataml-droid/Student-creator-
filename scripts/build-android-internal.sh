@@ -33,6 +33,7 @@ else
   runner="$tmp/gradle-$version/bin/gradle"
 fi
 # No production credentials, catalog origin, signing keys or publication.
-"$runner" --no-daemon --console=plain -p apps/android :app:assembleDebug :app:lintDebug
+"$runner" --no-daemon --console=plain -p apps/android :app:assembleDebug :app:assembleDebugAndroidTest :app:lintDebug
 test -s apps/android/app/build/outputs/apk/debug/app-debug.apk
-echo "Internal Android debug APK compiled and lint completed. No release signing or install."
+test -s apps/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+echo "Internal Android debug and instrumentation APKs compiled and lint completed. No release signing or install."

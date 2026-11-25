@@ -14,8 +14,6 @@ import java.util.ArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
-import org.json.JSONArray;
-import org.json.JSONObject;
 
 /** Native public catalog only. No native login, private media, purchase or enrollment. */
 public final class MainActivity extends Activity {
@@ -41,13 +39,16 @@ public final class MainActivity extends Activity {
             return insets.consumeSystemWindowInsets();
         });
         heading = new TextView(this);
+        heading.setId(R.id.catalog_heading);
         heading.setTextSize(24);
         if (Build.VERSION.SDK_INT >= 28) heading.setAccessibilityHeading(true);
         layout.addView(heading);
         status = new TextView(this);
+        status.setId(R.id.catalog_status);
         status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
         layout.addView(status);
         retry = new Button(this);
+        retry.setId(R.id.catalog_retry);
         retry.setText("Retry");
         retry.setOnClickListener(v -> load());
         layout.addView(retry);
@@ -56,6 +57,7 @@ public final class MainActivity extends Activity {
         back.setOnClickListener(v -> { selectedCourse = null; selectedTitle = null; load(); });
         layout.addView(back);
         list = new ListView(this);
+        list.setId(R.id.catalog_list);
         layout.addView(list, new LinearLayout.LayoutParams(-1, 0, 1));
         setContentView(layout);
         if (state != null) {
@@ -92,31 +94,17 @@ public final class MainActivity extends Activity {
         String course = selectedCourse;
         pending = executor.submit(() -> {
             try {
-                JSONObject response = new JSONObject(course == null ? transport.courses() : transport.lessons(course));
-                if (course == null && !"ready".equals(response.optString("state"))) throw new IllegalStateException();
-                JSONArray rows = response.getJSONArray(course == null ? "courses" : "items");
-                ArrayList<String> labels = new ArrayList<>(), ids = new ArrayList<>();
-                int limit = course == null ? 50 : 20;
-                for (int i = 0; i < Math.min(rows.length(), limit); i++) {
-                    JSONObject row = rows.getJSONObject(i);
-                    String id = row.optString("id");
-                    String title = row.optString("title").trim();
-                    if (title.isEmpty() || id.isEmpty()) continue;
-                    if (course == null) transport.lessonsUri(id);
-                    if (course != null && !course.equals(row.optString("courseId"))) continue;
-                    String code = row.optString("code", "");
-                    String label = (course == null && !code.isEmpty() ? code + " — " : "") + title;
-                    String preview = course == null ? "" : row.optString("previewText", "");
-                    labels.add(label + (preview.isEmpty() || "null".equals(preview) ? "" : "\n" + preview));
-                    ids.add(id);
-                }
+                ArrayList<CatalogPreview.Row> rows = CatalogPreview.parse(
+                    course == null ? transport.courses() : transport.lessons(course), course);
+                ArrayList<String> labels = new ArrayList<>();
+                for (CatalogPreview.Row row : rows) labels.add(row.label());
                 runOnUiThread(() -> {
                     if (generation != attempt || isFinishing()) return;
                     status.setText(labels.isEmpty() ? "No public previews available." :
                         (course == null ? "Select a course to explore original student work." : "Public previews only."));
                     list.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, labels));
                     list.setOnItemClickListener((parent, view, position, id) -> {
-                        if (course == null) { selectedCourse = ids.get(position); selectedTitle = labels.get(position); load(); }
+                        if (course == null) { selectedCourse = rows.get(position).id; selectedTitle = rows.get(position).title; load(); }
                     });
                 });
             } catch (Exception e) {
