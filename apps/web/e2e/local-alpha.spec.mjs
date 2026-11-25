@@ -389,6 +389,15 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     await expect(invitePage.locator('#inviteCode')).toHaveAttribute('required','');
     await expect(invitePage.locator('#inviteCode')).toHaveAttribute('type','password');
     await invitePage.close();
+    // Actual browser must purge private history when the current session is revoked.
+    await viewerPage.bringToFront();
+    await viewerPage.goto('/messages/'+creatorId);
+    await expect(viewerPage.getByText(privateText,{exact:true})).toBeVisible();
+    await readJson(await viewer.request.post('/api/local/auth/logout-all',{data:{}}));
+    await expect(viewerPage.getByText('You need to',{exact:false})).toBeVisible({timeout:20000});
+    await expect(viewerPage.getByText(privateText,{exact:true})).toHaveCount(0);
+    await expect(viewerPage.getByLabel('Message (max 2,000 characters)')).toHaveCount(0);
+    console.log('browser-alpha: open conversation purged after session revocation');
     console.log('browser-alpha: creator moderation and revocation passed');
   }finally{
     await Promise.all([admin.close(),creator.close(),viewer.close()]);
