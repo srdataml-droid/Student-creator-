@@ -15,6 +15,12 @@ jobs:
           node-version: '22'
       - name: Run tests (no dependencies required)
         run: npm test
+      - name: Install disposable ClamAV engine (no production signatures or credentials)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clamav-daemon
+      - name: Verify real clamd engine and worker integration on harmless synthetic signature
+        run: bash scripts/test-clamd-engine.sh
       - name: Verify source artefacts do not contain development secrets
         run: |
           if git ls-files | grep -E '(^|/)(\.env(\..*)?|.*\.pem|.*\.key)$' | grep -vE '\.env\.example$'; then
@@ -30,8 +36,15 @@ jobs:
       - name: Install from committed lockfile
         working-directory: apps/web
         run: npm ci --no-audit --no-fund
-      - name: Build Next.js app without production credentials
+      - name: Build Next.js with synthetic server-only credential canaries
         working-directory: apps/web
+        env:
+          APP_DATA_MODE: local
+          SUPABASE_SECRET_KEY: synthetic_ci_supabase_secret_canary_20261125
+          MUX_PLAYBACK_PRIVATE_KEY_BASE64: synthetic_ci_mux_secret_canary_20261125
+          LIVEKIT_API_SECRET: synthetic_ci_livekit_secret_canary_20261125
+          RESEND_API_KEY: synthetic_ci_resend_secret_canary_20261125
+          PAYSTACK_TEST_SECRET_KEY: synthetic_ci_paystack_secret_canary_20261125
         run: npm run build
 
   database-contract:
@@ -74,6 +87,9 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/migrations/0006_institution_identity_contract.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/0007_mux_webhook_idempotency.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/0008_hosted_rls_read_grants.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0009_restrict_content_metadata_columns.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0021_week01_runtime_privileges.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/runtime_privileges.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/smoke.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/creator_public_profiles.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/creator_restrictions.sql
@@ -82,6 +98,39 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/tests/institution_identity.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/mux_webhook_inbox.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/hosted_rls_isolation.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0010_week01_current_session_guard.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/current_session_guard.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0012_week01_mux_webhook_delivery.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/mux_webhook_delivery.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0014_week01_mux_video.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/mux_video.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0017_week01_mux_event_worker.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/mux_event_worker.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0013_week01_private_identity_api.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/private_identity_api.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0015_week01_auth_email_delivery.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/auth_email_delivery.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0016_week01_hosted_auth_lifecycle.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/hosted_auth_lifecycle.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0018_week01_session_aware_rls.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/session_aware_rls.sql
+
+      - name: Restore disposable PostgreSQL backup into isolated database
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          test "$PGDATABASE" = campus_ci
+          test -n "$PG_CONTAINER"
+          umask 077
+          dump="$RUNNER_TEMP/student-creators-disposable.dump"
+          trap 'rm -f "$dump"' EXIT
+          psql -v ON_ERROR_STOP=1 -f db/tests/backup_restore_fixture.sql
+          docker exec "$PG_CONTAINER" pg_dump -U postgres -d campus_ci --format=custom > "$dump"
+          test -s "$dump"
+          docker exec "$PG_CONTAINER" createdb -U postgres campus_ci_restore
+          docker exec -i "$PG_CONTAINER" pg_restore -U postgres --dbname=campus_ci_restore --exit-on-error < "$dump"
+          docker exec -i "$PG_CONTAINER" psql -U postgres -d campus_ci_restore -v ON_ERROR_STOP=1 < db/tests/backup_restore_assert.sql
 
   browser-alpha:
     runs-on: ubuntu-24.04
@@ -121,6 +170,26 @@ jobs:
           done
           curl -fsS http://localhost:3000/api/local/health >/dev/null || { cat "$RUNNER_TEMP/student-creators-browser.log"; exit 1; }
           (cd apps/web && npx playwright test e2e/local-alpha.spec.mjs --workers=1 --reporter=line --trace=retain-on-failure)
+
+      - name: Verify hosted account UI fails closed when staging is not approved
+        env:
+          APP_DATA_MODE: hosted
+          STUDENT_CREATORS_STAGING_APPROVED: 'false'
+          STUDENT_CREATORS_PUBLIC_REGISTRATION: 'false'
+          STUDENT_CREATORS_REAL_PAYMENT_ENABLED: 'false'
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: |
+          set -euo pipefail
+          npm run start --prefix apps/web -- -p 3101 > "$RUNNER_TEMP/hosted-closed.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 45); do
+            if curl -fsS http://localhost:3101/sign-in >/dev/null 2>&1; then break; fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then cat "$RUNNER_TEMP/hosted-closed.log"; exit 1; fi
+            sleep 1
+          done
+          curl -fsS http://localhost:3101/sign-in >/dev/null
+          (cd apps/web && npx playwright test e2e/hosted-closed.spec.mjs --workers=1 --reporter=line)
 
   browser-paid-media:
     runs-on: ubuntu-24.04

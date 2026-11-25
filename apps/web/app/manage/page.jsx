@@ -3,10 +3,10 @@ import Link from 'next/link';
 import {useEffect,useState} from 'react';
 import {api,friendlyError} from '../../lib/local-client.js';
 export default function Manage(){
- const [user,setUser]=useState(null),[state,setState]=useState('loading'),[schools,setSchools]=useState([]),[courses,setCourses]=useState([]),[people,setPeople]=useState([]),[students,setStudents]=useState([]),[queue,setQueue]=useState([]),[reports,setReports]=useState([]),[communityReports,setCommunityReports]=useState([]),[commentReports,setCommentReports]=useState([]);
+ const [user,setUser]=useState(null),[state,setState]=useState('loading'),[schools,setSchools]=useState([]),[courses,setCourses]=useState([]),[people,setPeople]=useState([]),[students,setStudents]=useState([]),[appeals,setAppeals]=useState([]),[due,setDue]=useState([]),[queue,setQueue]=useState([]),[reports,setReports]=useState([]),[communityReports,setCommunityReports]=useState([]),[commentReports,setCommentReports]=useState([]);
  const [schoolName,setSchoolName]=useState(''),[course,setCourse]=useState({institutionId:'',code:'',title:''}),[topic,setTopic]=useState({courseId:'',name:''}),[reasons,setReasons]=useState({});
  const [error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
- async function refresh(){try{const me=await api('me');setUser(me.user);if(me.user.role!=='admin'){setState('forbidden');return;}const [a,b,c,d,r,cr,comments,accounts]=await Promise.all([api('institutions'),api('courses'),api('admin/pending-users'),api('admin/review-queue'),api('admin/reports'),api('admin/community-reports'),api('admin/comment-reports'),api('admin/students')]);setSchools(a.institutions);setCourses(b.courses);setPeople(c.users);setQueue(d.lessons);setReports(r.reports);setCommunityReports(cr.reports);setCommentReports(comments.reports);setStudents(accounts.students);setState('ready');}catch(e){setState(e.status===401?'signed-out':'unavailable');}}
+ async function refresh(){try{const me=await api('me');setUser(me.user);if(me.user.role!=='admin'){setState('forbidden');return;}const [a,b,c,d,r,cr,comments,accounts,identityAppeals,revalidation]=await Promise.all([api('institutions'),api('courses'),api('admin/pending-users'),api('admin/review-queue'),api('admin/reports'),api('admin/community-reports'),api('admin/comment-reports'),api('admin/students'),api('admin/verification-appeals'),api('admin/identity/revalidation-due')]);setSchools(a.institutions);setCourses(b.courses);setPeople(c.users);setQueue(d.lessons);setReports(r.reports);setCommunityReports(cr.reports);setCommentReports(comments.reports);setStudents(accounts.students);setAppeals(identityAppeals.appeals);setDue(revalidation.due);setState('ready');}catch(e){setState(e.status===401?'signed-out':'unavailable');}}
  useEffect(()=>{refresh();},[]);
  async function doAction(job,success){setBusy(true);setError('');setMessage('');try{await job();setMessage(success);await refresh();}catch(e){setError(friendlyError(e));}finally{setBusy(false);}}
  async function signOut(){await api('auth/logout',{method:'POST',body:{}});window.location.assign('/');}
@@ -33,6 +33,16 @@ export default function Manage(){
  <textarea id={'suspension-'+s.id} value={reasons['suspension-'+s.id]??''} onChange={e=>setReasons(old=>({...old,['suspension-'+s.id]:e.target.value}))} required minLength={5} maxLength={1000} rows={2} />
  <button type="submit" className="secondary-link" disabled={busy||(reasons['suspension-'+s.id]??'').trim().length<5}>{s.suspended?'Reinstate student':'Suspend student'}</button>
  </form></li>)}</ul>}
+ </section>
+ <section className="panel"><p className="eyebrow">Institutional verification</p><h2>Membership appeals</h2>
+ <p className="hint">Review the student's explanation and record a decision. Requesting another review never restores access automatically or proves affiliation.</p>
+ {appeals.length===0?<p role="status">No open verification appeals.</p>:<ul className="review-list">{appeals.map(a=><li key={a.caseId}>
+ <h3>Case {a.caseId.slice(0,8)}</h3><p className="hint">Student reference: {a.userId.slice(0,8)} · {a.createdAt}</p><div className="review-text">{a.reason}</div>
+ <label htmlFor={'appeal-'+a.caseId}>Decision notes (10–500 characters)</label><textarea id={'appeal-'+a.caseId} rows={3} minLength={10} maxLength={500} value={reasons['appeal-'+a.caseId]??''} onChange={e=>setReasons(old=>({...old,['appeal-'+a.caseId]:e.target.value}))}/>
+ <div className="button-row">{[['review_requested','Request another review'],['rejected','Reject appeal']].map(([decision,label])=><button key={decision} type="button" className="secondary-link" disabled={busy||(reasons['appeal-'+a.caseId]??'').trim().length<10} onClick={()=>doAction(()=>api('admin/verification-appeals/'+a.caseId,{method:'POST',body:{decision,note:reasons['appeal-'+a.caseId]}}),'Appeal decision recorded. Eligibility unchanged.')}>{label}</button>)}</div>
+ </li>)}</ul>}
+ <h3>Affiliations requiring revalidation</h3><p className="hint">Expiring within 24 hours or already expired. An institution-approved proof is required for renewal.</p>
+ {due.length===0?<p role="status">No affiliations due.</p>:<ul className="small-list">{due.map(d=><li key={d.userId}>Student {d.userId.slice(0,8)} · {d.providerId} · {new Date(d.validUntil*1000).toISOString()}</li>)}</ul>}
  </section>
  <section className="panel"><p className="eyebrow">Step 4</p><h2>Lesson review</h2><p className="hint">Read each submission and document the reason for your decision. Approval makes the lesson public immediately.</p>
  {queue.length===0?<p role="status">No lessons awaiting review.</p>:<ul className="review-list">{queue.map(l=><li key={l.id}><span className="pill">Awaiting review</span><h3>{l.title}</h3><p>{l.description}</p><div className="review-text">{l.lessonText}</div>

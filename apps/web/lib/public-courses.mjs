@@ -1,9 +1,9 @@
-import {readSupabaseRuntimeConfig} from '../../../packages/content-core/src/supabase-runtime-config.mjs';
+import {readDedicatedSupabaseRuntimeConfig} from '../../../packages/content-core/src/supabase-runtime-config.mjs';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export class PublicCatalogError extends Error {constructor(message){super(message);this.name='PublicCatalogError';}}
 /** Public PostgREST read only. Handles missing configuration without pretending courses exist. */
 export async function getPublicCourses({env=process.env,fetcher=fetch}={}) {
-  const config=readSupabaseRuntimeConfig(env);
+  const config=readDedicatedSupabaseRuntimeConfig(env);
   if(!config) return {state:'not_configured',courses:[]};
   const base=new URL(config.url);
   if(base.protocol!=='https:'&&!(base.protocol==='http:'&&['127.0.0.1','localhost'].includes(base.hostname)))throw new PublicCatalogError('Invalid project URL');
@@ -17,7 +17,7 @@ export async function getPublicCourses({env=process.env,fetcher=fetch}={}) {
 }
 export async function getPublicCourse({id,env=process.env,fetcher=fetch}={}) {
   if(!UUID.test(id||''))return null;
-  const config=readSupabaseRuntimeConfig(env);
+  const config=readDedicatedSupabaseRuntimeConfig(env);
   if(!config)return null;
   const base=new URL(config.url);
   if(base.protocol!=='https:'&&!(base.protocol==='http:'&&['127.0.0.1','localhost'].includes(base.hostname)))throw new PublicCatalogError('Invalid project URL');

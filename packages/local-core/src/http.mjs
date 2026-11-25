@@ -128,6 +128,7 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
         if(path==='me/privacy-requests'){if(!actor)return unauthorized();return responses({requests:store.myPrivacyRequests(actor)});}
         if(path==='admin/copyright-claims'){if(!actor)return unauthorized();return responses({claims:store.copyrightReviewQueue(actor)});}
         if(path==='admin/privacy-requests'){if(!actor)return unauthorized();return responses({requests:store.privacyRequestQueue(actor)});}
+        if(path==='admin/verification-appeals'){if(!actor)return unauthorized();return responses({appeals:store.verificationAppealQueue(actor)});}
         if(path==='admin/identity/revalidation-due'){if(!actor)return unauthorized();return responses({due:store.dueAffiliationRevalidations(actor)});}
         if(segments.length===3&&segments[0]==='admin'&&segments[1]==='institution-integrations'){
           if(!actor)return unauthorized();const integration=store.getInstitutionIntegration(actor,segments[2]);

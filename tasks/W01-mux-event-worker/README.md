@@ -1,0 +1,2 @@
+# Mux worker staging contract
+Stacked integration of #52 and #54. Explicit worker gate and dedicated project only. Run node scripts/process-mux-event.mjs once per scheduler invocation after reviewed migrations. No scheduler provisioned. Worker uses bounded lease/retry, authoritative GETs, immutable upload binding; signed deletion only revokes already-bound test assets. No event can create a clean scan or publish content. Exact provider acceptance and independent review required.
