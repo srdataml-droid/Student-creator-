@@ -1,7 +1,8 @@
-import {readSupabaseRuntimeConfig} from '../../../packages/content-core/src/supabase-runtime-config.mjs';
+import {readSupabaseRuntimeConfig,readDedicatedSupabaseRuntimeConfig} from '../../../packages/content-core/src/supabase-runtime-config.mjs';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const REF='jnkqmlbkkvccnxrgkpno';
 export function discoveryConfig(env){
+ if(env.STUDENT_CREATORS_ENVIRONMENT==='production'){const cfg=readDedicatedSupabaseRuntimeConfig(env);if(!cfg)throw Error('CATALOG_UNAVAILABLE');return cfg;}
  if(env.APP_DATA_MODE!=='hosted'||env.STUDENT_CREATORS_STAGING_APPROVED!=='true'||env.STUDENT_CREATORS_PROJECT_REF!==REF||env.STUDENT_CREATORS_PUBLIC_REGISTRATION!=='false'||env.STUDENT_CREATORS_REAL_PAYMENT_ENABLED!=='false')throw Error('CATALOG_UNAVAILABLE');
  const config=readSupabaseRuntimeConfig(env);
  if(!config||config.url!=='https://'+REF+'.supabase.co')throw Error('CATALOG_UNAVAILABLE');
