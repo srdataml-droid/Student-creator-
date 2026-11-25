@@ -8,8 +8,8 @@ emu="$sdk/emulator/emulator"
 adb="$sdk/platform-tools/adb"
 avdm="$sdk/cmdline-tools/latest/bin/avdmanager"
 sdkmanager="$sdk/cmdline-tools/latest/bin/sdkmanager"
-if [[ "${CI:-}" != true || -z "$sdk" || ! -x "$emu" || ! -x "$adb" ]]; then
-  echo "ANDROID_EMULATOR_NOT_EXECUTED: Android emulator or SDK unavailable"
+if [[ "${CI:-}" != true || -z "$sdk" || ! -d "$sdk" ]]; then
+  echo "ANDROID_EMULATOR_NOT_EXECUTED: isolated CI or Android SDK unavailable"
   exit 0
 fi
 if [[ ! -x "$avdm" ]]; then avdm="$(command -v avdmanager || true)"; fi
@@ -29,7 +29,23 @@ if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
     sudo -n setfacl -m "u:$(id -u):rw" /dev/kvm || true
   fi
 fi
-if [[ ! -r /dev/kvm || ! -w /dev/kvm ]] || ! "$emu" -accel-check; then
+if [[ ! -r /dev/kvm || ! -w /dev/kvm ]]; then
+  echo "ANDROID_EMULATOR_NOT_EXECUTED: KVM permissions unavailable"
+  exit 0
+fi
+if [[ ! -x "$emu" || ! -x "$adb" ]]; then
+  if [[ "${GITHUB_ACTIONS:-}" == true && "${RUNNER_ENVIRONMENT:-}" == github-hosted && "${WK8_STANDARD_PUBLIC_RUNNER:-}" == true && -x "$sdkmanager" ]]; then
+    packages=()
+    [[ -x "$emu" ]] || packages+=(emulator)
+    [[ -x "$adb" ]] || packages+=(platform-tools)
+    timeout 180 "$sdkmanager" --install "${packages[@]}" </dev/null || true
+  fi
+fi
+if [[ ! -x "$emu" || ! -x "$adb" ]]; then
+  echo "ANDROID_EMULATOR_NOT_EXECUTED: SDK emulator or platform-tools unavailable"
+  exit 0
+fi
+if ! "$emu" -accel-check; then
   echo "ANDROID_EMULATOR_NOT_EXECUTED: KVM cannot be used by this runner"
   exit 0
 fi
