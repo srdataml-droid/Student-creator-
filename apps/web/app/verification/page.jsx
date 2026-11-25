@@ -1,11 +1,13 @@
 'use client';
+import {useHostedAccount} from '../HostedAccountProvider.jsx';
+import {HostedIdentity} from '../HostedCreatorWorkspace.jsx';
 import Link from 'next/link';
 import {useEffect,useState} from 'react';
 import {api,friendlyError} from '../../lib/local-client.js';
 
 /** Shows scoped affiliation only. There is deliberately no ID-photo upload,
  * self-issued verification badge or institutional admin impersonation flow. */
-export default function StudentVerification(){
+function LocalStudentVerification(){
  const [account,setAccount]=useState(null),[affiliation,setAffiliation]=useState(null);
  const [appeals,setAppeals]=useState([]),[phase,setPhase]=useState('loading');
  const [reason,setReason]=useState(''),[busy,setBusy]=useState(false);
@@ -76,3 +78,5 @@ export default function StudentVerification(){
  </div>}
  </main>;
 }
+
+export default function StudentVerification(){const hosted=useHostedAccount();return hosted?<HostedIdentity/>:<LocalStudentVerification/>;}
