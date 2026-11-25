@@ -178,6 +178,30 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     const lessonId=lessons.find(x=>x.title===title)?.id;
     expect(lessonId).toBeTruthy();
 
+    const draftRow=creatorPage.getByRole('listitem').filter({hasText:title});
+    await draftRow.getByRole('button',{name:'Edit',exact:true}).click();
+    await expect(creatorPage.locator('#course')).toBeDisabled();
+    await expect(creatorPage.locator('#topic')).toBeDisabled();
+    await expect(draftRow.getByRole('button',{name:'Submit for review'})).toBeDisabled();
+    await creatorPage.getByRole('button',{name:'Cancel editing'}).click();
+    await expect(draftRow.getByRole('button',{name:'Submit for review'})).toBeEnabled();
+    const price=creatorPage.locator('#price-'+lessonId);
+    await price.fill('');
+    await expect(draftRow.getByRole('button',{name:'Submit for review'})).toBeDisabled();
+    await draftRow.getByRole('button',{name:'Save access price'}).click();
+    await expect(creatorPage.getByRole('alert').filter({hasText:'Choose ₦0'})).toBeVisible();
+    await price.fill('0');
+    await expect(draftRow.getByRole('button',{name:'Submit for review'})).toBeEnabled();
+    const videoInput=creatorPage.locator('#video-'+lessonId);
+    await videoInput.setInputFiles({name:'empty.mp4',mimeType:'video/mp4',buffer:Buffer.alloc(0)});
+    await expect(draftRow.getByRole('button',{name:'Submit for review'})).toBeDisabled();
+    await draftRow.getByRole('button',{name:'Upload video'}).click();
+    await expect(creatorPage.getByRole('alert').filter({hasText:'nonempty MP4'})).toBeVisible();
+    await draftRow.getByRole('button',{name:'Remove selected video'}).click();
+    await expect(videoInput).toHaveValue('');
+    await expect(draftRow.getByRole('button',{name:'Submit for review'})).toBeEnabled();
+    console.log('browser-alpha: studio edit, explicit price and selected media guard passed');
+
     // Draft video must be invisible to other viewers, including anonymous users.
     expect((await request.get(`${BASE}/api/local/lessons/${lessonId}/video`)).status()).toBe(404);
     await creatorPage.locator(`#video-${lessonId}`).setInputFiles({
@@ -185,11 +209,13 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     });
     await creatorPage.getByRole('button',{name:'Upload video'}).click();
     await expect(creatorPage.getByText('Video saved privately.',{exact:false})).toBeVisible();
+    await expect(videoInput).toHaveValue('');
     await creatorPage.locator('#captions-'+lessonId).setInputFiles({
       name:'synthetic.vtt',mimeType:'text/vtt',buffer:Buffer.from(syntheticCaptions),
     });
     await creatorPage.getByRole('button',{name:'Upload captions'}).click();
     await expect(creatorPage.getByText('English captions saved privately.',{exact:false})).toBeVisible();
+    await expect(creatorPage.locator('#captions-'+lessonId)).toHaveValue('');
     expect((await request.get(`${BASE}/api/local/lessons/${lessonId}/video`)).status()).toBe(404);
     await creatorPage.getByRole('button',{name:'Submit for review'}).click();
     await expect(creatorPage.getByText('Lesson submitted.',{exact:false})).toBeVisible();
