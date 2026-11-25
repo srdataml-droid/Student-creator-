@@ -1,8 +1,10 @@
 'use client';
+import HostedAccountForm from '../HostedAccountForm.jsx';
+import {useHostedAccount} from '../HostedAccountProvider.jsx';
 import Link from 'next/link';
 import {useEffect,useState} from 'react';
 import {api,friendlyError} from '../../lib/local-client.js';
-export default function Join(){
+function LocalJoin(){
  const [schools,setSchools]=useState([]),[inviteOnly,setInviteOnly]=useState(false),[state,setState]=useState('loading'),[form,setForm]=useState({email:'',password:'',institutionId:'',inviteCode:''}),[error,setError]=useState(''),[busy,setBusy]=useState(false),[created,setCreated]=useState(false);
  useEffect(()=>{Promise.all([api('institutions'),api('health')]).then(([d,health])=>{setSchools(d.institutions);setInviteOnly(Boolean(health.pilotInviteOnly));setState('ready')}).catch(()=>setState('unavailable'));},[]);
  async function submit(e){e.preventDefault();setError('');setBusy(true);try{await api('auth/register',{method:'POST',body:form});setCreated(true);}catch(e){setError(friendlyError(e));}finally{setBusy(false);}}
@@ -18,3 +20,5 @@ export default function Join(){
  <p className="hint">Already registered? <Link href="/sign-in">Sign in</Link></p></>}
  </div></section></main>;
 }
+
+export default function Join(){const hosted=useHostedAccount();return hosted?<HostedAccountForm mode="join"/>:<LocalJoin/>;}

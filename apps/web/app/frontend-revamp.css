@@ -426,3 +426,12 @@
 .hosted-pagination{display:flex;align-items:center;justify-content:center;gap:20px;padding:20px 0;color:var(--muted)}
 .hosted-pagination a{min-height:44px;display:inline-flex;align-items:center}
 @media(max-width:360px){.hosted-pagination{gap:10px}.hosted-search-row{gap:6px}}
+
+/* Hosted account forms use the same neutral controls and responsive type. */
+.creator-body .hosted-account-page{max-width:680px}
+.account-form-wrap{max-width:440px;margin:24px auto 48px;padding:24px 0}
+.account-form-wrap h1{font-size:clamp(1.6rem,3vw,2rem);line-height:1.2;letter-spacing:-.04em;margin:0 0 12px}
+.account-form-wrap .form-stack{gap:8px;margin:24px 0 18px}
+.account-form-wrap .form-stack button{margin-top:12px;width:100%}
+.account-form-wrap a:not(.primary-link){color:var(--brand-strong);font-weight:600}
+@media(max-width:760px){.account-form-wrap{margin:0 auto;padding:16px 0 30px}}
