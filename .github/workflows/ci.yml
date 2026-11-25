@@ -86,6 +86,8 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-messaging.test.sql
           psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-communities.sql
           psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-communities.test.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-discovery.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-discovery.test.sql
 
   browser-alpha:
     runs-on: ubuntu-24.04
