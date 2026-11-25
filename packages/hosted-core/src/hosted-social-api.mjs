@@ -18,6 +18,7 @@ const key=v=>{if(typeof v!=='string'||!/^[A-Za-z0-9_-]{16,128}$/.test(v))throw f
 const rpc=(name,args)=>({path:'rpc/'+name,method:'POST',body:args});
 const select=(name,fields,filters={})=>({path:name+'?'+new URLSearchParams({select:fields,...filters}),method:'GET'});
 const readIds=v=>{if(!Array.isArray(v)||v.length<1||v.length>100||new Set(v).size!==v.length)throw fault('INVALID_INPUT',422);return v.map(id);};
+const adminOperations=new Set(['setCommunityModerator','reportQueue','reviewReport']);
 const rateMessages=new Set(['MESSAGE_RATE_LIMIT','POST_RATE_LIMIT','COMMENT_RATE_LIMIT','FOLLOW_RATE_LIMIT','REPORT_RATE_LIMIT','RESTRICTION_RATE_LIMIT']);
 function mapError(status,data){
  if(status===401)return fault('AUTH_REQUIRED',401);
@@ -100,13 +101,28 @@ function operation(name,input,actor){
  case 'reportAccount':case 'reportMessage':{
   const b=shape(input,['targetId','category','reason']);return rpc('social_abuse_report',{_kind:name==='reportAccount'?'account':'message',_target:id(b.targetId),_category:choice(b.category,['harassment','impersonation','spam','other']),_reason:string(b.reason,10,1000)});
  }
+ case 'setCommunityModerator':{
+  const b=shape(input,['courseId','userId','enabled','reason']);return rpc('social_community_action',{_action:'role',_course:id(b.courseId),_input:{userId:id(b.userId),enabled:bool(b.enabled),reason:string(b.reason,5,1000)}});
+ }
+ case 'reportQueue':{
+  const b=shape(input,['kind','limit']);return rpc('social_report_queue',{_kind:choice(b.kind,['message','account','comment','community']),_limit:integer(b.limit,100,100)});
+ }
+ case 'reviewReport':{
+  const b=shape(input,['kind','id','decision','reason']),kind=choice(b.kind,['message','account','comment','community']);
+  return rpc('social_review_report',{_kind:kind,_id:id(b.id),_decision:choice(b.decision,['account','message'].includes(kind)?['review']:['hide','dismiss']),_reason:string(b.reason,5,1000)});
+ }
  default:throw fault('SOCIAL_OPERATION_NOT_FOUND',404);
  }
 }
-export function createHostedSocialClient({projectRef,publishableKey,isCurrentSession,authorizeStudent,fetchImpl=globalThis.fetch}={}){
+export function createHostedSocialClient({projectRef,publishableKey,isCurrentSession,authorizeStudent,authorizeAdmin,fetchImpl=globalThis.fetch}={}){
  return Object.freeze({
   async execute({accessToken,operation:name,input={}}={}){
-   const verified=await verifyCurrentStudentBearer({accessToken,projectRef,publishableKey,isCurrentSession,authorizeStudent,fetchImpl});
+   const staff=adminOperations.has(name);
+   // The shared verifier checks identity/session and a trusted authorization predicate.
+   // Staff are not required to be enrolled students: use the independent admin predicate.
+   let verified;
+   try{verified=await verifyCurrentStudentBearer({accessToken,projectRef,publishableKey,isCurrentSession,authorizeStudent:staff?authorizeAdmin:authorizeStudent,fetchImpl});}
+   catch(e){if(staff&&e.code==='STUDENT_NOT_ELIGIBLE')throw fault('ADMIN_REQUIRED',403);throw e;}
    const request=operation(name,input,verified.userId);
    const headers={apikey:publishableKey,Authorization:'Bearer '+accessToken,Accept:'application/json',...(request.body!==undefined?{'Content-Type':'application/json'}:{}),...(request.prefer?{Prefer:request.prefer}:{})};
    let response;
