@@ -85,7 +85,9 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/migrations/0010_week01_current_session_guard.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/current_session_guard.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/0015_week05_hosted_test_commerce.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0016_week05_charge_inbox.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/week05_test_commerce.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/week05_charge_inbox.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/0019_week01_paystack_hosted_bridge.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/paystack_hosted_bridge.sql
 

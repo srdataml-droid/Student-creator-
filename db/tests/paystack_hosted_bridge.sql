@@ -14,11 +14,13 @@ BEGIN
  IF o->>'create'<>'true' OR o->>'buyerEmail'<>'buyer@example.invalid' OR (o->>'amountKobo')::bigint<>20000 THEN RAISE EXCEPTION 'Order snapshot invalid'; END IF;
  IF public.reserve_hosted_paystack_checkout(b,c,'fixture-paystack-key-19')->>'create'<>'false' THEN RAISE EXCEPTION 'Duplicate initialization'; END IF;
  IF NOT public.finish_hosted_paystack_checkout(oid,'https://checkout.paystack.com/fixture') THEN RAISE EXCEPTION 'Checkout finish'; END IF;
- IF public.record_hosted_paystack_charge(ref,'tx_fixture',repeat('a',64))<>'accepted' OR public.record_hosted_paystack_charge(ref,'tx_fixture',repeat('a',64))<>'duplicate' OR public.record_hosted_paystack_charge(ref,'tx_fixture',repeat('b',64))<>'collision' THEN RAISE EXCEPTION 'Inbox replay'; END IF;
+ IF public.record_hosted_paystack_charge(ref,'tx_fixture',repeat('a',64))<>'accepted' OR public.record_hosted_paystack_charge(ref,'tx_fixture',repeat('a',64))<>'duplicate' OR public.record_hosted_paystack_charge(ref,'tx_fixture',repeat('b',64))<>'duplicate' THEN RAISE EXCEPTION 'Inbox replay'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM week05_finance.charge_inbox WHERE transaction_id='tx_fixture' AND payload_sha256=repeat('a',64)) THEN RAISE EXCEPTION 'Canonical inbox or first digest missing'; END IF;
  e:=public.claim_hosted_paystack_charge();
+ IF public.week05_claim_test_charge() IS NOT NULL THEN RAISE EXCEPTION 'Second worker claimed same charge'; END IF;
  IF public.settle_hosted_paystack_charge(e->>'key',gen_random_uuid(),'tx_fixture',20000,0) THEN RAISE EXCEPTION 'Wrong lease settled'; END IF;
  IF EXISTS(SELECT 1 FROM public.entitlements WHERE order_id=oid) THEN RAISE EXCEPTION 'Inbox granted entitlement'; END IF;
  IF NOT public.settle_hosted_paystack_charge(e->>'key',(e->>'leaseId')::uuid,'tx_fixture',20000,0) THEN RAISE EXCEPTION 'Settlement failed'; END IF;
- IF NOT EXISTS(SELECT 1 FROM public.entitlements WHERE order_id=oid AND state='active') OR public.claim_hosted_paystack_charge() IS NOT NULL THEN RAISE EXCEPTION 'Atomic settlement failed'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM public.entitlements WHERE order_id=oid AND state='active') OR public.claim_hosted_paystack_charge() IS NOT NULL OR NOT EXISTS(SELECT 1 FROM week05_finance.charge_inbox WHERE transaction_id='tx_fixture' AND state='processed') THEN RAISE EXCEPTION 'Atomic settlement failed'; END IF;
 END $$;
 ROLLBACK;
