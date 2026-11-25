@@ -105,7 +105,7 @@ create trigger week05_order_snapshot before update or delete on public.orders fo
 -- receipt and posted charge. The existing visibility policy still enforces
 -- account, course and creator restrictions. Revocation never grants access.
 create function week05_finance.entitlement_guard() returns trigger
-language plpgsql security invoker set search_path='' as $
+language plpgsql security invoker set search_path='' as $$
 begin
  if tg_op='UPDATE' and exists(select 1 from week05_finance.order_terms where order_id=old.order_id) then
   if (new.order_id,new.buyer_id,new.content_id,new.granted_at) is distinct from (old.order_id,old.buyer_id,old.content_id,old.granted_at) then
@@ -121,7 +121,7 @@ begin
   raise exception 'VERIFIED_JOURNAL_REQUIRED' using errcode='23514';
  end if;
  return new;
-end $;
+end $$;
 revoke all on function week05_finance.entitlement_guard() from public,anon,authenticated;
 create trigger week05_entitlement_guard before insert or update on public.entitlements for each row execute function week05_finance.entitlement_guard();
 
