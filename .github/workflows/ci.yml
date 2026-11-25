@@ -171,6 +171,26 @@ jobs:
           curl -fsS http://localhost:3000/api/local/health >/dev/null || { cat "$RUNNER_TEMP/student-creators-browser.log"; exit 1; }
           (cd apps/web && npx playwright test e2e/local-alpha.spec.mjs --workers=1 --reporter=line --trace=retain-on-failure)
 
+      - name: Verify hosted account UI fails closed when staging is not approved
+        env:
+          APP_DATA_MODE: hosted
+          STUDENT_CREATORS_STAGING_APPROVED: 'false'
+          STUDENT_CREATORS_PUBLIC_REGISTRATION: 'false'
+          STUDENT_CREATORS_REAL_PAYMENT_ENABLED: 'false'
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: |
+          set -euo pipefail
+          npm run start --prefix apps/web -- -p 3101 > "$RUNNER_TEMP/hosted-closed.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 45); do
+            if curl -fsS http://localhost:3101/sign-in >/dev/null 2>&1; then break; fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then cat "$RUNNER_TEMP/hosted-closed.log"; exit 1; fi
+            sleep 1
+          done
+          curl -fsS http://localhost:3101/sign-in >/dev/null
+          (cd apps/web && npx playwright test e2e/hosted-closed.spec.mjs --workers=1 --reporter=line)
+
   browser-paid-media:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
