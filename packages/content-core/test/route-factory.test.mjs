@@ -37,7 +37,7 @@ test('catalog route uses public-only credentials and rejects nonpublished',async
  };
  const handler=buildCatalogRoute({getEnv:()=>({...env,SUPABASE_SERVICE_ROLE_KEY:undefined}),fetcher});
  const res=await handler(new Request('https://site.example/api/lessons?courseId='+course));const json=await res.json();
- assert.equal(res.status,200);assert.equal(json.items.length,1);assert.deepEqual(keySeen,['public',env.SUPABASE_PUBLISHABLE_KEY]);
+ assert.equal(res.status,200);assert.equal(json.items.length,1);assert.deepEqual(keySeen,[env.SUPABASE_PUBLISHABLE_KEY,env.SUPABASE_PUBLISHABLE_KEY]);
 });
 
 test('content entrypoints never contact wrong projects, live modes or mislabeled privileged public keys',async()=>{
