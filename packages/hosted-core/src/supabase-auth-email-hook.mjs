@@ -1,10 +1,10 @@
-import {createHmac,createHash,timingSafeEqual} from 'node:crypto';
+import {createHmac,timingSafeEqual} from 'node:crypto';
 import {readSupabaseRuntimeConfig,supabaseServerHeaders} from '../../content-core/src/supabase-runtime-config.mjs';
 import {createResendTransport} from './resend-transport.mjs';
 const MAX=65536,REF='jnkqmlbkkvccnxrgkpno';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const invalid=()=>new Error('Email hook unavailable');
-const hash=s=>createHash('sha256').update(s).digest('hex');
+const deliveryHash=(secret,label,value)=>createHmac('sha256',secret).update(label+'\0'+value).digest('hex');
 const reply=status=>Response.json(status===200?{}:{error:{http_code:status,message:'Email delivery unavailable'}},{status,headers:{'cache-control':'no-store'}});
 const actions={signup:['Verify your email','email verification'],invite:['Your private student invitation','invitation'],recovery:['Reset your password','password recovery']};
 async function raw(request){
@@ -34,7 +34,7 @@ export function verifySupabaseEmailHook({bytes,headers,secret,now=Math.floor(Dat
  if(!verified)throw invalid();
  return JSON.parse(new TextDecoder('utf-8',{fatal:true}).decode(bytes));
 }
-function message(payload,{recipient,origin}){
+function message(payload,{recipient,origin,deliverySecret}){
  const email=payload?.user?.email,action=payload?.email_data?.email_action_type;
  const otp=payload?.email_data?.token,tokenHash=payload?.email_data?.token_hash;
  if(typeof email!=='string'||email.toLowerCase()!==recipient||!Object.hasOwn(actions,action)||
@@ -42,15 +42,16 @@ function message(payload,{recipient,origin}){
  const [subject,purpose]=actions[action];
  // Only the code is sent; no credential in a clickable URL or tracking link.
  const text='Your Worthkind Student Creators '+purpose+' code is: '+otp+'\n\nOpen '+origin+'/auth/confirm and enter the code. Never share it. If you did not request this, ignore this email.';
- const key=hash(action+'\0'+tokenHash);
- const digest=hash(JSON.stringify({email:recipient,subject,text}));
+ if(typeof deliverySecret!=='string'||!/^[A-Za-z0-9_-]{32,128}$/.test(deliverySecret))throw invalid();
+ const key=deliveryHash(deliverySecret,'event',action+'\0'+tokenHash);
+ const digest=deliveryHash(deliverySecret,'message',JSON.stringify({email:recipient,subject,text}));
  return {to:recipient,subject,text,key,digest,idempotencyKey:'student-auth/'+key};
 }
-export function createSupabaseAuthEmailHandler({secret,recipient,origin,store,transport,now=()=>Math.floor(Date.now()/1000)}={}){
+export function createSupabaseAuthEmailHandler({secret,recipient,origin,deliverySecret,store,transport,now=()=>Math.floor(Date.now()/1000)}={}){
  return async request=>{
   if(request.method!=='POST')return reply(405);
   let msg;
-  try{msg=message(verifySupabaseEmailHook({bytes:await raw(request),headers:request.headers,secret,now:now()}),{recipient,origin});}
+  try{msg=message(verifySupabaseEmailHook({bytes:await raw(request),headers:request.headers,secret,now:now()}),{recipient,origin,deliverySecret});}
   catch{return reply(400);}
   try{
    const claim=await store.claim({key:msg.key,digest:msg.digest});
@@ -85,6 +86,8 @@ export function buildSupabaseAuthEmailHook({getEnv=()=>process.env,fetcher=fetch
    if(parsed.origin!==origin||parsed.protocol!=='https:'||parsed.username||parsed.password)throw invalid();
    const recipient=String(env.STUDENT_CREATORS_PILOT_EMAIL??'').trim().toLowerCase();
    const secret=env.SUPABASE_AUTH_EMAIL_HOOK_SECRET;decodeSecret(secret);
+   const deliverySecret=env.STUDENT_CREATORS_AUTH_EMAIL_IDEMPOTENCY_SECRET;
+   if(typeof deliverySecret!=='string'||!/^[A-Za-z0-9_-]{32,128}$/.test(deliverySecret))throw invalid();
    const transport=createResendTransport({apiKey:readAlias(env,['RESEND_API_KEY','resend_api']),
     fromEmail:readAlias(env,['RESEND_FROM_EMAIL','resend_from_email']),allowedRecipients:[recipient],fetcher});
    const rpc=async(name,body)=>{
@@ -95,7 +98,7 @@ export function buildSupabaseAuthEmailHook({getEnv=()=>process.env,fetcher=fetch
    };
    const store={claim:({key,digest})=>rpc('claim_auth_email_delivery',{_key:key,_digest:digest}),
     finish:({key,leaseId,providerId})=>rpc('finish_auth_email_delivery',{_key:key,_lease:leaseId,_provider_id:providerId})};
-   return await createSupabaseAuthEmailHandler({secret,recipient,origin,store,transport})(request);
+   return await createSupabaseAuthEmailHandler({secret,recipient,origin,deliverySecret,store,transport})(request);
   }catch{return reply(503);}
  };
 }

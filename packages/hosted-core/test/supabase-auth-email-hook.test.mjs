@@ -12,7 +12,7 @@ function req(data=payload,{signedData=data,t=time,webhookId=id}={}){
 }
 function fixture({claim={status:'claimed',leaseId},send=async()=>({id:'resend_message_1'}),finish=true}={}){
  const calls=[];
- const handler=createSupabaseAuthEmailHandler({secret,recipient,origin,now:()=>time,
+ const handler=createSupabaseAuthEmailHandler({secret,recipient,origin,deliverySecret:'synthetic_idempotency_pepper_123456789',now:()=>time,
   store:{claim:async x=>{calls.push(['claim',x]);return claim;},finish:async x=>{calls.push(['finish',x]);return finish;}},
   transport:{send:async x=>{calls.push(['send',x]);return send(x);}}});
  return {handler,calls};
