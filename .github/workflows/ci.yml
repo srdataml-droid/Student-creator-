@@ -114,6 +114,28 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/tests/hosted_auth_lifecycle.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/0018_week01_session_aware_rls.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/session_aware_rls.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0015_week05_hosted_test_commerce.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/week05_test_commerce.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0016_week05_charge_inbox.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/week05_charge_inbox.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0019_week01_paystack_hosted_bridge.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/paystack_hosted_bridge.sql
+
+      - name: Verify isolated production live payment schema (no provider calls)
+        run: |
+          set -euo pipefail
+          createdb campus_ci_live
+          (
+            export PGDATABASE=campus_ci_live
+            sed '/^create role /d' db/tests/bootstrap.sql | psql -v ON_ERROR_STOP=1
+            for f in db/migrations/0001_proposed_core.sql db/migrations/0002_creator_comments.sql db/migrations/0003_creator_public_profiles.sql db/migrations/0004_creator_restrictions.sql db/migrations/0005_paid_access_security.sql db/migrations/0006_institution_identity_contract.sql db/migrations/0007_mux_webhook_idempotency.sql db/migrations/0008_hosted_rls_read_grants.sql db/migrations/0009_restrict_content_metadata_columns.sql db/migrations/0010_week01_current_session_guard.sql db/migrations/0018_week01_session_aware_rls.sql db/migrations/0015_week05_hosted_test_commerce.sql db/migrations/0016_week05_charge_inbox.sql db/production/0001_live_commerce.sql db/production/0002_live_charge_inbox.sql db/production/0003_live_paystack_bridge.sql db/production/0004_live_reversal_inbox.sql db/production/0005_live_refund_reference.sql db/migrations/0012_week01_mux_webhook_delivery.sql db/production/0006_live_mux_video.sql db/production/0007_live_mux_event_worker.sql db/tests/live_payment_contract.sql; do
+              if [[ "$f" == db/production/* ]]; then
+                psql -1 -v ON_ERROR_STOP=1 -f "$f"
+              else
+                psql -v ON_ERROR_STOP=1 -f "$f"
+              fi
+            done
+          )
 
       - name: Restore disposable PostgreSQL backup into isolated database
         env:

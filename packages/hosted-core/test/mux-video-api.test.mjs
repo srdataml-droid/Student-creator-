@@ -55,3 +55,13 @@ test('missing or false provider test flag never releases direct upload URL or re
  for(const testFlag of [undefined,false,null])await assert.rejects(reconcileMuxUpload({mux:{},store,row,upload:{...upload,test:testFlag}}));
  assert.equal(applied,0);
 });
+
+test('live Mux upload never creates test assets and rejects test asset playback',async()=>{
+ let body;const liveUpload={...upload,test:false,new_asset_settings:{...upload.new_asset_settings,test:false}};
+ const mux=createMuxTestClient({tokenId:'fixture_token',tokenSecret:'fixture_secret',origin,testAsset:false,fetcher:async(url,o)=>{body=JSON.parse(o.body);return Response.json({data:liveUpload});}});
+ await mux.create(reservation);assert.equal(body.test,false);assert.equal(body.new_asset_settings.test,false);
+ const row={id:reservation,uploadId,state:'processing'},finished={...liveUpload,status:'asset_created',asset_id:assetId};const store={apply:async s=>({id:reservation,state:s.state})};
+ assert.equal((await reconcileMuxUpload({mux:{testAsset:false,getAsset:async()=>({...asset,test:false})},store,row,upload:finished})).state,'ready');
+ assert.equal((await reconcileMuxUpload({mux:{testAsset:false,getAsset:async()=>asset},store,row,upload:finished})).state,'unsafe');
+ await assert.rejects(reconcileMuxUpload({mux:{testAsset:false},store,row,upload}));
+});

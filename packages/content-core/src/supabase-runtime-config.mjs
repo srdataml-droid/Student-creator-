@@ -61,10 +61,9 @@ function credentialRole(key,role){
   }catch{return false;}
 }
 export function readDedicatedSupabaseRuntimeConfig(env={},options={}){
-  if(env.APP_DATA_MODE!=='hosted'||env.STUDENT_CREATORS_STAGING_APPROVED!=='true'||
-     env.STUDENT_CREATORS_PROJECT_REF!==STAGING_REF||
-     env.STUDENT_CREATORS_PUBLIC_REGISTRATION!=='false'||
-     env.STUDENT_CREATORS_REAL_PAYMENT_ENABLED!=='false')return null;
+  const live=env.STUDENT_CREATORS_ENVIRONMENT==='production'&&env.STUDENT_CREATORS_PAYSTACK_TEST_ENABLED!=='true';
+  const staging=env.STUDENT_CREATORS_STAGING_APPROVED==='true'&&env.STUDENT_CREATORS_REAL_PAYMENT_ENABLED==='false';
+  if(env.APP_DATA_MODE!=='hosted'||env.STUDENT_CREATORS_PROJECT_REF!==STAGING_REF||env.STUDENT_CREATORS_PUBLIC_REGISTRATION!=='false'||!(live||staging))return null;
   const config=readSupabaseRuntimeConfig(env,options);
   if(!config)return null;
   if(!credentialRole(config.publishableKey,'anon')||

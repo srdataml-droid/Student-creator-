@@ -38,3 +38,5 @@ test('dedicated configuration distinguishes public and private key roles, includ
  assert.throws(()=>readDedicatedSupabaseRuntimeConfig({...env,supabase_publishable_key:jwt('service_role')}),/INVALID_SUPABASE_CREDENTIAL_ROLE/);
  assert.throws(()=>readDedicatedSupabaseRuntimeConfig({...env,supabase_publishable_key:jwt('anon','aaaaaaaaaaaaaaaaaaaa')}),/INVALID_SUPABASE_CREDENTIAL_ROLE/);
 });
+
+test('same project production mode keeps auth configuration available while live payments are enabled',()=>{const env={APP_DATA_MODE:'hosted',STUDENT_CREATORS_ENVIRONMENT:'production',STUDENT_CREATORS_PROJECT_REF:ref,STUDENT_CREATORS_PUBLIC_REGISTRATION:'false',STUDENT_CREATORS_REAL_PAYMENT_ENABLED:'true',supabase_url:url,supabase_publishable_key:'sb_publishable_fixture_public',supabase_secret_key:'sb_secret_fixture_server'};assert.ok(readDedicatedSupabaseRuntimeConfig(env,{server:true}));assert.equal(readDedicatedSupabaseRuntimeConfig({...env,STUDENT_CREATORS_PAYSTACK_TEST_ENABLED:'true'}),null);});

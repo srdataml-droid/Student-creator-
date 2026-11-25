@@ -17,8 +17,9 @@ function checkKobo(value, name) {
   }
 }
 
-/** Internal money allocation only. Gateway/settlement fees must be tracked separately. */
-export function quoteLessonPurchase(amountKobo, platformFeeBps = 1000) {
+/** Internal allocation only: callers must supply explicit terms. No commission default.
+ * Gateway/settlement fees must be tracked separately. */
+export function quoteLessonPurchase(amountKobo, platformFeeBps) {
   checkKobo(amountKobo, 'amountKobo');
   if (amountKobo < MIN_PRICE_KOBO) {
     throw new PaymentValidationError('BELOW_MINIMUM_PRICE', 'Paid lessons must cost at least ₦200');
@@ -61,7 +62,7 @@ export function decodeVerifiedLegacyWebhook(rawBody, signature, secrets) {
   let payload;
   try { payload = JSON.parse(Buffer.isBuffer(rawBody) ? rawBody.toString('utf8') : rawBody); }
   catch { throw new PaymentValidationError('BAD_JSON', 'Signed body is not valid JSON'); }
-  if (!payload || typeof payload !== 'object' || typeof payload.event !== 'string' || !payload.data || typeof payload.data !== 'object') {
+  if (!payload || typeof payload !== 'object' || typeof payload.event !== 'string' || !payload.data || typeof payload.data !== 'object' || Array.isArray(payload.data)) {
     throw new PaymentValidationError('INVALID_EVENT', 'Webhook payload is missing required fields');
   }
   return { event: payload.event, data: payload.data };
@@ -74,10 +75,11 @@ export function decodeVerifiedLegacyWebhook(rawBody, signature, secrets) {
  * performs no writes and is safe for retries.
  */
 export function validateVerifiedCharge(order, verificationResponse) {
-  if (!order || typeof order !== 'object' || typeof order.reference !== 'string' || !order.reference || typeof order.buyerEmail !== 'string') {
+  if (!order || typeof order !== 'object' || typeof order.reference !== 'string' || !order.reference || typeof order.buyerEmail !== 'string' || !order.buyerEmail.trim()) {
     throw new PaymentValidationError('INVALID_ORDER', 'Expected trusted server-side order snapshot');
   }
   checkKobo(order.amountKobo, 'order.amountKobo');
+  if (order.amountKobo < MIN_PRICE_KOBO) throw new PaymentValidationError('BELOW_MINIMUM_PRICE', 'Paid orders must cost at least ₦200');
   if (!['test', 'live'].includes(order.domain)) {
     throw new PaymentValidationError('INVALID_ORDER', 'Order must declare its payment environment');
   }
@@ -95,6 +97,7 @@ export function validateVerifiedCharge(order, verificationResponse) {
   if ((typeof data.id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(data.id)) && (typeof data.id !== 'number' || !Number.isSafeInteger(data.id) || data.id <= 0)) {
     throw new PaymentValidationError('MISSING_TRANSACTION_ID', 'Provider transaction ID missing');
   }
+  if (order.domain==='live' && data.fees==null) throw new PaymentValidationError('MISSING_PROVIDER_FEE', 'Live verification must declare provider fees');
   if (data.fees != null && (!Number.isSafeInteger(data.fees) || data.fees < 0 || data.fees > data.amount)) throw new PaymentValidationError('INVALID_PROVIDER_FEE', 'Provider fee must be valid integer kobo');
   return Object.freeze({ reference: order.reference, providerTransactionId: String(data.id), amountKobo: data.amount, currency: 'NGN', domain: data.domain, providerFeeKobo: data.fees ?? 0 });
 }

@@ -1,0 +1,64 @@
+BEGIN;
+INSERT INTO auth.users(id,email,email_confirmed_at) VALUES('f1910000-0000-4000-8000-000000000001','creator@example.invalid',now()),('f1910000-0000-4000-8000-000000000002','buyer@example.invalid',now()),('f1910000-0000-4000-8000-000000000003','reviewer@example.invalid',now());
+INSERT INTO public.institutions(id,slug,name) VALUES('f1920000-0000-4000-8000-000000000001','fixture-paystack-19','Synthetic');
+INSERT INTO public.departments(id,institution_id,slug,name) VALUES('f1930000-0000-4000-8000-000000000001','f1920000-0000-4000-8000-000000000001','fixture','Synthetic');
+INSERT INTO public.courses(id,institution_id,department_id,code,title) VALUES('f1940000-0000-4000-8000-000000000001','f1920000-0000-4000-8000-000000000001','f1930000-0000-4000-8000-000000000001','PAY19','Synthetic');
+INSERT INTO public.student_profiles(user_id,institution_id,display_name,verified_at) SELECT id,'f1920000-0000-4000-8000-000000000001','Synthetic',now() FROM auth.users WHERE id IN ('f1910000-0000-4000-8000-000000000001','f1910000-0000-4000-8000-000000000002');
+INSERT INTO public.content_items(id,creator_id,institution_id,course_id,title,rights_attested_at,creation_key,creation_hash,status,reviewer_id,review_reason,reviewed_at,published_at) VALUES('f1950000-0000-4000-8000-000000000001','f1910000-0000-4000-8000-000000000001','f1920000-0000-4000-8000-000000000001','f1940000-0000-4000-8000-000000000001','Synthetic payment lesson',now(),'fixture-paystack-19',repeat('a',64),'published','f1910000-0000-4000-8000-000000000003','Synthetic approval',now(),now());
+DO $$ DECLARE r jsonb; BEGIN
+ r:=public.reserve_mux_live_upload('f1910000-0000-4000-8000-000000000001','f1950000-0000-4000-8000-000000000001');
+ -- Already published content cannot acquire a new upload reservation.
+ IF r IS NOT NULL THEN RAISE EXCEPTION 'Published upload reservation accepted'; END IF;
+END $$;
+INSERT INTO public.mux_video_uploads(content_id,creator_id,state,upload_id,asset_id,playback_id) VALUES('f1950000-0000-4000-8000-000000000001','f1910000-0000-4000-8000-000000000001','ready','fixture_live_upload','fixture_live_asset','fixture_live_playback');
+INSERT INTO public.content_assets(content_id,private_object_key,mime_type,bytes,processing_status,scan_verdict) VALUES('f1950000-0000-4000-8000-000000000001','private/mux/fixture_live_asset','video/mp4',100,'ready','clean');
+INSERT INTO public.listings(content_id,creator_id,price_kobo) VALUES('f1950000-0000-4000-8000-000000000001','f1910000-0000-4000-8000-000000000001',20000);
+INSERT INTO auth.sessions(id,user_id,not_after) VALUES('f1960000-0000-4000-8000-000000000001','f1910000-0000-4000-8000-000000000002',now()+interval '1 hour');
+DO $$ BEGIN
+ IF has_function_privilege('authenticated','public.reserve_live_paystack_checkout(uuid,uuid,text,text)','EXECUTE') OR has_function_privilege('anon','public.settle_live_paystack_charge(text,uuid,text,bigint,bigint)','EXECUTE') OR has_table_privilege('service_role','live_finance.runtime_gate','UPDATE') OR has_table_privilege('service_role','live_finance.journal','INSERT') THEN RAISE EXCEPTION 'Unsafe finance privileges'; END IF;
+ IF public.reserve_live_paystack_checkout('f1910000-0000-4000-8000-000000000002','f1950000-0000-4000-8000-000000000001','fixture-paystack-live-key','fixture-terms-v1') IS NOT NULL THEN RAISE EXCEPTION 'Live checkout enabled by default'; END IF;
+ BEGIN UPDATE live_finance.runtime_gate SET allow_checkout=true WHERE singleton; RAISE EXCEPTION 'Policy bypass'; EXCEPTION WHEN check_violation THEN NULL; END;
+END $$;
+-- Synthetic CI terms only. Never use these fixture numbers as founder policy.
+UPDATE live_finance.runtime_gate SET allow_checkout=true,terms_version='fixture-terms-v1',refund_policy_version='fixture-refund-v1',platform_fee_bps=1000,fee_bearer='platform',license_seconds=3600,approved_at=now() WHERE singleton;
+DO $$ DECLARE b uuid:='f1910000-0000-4000-8000-000000000002'; c uuid:='f1950000-0000-4000-8000-000000000001'; o jsonb; ref text; oid uuid; e jsonb;
+BEGIN
+ IF public.reserve_live_paystack_checkout(b,c,'fixture-paystack-live-key','wrong-terms') IS NOT NULL THEN RAISE EXCEPTION 'Unaccepted terms created order'; END IF;
+ o:=public.reserve_live_paystack_checkout(b,c,'fixture-paystack-live-key','fixture-terms-v1');ref:=o->>'reference';oid:=(o->>'orderId')::uuid;
+ IF o->>'create' IS DISTINCT FROM 'true' OR o->>'domain' IS DISTINCT FROM 'live' OR ref !~ '^lc_[0-9a-f]{32}$' OR (o->>'amountKobo')::bigint<>20000 THEN RAISE EXCEPTION 'Live order snapshot invalid'; END IF;
+ IF (SELECT platform_fee_kobo FROM public.orders WHERE id=oid)<>2000 OR (SELECT creator_gross_share_kobo FROM public.orders WHERE id=oid)<>18000 THEN RAISE EXCEPTION 'Allocation mismatch'; END IF;
+ IF public.reserve_live_paystack_checkout(b,c,'fixture-paystack-live-key','fixture-terms-v1')->>'create' IS DISTINCT FROM 'false' THEN RAISE EXCEPTION 'Duplicate initialization'; END IF;
+ IF public.finish_live_paystack_checkout(oid,'https://checkout.paystack.com/fixture#fragment') THEN RAISE EXCEPTION 'Unsafe checkout URL'; END IF;
+ IF NOT public.finish_live_paystack_checkout(oid,'https://checkout.paystack.com/fixture') THEN RAISE EXCEPTION 'Checkout not recorded'; END IF;
+ IF NOT public.live_paystack_can_return(b,ref,'fixture-terms-v1') THEN RAISE EXCEPTION 'Checkout recheck denied'; END IF;
+ IF public.record_live_paystack_charge('sc_'||repeat('a',32),'tx_fixture',repeat('a',64))<>'invalid' THEN RAISE EXCEPTION 'Test reference accepted'; END IF;
+ IF public.record_live_paystack_charge(ref,'tx_fixture',repeat('a',64))<>'accepted' OR public.record_live_paystack_charge(ref,'tx_fixture',repeat('a',64))<>'duplicate' THEN RAISE EXCEPTION 'Inbox replay'; END IF;
+ e:=public.claim_live_paystack_charge();
+ IF public.claim_live_paystack_charge() IS NOT NULL THEN RAISE EXCEPTION 'Two workers claimed same event'; END IF;
+ IF public.settle_live_paystack_charge(e->>'key',gen_random_uuid(),'tx_fixture',20000,100) THEN RAISE EXCEPTION 'Wrong lease settled'; END IF;
+ IF EXISTS(SELECT 1 FROM public.entitlements WHERE order_id=oid) THEN RAISE EXCEPTION 'Webhook granted access'; END IF;
+ BEGIN PERFORM public.live_apply_charge(ref,'tx_fixture',20000,'NGN','test','buyer@example.invalid',100); RAISE EXCEPTION 'Test charge accepted'; EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
+ BEGIN PERFORM public.live_apply_charge(ref,'tx_fixture',20001,'NGN','live','buyer@example.invalid',100); RAISE EXCEPTION 'Wrong amount accepted'; EXCEPTION WHEN check_violation THEN NULL; END;
+ BEGIN PERFORM public.live_apply_charge(ref,'tx_fixture',20000,'NGN','live','buyer@example.invalid',NULL); RAISE EXCEPTION 'Missing fee accepted'; EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
+ UPDATE live_finance.runtime_gate SET allow_checkout=false WHERE singleton;
+ IF public.live_paystack_can_return(b,ref,'fixture-terms-v1') THEN RAISE EXCEPTION 'Cached URL bypasses kill switch'; END IF;
+ IF NOT public.settle_live_paystack_charge(e->>'key',(e->>'leaseId')::uuid,'tx_fixture',20000,100) THEN RAISE EXCEPTION 'Existing charge could not reconcile after checkout disabled'; END IF;
+ IF NOT EXISTS(SELECT 1 FROM public.entitlements x JOIN public.orders y ON y.id=x.order_id WHERE x.order_id=oid AND x.state='active' AND x.expires_at=y.paid_at+interval '1 hour') THEN RAISE EXCEPTION 'Entitlement or license expiry missing'; END IF;
+ IF (SELECT count(*) FROM live_finance.journal WHERE order_id=oid)<>4 OR NOT EXISTS(SELECT 1 FROM live_finance.journal WHERE order_id=oid AND kind='provider_fee' AND debit_account='platform_pending' AND amount_kobo=100) THEN RAISE EXCEPTION 'Live accounting incorrect'; END IF;
+ PERFORM set_config('request.jwt.claim.sub',b::text,true);
+ PERFORM set_config('request.jwt.claims',jsonb_build_object('sub',b,'role','authenticated','session_id','f1960000-0000-4000-8000-000000000001')::text,true);
+ IF NOT public.can_view_published_content(c) OR public.authorized_mux_live_playback(b,c) IS NULL THEN RAISE EXCEPTION 'Paid viewing denied'; END IF;
+ IF public.enqueue_live_reversal_event('refund.processed','7',repeat('c',64))<>'accepted' OR public.enqueue_live_reversal_event('refund.processed','7',repeat('c',64))<>'duplicate' THEN RAISE EXCEPTION 'Reversal intake replay'; END IF;
+ e:=public.claim_live_reversal_event();
+ IF public.claim_live_reversal_event() IS NOT NULL OR public.apply_live_refund_event('7',gen_random_uuid(),'tx_fixture',20000) OR public.apply_live_refund_event('7',(e->>'lease')::uuid,'tx_fixture',100) THEN RAISE EXCEPTION 'Invalid reversal lease or amount'; END IF;
+ IF NOT public.apply_live_refund_event('7',(e->>'lease')::uuid,'tx_fixture',20000) THEN RAISE EXCEPTION 'Verified reversal settlement failed'; END IF;
+ IF public.enqueue_live_reversal_event('refund.processed',ref||':'||repeat('d',64),repeat('d',64))<>'accepted' THEN RAISE EXCEPTION 'Reference-only refund not enqueued'; END IF;
+ e:=public.claim_live_reversal_event();
+ IF NOT public.apply_live_refund_event(ref||':'||repeat('d',64),(e->>'lease')::uuid,'tx_fixture',20000) THEN RAISE EXCEPTION 'Reference refund replay failed'; END IF;
+ IF public.can_view_published_content(c) OR public.authorized_mux_live_playback(b,c) IS NOT NULL OR (SELECT state FROM public.entitlements WHERE order_id=oid)<>'revoked' THEN RAISE EXCEPTION 'Refund did not revoke access'; END IF;
+ IF (SELECT count(*) FROM live_finance.journal WHERE order_id=oid)<>7 THEN RAISE EXCEPTION 'Reversal accounting missing'; END IF;
+ IF (public.live_apply_charge(ref,'tx_fixture',20000,'NGN','live','buyer@example.invalid',100)->>'replayed') IS DISTINCT FROM 'true' THEN RAISE EXCEPTION 'Receipt replay failed'; END IF;
+ IF public.can_view_published_content(c) THEN RAISE EXCEPTION 'Replay restored revoked access'; END IF;
+END $$;
+ROLLBACK;
+SELECT 'PASS: isolated live finance policy, checkout, leased settlement, commission, expiry and refund contract' AS evidence;

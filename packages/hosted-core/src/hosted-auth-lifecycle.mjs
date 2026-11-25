@@ -151,8 +151,8 @@ export function createHostedAuthHandler({provider,store,currentAuth,origin,pilot
  };
 }
 export function hostedAuthDependencies(env,fetcher=fetch){
- if(env.APP_DATA_MODE!=='hosted'||env.STUDENT_CREATORS_STAGING_APPROVED!=='true'||env.STUDENT_CREATORS_PROJECT_REF!==REF||
- env.STUDENT_CREATORS_PUBLIC_REGISTRATION!=='false'||env.STUDENT_CREATORS_REAL_PAYMENT_ENABLED!=='false'||
+ if(env.APP_DATA_MODE!=='hosted'||env.STUDENT_CREATORS_PROJECT_REF!==REF||
+ env.STUDENT_CREATORS_PUBLIC_REGISTRATION!=='false'||
  env.STUDENT_CREATORS_HOSTED_AUTH_ENABLED!=='true'||env.STUDENT_CREATORS_SUPABASE_SIGNUPS_DISABLED_CONFIRMED!=='true'||
  env.STUDENT_CREATORS_AUTH_EMAIL_ENABLED!=='true'||env.STUDENT_CREATORS_PILOT_SEATS!=='1')throw unavailable();
  const cfg=readDedicatedSupabaseRuntimeConfig(env,{server:true});
