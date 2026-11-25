@@ -79,4 +79,4 @@ function LocalStudentVerification(){
  </main>;
 }
 
-export default function StudentVerification(){const hosted=useHostedAccount();return hosted?<HostedIdentity/>:<LocalStudentVerification/>;}
+export default function StudentVerification(){const hosted=useHostedAccount();return hosted?<HostedIdentity key={hosted.session.userId||hosted.session.state}/>:<LocalStudentVerification/>;}
