@@ -9,3 +9,8 @@ create table auth.sessions (id uuid primary key,user_id uuid not null references
 create function auth.uid() returns uuid language sql stable as $$
   select nullif(current_setting('request.jwt.claim.sub',true),'')::uuid;
 $$;
+
+-- Disposable stand-in for Supabase's verified JWT claims accessor.
+create function auth.jwt() returns jsonb language sql stable as $$
+ select coalesce(nullif(current_setting('request.jwt.claims',true),'')::jsonb,'{}'::jsonb);
+$$;

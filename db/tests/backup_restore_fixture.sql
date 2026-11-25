@@ -1,6 +1,7 @@
 -- Disposable GitHub Actions source database ONLY.
 DO $$ BEGIN IF current_database()<>'campus_ci' THEN RAISE EXCEPTION 'Not disposable CI source'; END IF; END $$;
-INSERT INTO auth.users(id) VALUES('f2010000-0000-4000-8000-000000000001'),('f2010000-0000-4000-8000-000000000002');
+INSERT INTO auth.users(id,email_confirmed_at,is_anonymous) VALUES('f2010000-0000-4000-8000-000000000001',now(),false),('f2010000-0000-4000-8000-000000000002',now(),false);
+INSERT INTO auth.sessions(id,user_id,not_after) VALUES('f2030000-0000-4000-8000-000000000001','f2010000-0000-4000-8000-000000000001',now()+interval '1 hour');
 INSERT INTO public.institutions(id,slug,name) VALUES('f2020000-0000-4000-8000-000000000001','fixture-restore-20','Synthetic restore campus');
 INSERT INTO public.student_profiles(user_id,institution_id,display_name,verified_at) VALUES
 ('f2010000-0000-4000-8000-000000000001','f2020000-0000-4000-8000-000000000001','Synthetic restore student A',now()),
