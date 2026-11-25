@@ -1,5 +1,6 @@
 'use client';
 import HostedGate from './HostedGate.jsx';
+import AccountRequests from './HostedAccountRequests.jsx';
 import {ReviewSubmission} from './HostedSocialWorkspace.jsx';
 import {HostedEarnings} from './HostedLearningWorkspace.jsx';
 import {useRef,useState} from 'react';
@@ -23,7 +24,7 @@ export function HostedIdentity(){
  <button type="button" className="quiet-button" disabled={action.busy} onClick={()=>action.run(()=>account.reloadAccount())}>Refresh verification status</button>{records&&<ul>{records.map(x=><li key={x.id}>{x.method.replaceAll('_',' ')} · {x.status} · Expires {new Date(x.expiresAt).toLocaleDateString()}</li>)}</ul>}{received?<p role="status">Evidence received for scanning and manual review.</p>:pending.length>0?<form className="form-stack" onSubmit={e=>{e.preventDefault();const d=new FormData(e.currentTarget);action.run(async()=>{const out=await account.creatorRequest('identity',{requestId:String(d.get('requestId')).trim(),file:d.get('evidence')});if(out.received!==true)throw Error('UNCONFIRMED');setReceived(true);});}}>
  <label htmlFor="request-id">Verification request ID</label><select id="request-id" name="requestId" required><option value="">Select your request</option>{pending.map(x=><option key={x.id} value={x.id}>Manual ID · {new Date(x.createdAt).toLocaleDateString()}</option>)}</select>
  <label htmlFor="identity-evidence">Student ID evidence (JPEG, PNG, PDF; max 4 MiB)</label><input id="identity-evidence" name="evidence" type="file" accept="image/jpeg,image/png,application/pdf" required disabled={action.busy}/>
- <button className="primary-link" disabled={action.busy}>{action.busy?'Uploading…':'Submit evidence privately'}</button></form>:<p role="status">{records?"No pending manual ID requests.":"Verification status unavailable. Refresh to try again."}</p>}<Feedback action={action}/></section></HostedGate>;
+ <button className="primary-link" disabled={action.busy}>{action.busy?'Uploading…':'Submit evidence privately'}</button></form>:<p role="status">{records?"No pending manual ID requests.":"Verification status unavailable. Refresh to try again."}</p>}<Feedback action={action}/></section>{account.session.state==='signed-in'&&<AccountRequests type="appeal" key={account.session.userId}/>}</HostedGate>;
 }
 export function HostedCreatorStudio({courses=[],catalogAvailable}){
  const account=useHostedAccount(),action=useAction(),draftKey=useRef('');
