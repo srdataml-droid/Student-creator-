@@ -30,12 +30,23 @@ INSERT INTO public.governance_staff_role_grants(user_id,role) VALUES('ac000000-0
 DO $$ DECLARE r uuid; a uuid:='ac000000-0000-4000-8000-000000000002'; b uuid:='ac000000-0000-4000-8000-000000000004'; q jsonb;
 BEGIN
  SELECT id INTO r FROM public.student_privacy_requests WHERE user_id='ac000000-0000-4000-8000-000000000001';
- q:=public.week7_record_privacy_fulfilment(a,r,'unable_to_fulfil','fixture-evidence-reference','Synthetic externally reported outcome for testing only');
- IF q->>'executedBySystem'<>'false' THEN RAISE EXCEPTION 'False execution claim'; END IF;
- BEGIN PERFORM public.week7_verify_privacy_fulfilment(a,r); RAISE EXCEPTION 'Self-verified fulfilment'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+ q:=public.week7_record_privacy_fulfilment(a,r,'fixture-evidence-reference','Synthetic external outcome for testing only');
+ IF q->>'automaticExecution'<>'false' THEN RAISE EXCEPTION 'False execution claim'; END IF;
+ BEGIN PERFORM public.week7_confirm_privacy_fulfilment(a,r,'Synthetic self confirmation attempt'); RAISE EXCEPTION 'Self-verified fulfilment'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  IF jsonb_array_length(public.week7_privacy_fulfilment_queue(b,10)->'items')<>1 THEN RAISE EXCEPTION 'Verification queue missing'; END IF;
- PERFORM public.week7_verify_privacy_fulfilment(b,r);
+ PERFORM public.week7_confirm_privacy_fulfilment(b,r,'Synthetic independent evidence confirmation');
  IF NOT EXISTS(SELECT 1 FROM auth.users WHERE id='ac000000-0000-4000-8000-000000000001') THEN RAISE EXCEPTION 'User unexpectedly deleted'; END IF;
- IF has_function_privilege('authenticated','public.week7_verify_privacy_fulfilment(uuid,uuid)','EXECUTE') THEN RAISE EXCEPTION 'Client verification bypass'; END IF;
+ IF has_function_privilege('authenticated','public.week7_confirm_privacy_fulfilment(uuid,uuid,text)','EXECUTE') THEN RAISE EXCEPTION 'Client verification bypass'; END IF;
+END $$;
+INSERT INTO auth.users(id,email,email_confirmed_at) VALUES('ac000000-0000-4000-8000-000000000005','retention-owner@example.invalid',now());
+INSERT INTO public.platform_staff(user_id,role,active) VALUES('ac000000-0000-4000-8000-000000000005','admin',true);
+INSERT INTO public.governance_staff_role_grants(user_id,role) VALUES('ac000000-0000-4000-8000-000000000005','governance_owner');
+DO $$ DECLARE a uuid:='ac000000-0000-4000-8000-000000000002'; b uuid:='ac000000-0000-4000-8000-000000000005'; p uuid; q jsonb;
+BEGIN
+ PERFORM public.week7_propose_retention(a,'verification_evidence',90,'Synthetic proposal for review only');
+ SELECT id INTO p FROM public.governance_retention_proposals WHERE proposed_by=a;
+ q:=public.week7_recommend_retention(b,p,'Synthetic independent policy recommendation');
+ IF q->>'policyApproved'<>'false' OR q->>'automaticDeletion'<>'false' OR (SELECT state FROM public.governance_retention_proposals WHERE id=p)<>'proposed' THEN RAISE EXCEPTION 'Retention recommendation activated policy'; END IF;
+ BEGIN PERFORM public.week7_recommend_retention(b,p,'Duplicate synthetic recommendation'); RAISE EXCEPTION 'Duplicate recommendation'; EXCEPTION WHEN unique_violation THEN NULL; END;
 END $$;
 ROLLBACK;
