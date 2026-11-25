@@ -77,6 +77,9 @@ export function hostedCreatorRequest(operation,input={}){
  case 'accountState':return {path:'/api/account/state',method:'GET',headers:{}};
  case 'draftPrice':return json('/api/social/draftPrice',{contentId:id(input.contentId)});
  case 'setDraftPrice':{if(!Number.isSafeInteger(input.amountKobo)||input.amountKobo<0||input.amountKobo>1000000000||(input.amountKobo>0&&input.amountKobo<20000))throw Error('INVALID_PRICE');return json('/api/social/setDraftPrice',{contentId:id(input.contentId),amountKobo:input.amountKobo});}
+ case 'liveClassCheckout':{if(!/^[A-Za-z0-9._-]{3,128}$/.test(input.termsVersion||''))throw Error('INVALID_TERMS_VERSION');return {path:'/api/classes/'+id(input.classId)+'/live-checkout',method:'POST',headers:{'idempotency-key':key(input.creationKey),'x-student-creators-terms-version':input.termsVersion}};}
+ case 'classEnrollments':return json('/api/social/classEnrollments',{classId:id(input.classId),limit:100});
+ case 'removeClassParticipant':return json('/api/social/removeClassParticipant',{classId:id(input.classId),studentId:id(input.studentId),reason:bounded(input.reason,8,500)});
  default:throw Error('UNKNOWN_CREATOR_OPERATION');
  }
 }
