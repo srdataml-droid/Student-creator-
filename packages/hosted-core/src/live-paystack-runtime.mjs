@@ -11,9 +11,9 @@ export function createLivePaystackRuntime({env=process.env,fetcher=fetch}={}){
  // Stop new charges independently of verification/settlement of existing charges.
  const checkoutEnabled=env.STUDENT_CREATORS_REAL_PAYMENT_ENABLED==='true'&&env.PAYSTACK_LIVE_PAYMENTS_ENABLED==='1'&&
  env.STUDENT_CREATORS_LIVE_DELIVERY_APPROVED==='true'&&env.STUDENT_CREATORS_LIVE_REVERSAL_APPROVED==='true'&&env.STUDENT_CREATORS_LIVE_PROVIDER_APPROVED==='true';
- const signingSecrets=readPaystackSigningSecrets({
+ const signingSecrets=env.PAYSTACK_LIVE_WEBHOOK_SIGNING_SECRET?readPaystackSigningSecrets({
  PAYSTACK_WEBHOOK_KEY_ID:env.PAYSTACK_LIVE_WEBHOOK_KEY_ID,PAYSTACK_WEBHOOK_SIGNING_SECRET:env.PAYSTACK_LIVE_WEBHOOK_SIGNING_SECRET,
- PAYSTACK_WEBHOOK_PREVIOUS_KEY_ID:env.PAYSTACK_LIVE_WEBHOOK_PREVIOUS_KEY_ID,PAYSTACK_WEBHOOK_PREVIOUS_SIGNING_SECRET:env.PAYSTACK_LIVE_WEBHOOK_PREVIOUS_SIGNING_SECRET});
+ PAYSTACK_WEBHOOK_PREVIOUS_KEY_ID:env.PAYSTACK_LIVE_WEBHOOK_PREVIOUS_KEY_ID,PAYSTACK_WEBHOOK_PREVIOUS_SIGNING_SECRET:env.PAYSTACK_LIVE_WEBHOOK_PREVIOUS_SIGNING_SECRET}):[];
  if(signingSecrets.some(x=>[env.PAYSTACK_WEBHOOK_SIGNING_SECRET,env.PAYSTACK_WEBHOOK_PREVIOUS_SIGNING_SECRET].includes(x.secret)))throw unavailable();
  const gateway=createPaystackClient({secretKey:key,environment:'live',livePaymentsApproved:checkoutEnabled,fetchImpl:fetcher});
  const auth=createCurrentSupabaseAuth({url:cfg.url,publicKey:cfg.publishableKey,serverKey:cfg.serverKey,requireStudent:true,fetcher});
@@ -31,7 +31,7 @@ export function createLivePaystackRuntime({env=process.env,fetcher=fetch}={}){
   settle:(k,lease,c)=>rpc('settle_live_paystack_charge',{_key:k,_lease:lease,_tx:c.providerTransactionId,_amount:c.amountKobo,_fee:c.providerFeeKobo}),
   retry:(k,lease)=>rpc('retry_live_paystack_charge',{_key:k,_lease:lease})
  };
- return {domain:'live',checkoutEnabled,origin,auth,store,gateway,signingSecrets};
+ return {domain:'live',checkoutEnabled,origin,auth,store,gateway,signingSecrets,legacySecrets:[key]};
 }
 export function buildLivePaystackRoute({webhook=false,getEnv=()=>process.env,fetcher=fetch}={}){
  return async (request,context)=>{try{const r=createLivePaystackRuntime({env:getEnv(),fetcher});return webhook?await createHostedPaystackWebhook(r)(request):await createHostedCheckoutHandler(r)(request,context);}

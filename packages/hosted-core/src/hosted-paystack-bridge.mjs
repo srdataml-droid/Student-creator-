@@ -1,6 +1,7 @@
 import {createHash} from 'node:crypto';
 import {createCurrentSupabaseAuth} from './supabase-current-auth.mjs';
 import {createPaystackClient} from '../../payment-core/src/paystack-client.mjs';
+import {decodeVerifiedLegacyWebhook} from '../../payment-core/src/payments.mjs';
 import {decodeVerifiedPaystackWebhookV1} from '../../payment-core/src/webhooks.mjs';
 import {readDedicatedSupabaseRuntimeConfig,supabaseServerHeaders} from '../../content-core/src/supabase-runtime-config.mjs';
 const REF='jnkqmlbkkvccnxrgkpno',UUID=/^[0-9a-f-]{36}$/i,REFERENCE=/^sc_[0-9a-f]{32}$/,TX=/^[A-Za-z0-9_-]{1,128}$/;
@@ -42,11 +43,11 @@ export function createHostedCheckoutHandler({auth,store,gateway,origin,domain='t
   }catch{return json(503,{error:'CHECKOUT_UNAVAILABLE'});}
  };
 }
-export function createHostedPaystackWebhook({store,signingSecrets,domain='test'}){
+export function createHostedPaystackWebhook({store,signingSecrets,domain='test',legacySecrets=[]}){
  return async request=>{
   if(request.method!=='POST')return json(405,{error:'METHOD_NOT_ALLOWED'});
   let raw,event;
-  try{raw=await readRaw(request,1048576);event=decodeVerifiedPaystackWebhookV1(raw,request.headers.get('paystack-signature'),signingSecrets);}catch{return json(401,{error:'INVALID_SIGNATURE_OR_BODY'});}
+  try{raw=await readRaw(request,1048576);const v1=request.headers.get('paystack-signature');event=v1?decodeVerifiedPaystackWebhookV1(raw,v1,signingSecrets):decodeVerifiedLegacyWebhook(raw,request.headers.get('x-paystack-signature'),legacySecrets);}catch{return json(401,{error:'INVALID_SIGNATURE_OR_BODY'});}
   if(event.event!=='charge.success')return json(200,{received:true,ignored:true});
   const d=event.data;
   if(d.domain!==domain||!refPattern(domain).test(d.reference??'')||!(typeof d.id==='string'&&TX.test(d.id)||typeof d.id==='number'&&Number.isSafeInteger(d.id)&&d.id>0))return json(400,{error:domain==='test'?'INVALID_TEST_EVENT':'INVALID_LIVE_EVENT'});

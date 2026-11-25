@@ -1,8 +1,19 @@
--- PRODUCTION ONLY. Never apply in the existing staging project or a database with payment history.
--- This is a separate production migration track, not a conversion of test money.
--- Requires base schema and current-session RLS. No checkout is enabled by installation.
+-- Promote the existing empty Student Creators database to live commerce.
+-- Preserve all sandbox tables; never delete or convert sandbox payment records.
+-- Require empty money tables, and permanently close the old sandbox checkout gate.
+LOCK TABLE public.orders,public.entitlements,public.payment_attempts IN ACCESS EXCLUSIVE MODE;
 DO $$ BEGIN
- IF to_regnamespace('week05_finance') IS NOT NULL OR EXISTS(SELECT 1 FROM public.orders) OR EXISTS(SELECT 1 FROM public.entitlements) THEN RAISE EXCEPTION 'LIVE_FINANCE_REQUIRES_CLEAN_PRODUCTION_DATABASE'; END IF;
+ IF EXISTS(SELECT 1 FROM public.orders) OR EXISTS(SELECT 1 FROM public.entitlements) OR EXISTS(SELECT 1 FROM public.payment_attempts) THEN RAISE EXCEPTION 'LIVE_PROMOTION_REQUIRES_EMPTY_PAYMENT_TABLES'; END IF;
+ IF to_regnamespace('week05_finance') IS NOT NULL THEN
+  LOCK TABLE week05_finance.runtime_gate,week05_finance.order_terms,week05_finance.receipts,week05_finance.reversals,week05_finance.journal,week05_finance.charge_inbox IN ACCESS EXCLUSIVE MODE;
+  IF EXISTS(SELECT 1 FROM week05_finance.order_terms) OR EXISTS(SELECT 1 FROM week05_finance.receipts) OR EXISTS(SELECT 1 FROM week05_finance.reversals) OR EXISTS(SELECT 1 FROM week05_finance.journal) OR EXISTS(SELECT 1 FROM week05_finance.charge_inbox) THEN RAISE EXCEPTION 'SANDBOX_FINANCIAL_HISTORY_REQUIRES_REVIEW'; END IF;
+  IF to_regclass('week05_finance.checkout_sessions') IS NOT NULL THEN
+   LOCK TABLE week05_finance.checkout_sessions IN ACCESS EXCLUSIVE MODE;
+   IF EXISTS(SELECT 1 FROM week05_finance.checkout_sessions) THEN RAISE EXCEPTION 'SANDBOX_CHECKOUT_HISTORY_REQUIRES_REVIEW'; END IF;
+  END IF;
+  UPDATE week05_finance.runtime_gate SET allow_test_checkout=false;
+  ALTER TABLE week05_finance.runtime_gate ADD CONSTRAINT live_promotion_test_checkout_disabled CHECK (NOT allow_test_checkout);
+ END IF;
 END $$;
 ALTER TABLE public.orders ADD CONSTRAINT production_orders_live_only CHECK(environment='live');
 ALTER TABLE public.entitlements ADD COLUMN expires_at timestamptz NOT NULL;
