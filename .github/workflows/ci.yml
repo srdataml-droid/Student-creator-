@@ -82,6 +82,10 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/tests/institution_identity.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/mux_webhook_inbox.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/hosted_rls_isolation.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0015_week05_hosted_test_commerce.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0016_week05_charge_inbox.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/week05_test_commerce.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/week05_charge_inbox.sql
 
   browser-alpha:
     runs-on: ubuntu-24.04
