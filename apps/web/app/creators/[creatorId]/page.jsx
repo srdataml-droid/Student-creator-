@@ -15,7 +15,7 @@ export default async function CreatorProfile({params}){
   creator=getLocalPublicCreator(creatorId);
   if(!creator)return notFound();
   posts=getLocalPublicCourses().flatMap(course=>getLocalCourseLessons(course.id).filter(lesson=>lesson.creatorId===creatorId).map(lesson=>({...lesson,courseCode:course.code}))).sort((a,b)=>String(b.publishedAt||b.createdAt).localeCompare(String(a.publishedAt||a.createdAt))).slice(0,80);
- }catch{return <main id="main" className="main"><p role="status">This creator profile is unavailable right now.</p></main>}
+ }catch{return <main id="main" className="main"><section className="panel"><h1>Creator profile unavailable</h1><p role="status">This creator profile is unavailable right now.</p><Link className="secondary-link" href="/">Discover creators</Link></section></main>}
  return <main id="main" className="main creator-profile-shell">
    <Link className="back" href="/">← Discover creators</Link>
    <section className="public-creator-header"><div className="public-creator-cover"/><div className="public-creator-details"><div className="public-creator-avatar" aria-hidden="true">✳</div><div><p className="eyebrow">VERIFIED STUDENT CREATOR</p><h1>{creator.displayName||<>Student creator <span>{creatorId.slice(0,6).toUpperCase()}</span></>}</h1>{creator.handle&&<p className="hint">@{creator.handle} · Self-chosen public alias</p>}<p>{creator.bio||'Original work and lessons shared with the student community.'}</p><p className="hint">Verified student status refers to membership approval, not an institutional endorsement of this public name.</p></div></div>

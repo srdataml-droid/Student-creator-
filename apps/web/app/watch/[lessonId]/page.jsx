@@ -16,7 +16,7 @@ export default async function WatchLesson({params}){
   if(error?.status===402)redirect('/lessons/'+lessonId);
   if(error?.status===401||error?.status===403)
    return <main className="main" id="main"><div className="panel"><h1>Private creator viewing</h1><p>You need a verified account and permission from this creator to watch.</p><Link href="/sign-in" className="primary-link">Sign in</Link> <Link href="/" className="secondary-link">Back to feed</Link></div></main>;
-  return <main className="main" id="main"><p role="status" className="status">The video viewer is temporarily unavailable.</p></main>;
+  return <main className="main" id="main"><section className="panel"><h1>Video unavailable</h1><p role="status">The video viewer is temporarily unavailable.</p><Link className="secondary-link" href="/">Back to feed</Link></section></main>;
  }
  if(!lesson||!lesson.hasVideo)return notFound();
  const creator=getLocalPublicCreator(lesson.creatorId);

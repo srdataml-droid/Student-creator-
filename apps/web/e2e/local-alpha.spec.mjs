@@ -432,6 +432,8 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     expect((await viewer.request.get(`/api/local/lessons/${lessonId}/comments`)).status()).toBe(403);
     await viewerPage.goto(`/lessons/${lessonId}`);
     await expect(viewerPage.getByText('Full posts require verified student membership',{exact:false})).toBeVisible();
+    await expect(viewerPage.getByRole('heading',{name:'Private creator work',level:1})).toBeVisible();
+    await expect(viewerPage.getByRole('main').getByRole('link',{name:'Explore other lessons'})).toBeVisible();
     // The real local backend is tested with a secret invitation code in Node;
     // this browser-only response override tests the private-code field without
     // configuring a real invitation or exposing an email in public CI logs.
