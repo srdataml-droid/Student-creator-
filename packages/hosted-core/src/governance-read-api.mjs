@@ -46,6 +46,8 @@ async function readCommandBody(request){
  return body&&typeof body==='object'&&!Array.isArray(body)?body:null;
 }
 function commandFor(path){
+ if(path==='finance/access-reviews')return {name:'week7_paid_access_queue',scope:'finance.review',allowed:['limit']};
+ if(/^finance\/access-reviews\/[0-9a-f-]{36}\/resolve$/i.test(path))return {name:'week7_resolve_paid_access',scope:'finance.review',allowed:['resolution','note']};
  if(path==='identity/manual-revalidation')return {name:'week7_manual_revalidation_queue',scope:'verification.review',allowed:['limit']};
  if(/^identity\/requests\/[0-9a-f-]{36}\/review$/i.test(path))return {name:'week7_review_manual_identity',scope:'verification.review',allowed:['decision','note','days']};
  if(path==='copyright/claims')return {name:'week7_copyright_queue',scope:'copyright.review',allowed:['limit']};
@@ -81,6 +83,9 @@ function validateCommand(cmd,body,path,actorId){
    return UUID.test(path.split('/')[2])&&['dismiss','uphold','release','retain'].includes(body.decision)&&hasText(body.note,10,500)?{_actor:actorId,_id:path.split('/')[2],_decision:body.decision,_note:body.note.trim()}:null;
   case 'week7_review_privacy_request':
    return UUID.test(path.split('/')[2])&&['under_review','approved_for_manual_fulfilment','declined'].includes(body.decision)&&hasText(body.note,10,500)?{_actor:actorId,_id:path.split('/')[2],_decision:body.decision,_note:body.note.trim()}:null;
+  case 'week7_resolve_paid_access':
+   return UUID.test(path.split('/')[2])&&['access_available','verified_reversal'].includes(body.resolution)&&hasText(body.note,10,500)?{_actor:actorId,_id:path.split('/')[2],_resolution:body.resolution,_note:body.note.trim()}:null;
+  case 'week7_paid_access_queue':
   case 'week7_copyright_queue':
   case 'week7_privacy_queue':
   case 'week7_review_manual_identity':
@@ -176,6 +181,7 @@ export function createHostedGovernanceHandler({getEnv=()=>process.env,fetcher=fe
      if(!res.ok){
        const detail=await res.json().catch(()=>({}));
        const safeCodes={
+         ACCESS_REVIEW_CONFLICT:[409,'ACCESS_REVIEW_CONFLICT'],
          COPYRIGHT_REVIEW_CONFLICT:[409,'COPYRIGHT_REVIEW_CONFLICT'],
          PRIVACY_REVIEW_CONFLICT:[409,'PRIVACY_REVIEW_CONFLICT'],
          IDENTITY_REVIEW_CONFLICT:[409,'IDENTITY_REVIEW_CONFLICT'],
