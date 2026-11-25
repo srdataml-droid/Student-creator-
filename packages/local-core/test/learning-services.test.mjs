@@ -332,3 +332,36 @@ test('host participant removal revokes fresh room grants and retries provider di
     assert.equal(attempts,2);
   }finally{x.close();}
 });
+
+
+test('admin expiry prevents abandoned live rooms and queues financial review for unopened paid classes',async()=>{
+  const x=fixture();
+  try{
+    const a=await x.prepare();
+    const paid=await x.call('courses/'+a.course+'/classes','POST',x.schedule(a.course,'expired-paid',25000),a.host.cookie);
+    const open=await x.call('courses/'+a.course+'/classes','POST',x.schedule(a.course,'expired-open'),a.host.cookie);
+    assert.equal(paid.status,201);assert.equal(open.status,201);
+    const paidId=paid.body.class.id,openId=open.body.class.id;
+    assert.equal((await x.call('classes/'+paidId+'/enroll','POST',{},a.viewer.cookie)).status,200);
+    x.clock.ms+=4*60000;
+    assert.equal((await x.call('classes/'+openId+'/open','POST',{},a.host.cookie)).status,200);
+    x.clock.ms+=70*60000;
+    assert.equal((await x.call('admin/learning-classes/expire','POST',{},a.viewer.cookie)).status,403);
+    const expiry=await x.call('admin/learning-classes/expire','POST',{},a.admin);
+    assert.equal(expiry.status,200);
+    assert.deepEqual(expiry.body.expiry,{completed:1,cancelled:1,refundReviews:1,roomDeletionsQueued:2});
+    assert.equal((await x.call('classes/'+paidId,'GET',undefined,a.viewer.cookie)).body.class.status,'cancelled');
+    assert.equal((await x.call('classes/'+openId,'GET',undefined,a.host.cookie)).body.class.status,'completed');
+    assert.equal((await x.call('classes/'+openId+'/room-token','POST',{},a.host.cookie)).status,409);
+    const refund=(await x.call('admin/learning-refund-reviews','GET',undefined,a.admin)).body.reviews;
+    assert.equal(refund.filter(item=>item.resourceId===paidId).length,1);
+    const notices=(await x.call('me/learning-notifications','GET',undefined,a.viewer.cookie)).body.notifications;
+    assert.ok(notices.some(item=>item.kind==='class_cancelled'&&item.resourceId===paidId));
+    const again=await x.call('admin/learning-classes/expire','POST',{},a.admin);
+    assert.equal(again.status,200);assert.equal(again.body.expiry.roomDeletionsQueued,0);
+    const admin=x.store.login('admin@week06.invalid','Strong Synthetic Admin Password 2026').user;
+    const cleared=await x.store.drainRoomClosures(admin,{deleteRoom:async()=>{}});
+    assert.equal(cleared.completed,2);
+    assert.equal(cleared.remaining,0);
+  }finally{x.close();}
+});
