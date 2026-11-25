@@ -1,38 +1,44 @@
 # Week 8 — release evidence and stop gates
 
-Scope: founder's November 24 parallel assignment; existing Next.js shell retained. No design replacement, new dependencies, provider calls, credentials, or production release. Branch originally diverged from main (one unique research-only task, seven main commits missing); coordinate synchronization before integration.
+Founder-authorized isolated Week 8 implementation on `work/week-08`, draft PR #48. The existing creator-first Next.js design is preserved; no public release, production promotion, real enrollment, live financial operations or destructive rollback.
 
-## Implemented in this slice (not yet verified)
-- Root segment loading and error boundaries; generic messages only, user-triggered render retry, no automatic mutation replay. Root-layout failures and expected API errors require separate coverage.
-- Browser network-state notice (navigator.onLine is a hint, not an availability probe). No service worker, private-data offline cache or transaction queue.
-- Keyboard skip-link stacking and sticky navigation focus margins; mobile tab minimum height.
-- Added a synthetic 360px Chromium regression in the existing browser-alpha job for offline/reconnect, keyboard skip link, and horizontal overflow. The pre-existing browser-alpha and browser-paid-media journeys remain intact.
+## Verified implementation checkpoints
 
-References consulted: https://nextjs.org/docs/app/api-reference/file-conventions/error and https://nextjs.org/docs/app/api-reference/file-conventions/loading . Original implementation using documented framework interfaces; no upstream source copied, dependencies added, or external scripts executed. Exact pinned package version is in apps/web/package.json; no claim of reviewed upstream source revision.
-
-## Evidence required before release
-| Gate | Required evidence | Status |
+| Exact branch revision | GitHub Actions | Evidence |
 |---|---|---|
-| Responsive and keyboard | 320/360/412/768/1280 widths; keyboard-only and manual screen reader; all auth, content, chat, class, settings, moderation, payment routes | Partial code; tests pending |
-| Loading/errors/offline | Slow network, failed GET and mutations, reconnect; no duplicate orders or stale cross-account data; no inaccessible private content | Partial code; tests pending |
-| Media and bandwidth | Mux signed playback, captions, adaptive bitrate and bytes transferred on throttled connection; no eager protected media download | Pending Week 3/provider acceptance |
-| Browser | exact PR head five CI jobs; browser-alpha and browser-paid-media; then integrated staging browser tests | Pending |
-| Android emulator | reproducible build, API and navigation, session expiry/logout, offline, rotation, low-memory and process death | Not run; no native implementation verified |
-| Physical Android | consenting tester, exact build SHA/version, model/API, real network and accessibility, recorded results | Not run |
-| Mobile sessions | approved client architecture, secure platform-backed token storage if native, token revocation, no tokens in logs/URLs; server-side authorization retained | Pending Week 2 |
-| Play release | owner-approved package name, current target API, signed AAB, secure upload-key custody, store listing and actual screenshots, privacy/data-safety disclosures, content rating, reviewer access, deletion, reporting/blocking, applicable testing track and billing compliance | Pending |
-| Vercel staging | exact deployed commit, secret names only, HTTPS and gated enrollment/payments; no production promotion | Pending Week 1 |
-| Sentry/Firebase | configuration and consent, redaction of identity/documents/DMs/tokens/payment details, synthetic alert/delivery evidence | Not configured/verified |
-| Performance and dependencies | reproducible locked build; dependency audit and triage; measured mobile web vitals, network/media bytes and error budgets; authorized security scan | Pending |
-| Rollback | recorded last known good deployment and compatible schema, rollback rehearsal in isolation; verify auth/access and financial reconciliation; no destructive production rollback | Pending |
+| `7d122bc6c64ec4cc0214edfc87b35482163cbace` | [45502735098](https://github.com/worthkind/Student-creator-/actions/runs/45502735098) | Five jobs green; 12 primary and nine authenticated route checks, seven Chromium tests; offline/retry, keyboard, navigation, reflow, chat polling and feed races |
+| `5e906990ed7af1647358398424a504b5ec1ce95a` | [45519585749](https://github.com/worthkind/Student-creator-/actions/runs/45519585749) | Five jobs green; 285 Node tests, 38 native transport checks, SDK 36 internal debug build and lint; safe liveness/diagnostic tests |
+| `f59c76de14a585d20e9e4253ebbeed99dd7ad53b` | [45519819701](https://github.com/worthkind/Student-creator-/actions/runs/45519819701) | Five jobs green; 28 native session checks; debug and instrumentation APKs built, lint passed; emulator explicitly not executed (CI emulator/KVM unavailable) |
+| `d1a4dab903a24cd0290e9997f1c2571633818738` | [45519989413](https://github.com/worthkind/Student-creator-/actions/runs/45519989413) | Five jobs green; eight browser tests, labelled visible form controls, liveness response, throttled feed 168740 B, DCL 632ms, LCP 640ms, CLS 0 (synthetic Chromium only) |
+| `c5f1047f749f9336e73c706507dc69cb679a3b34` | [45520158782](https://github.com/worthkind/Student-creator-/actions/runs/45520158782) | Five jobs green; disposable rollback to previous source read current synthetic data, preserved authorization, media, journal replay and refund balance |
+| `dc45dc210bc7b0f8f88d054122efefb853789c77` | [45520397274](https://github.com/worthkind/Student-creator-/actions/runs/45520397274) | Added generated playable H.264 fixture, actual browser decode and position preservation; exact-head CI pending at documentation checkpoint |
 
-## Distribution rules
-Google Play official references (recheck at submission): https://support.google.com/googleplay/android-developer/answer/9858738 and https://support.google.com/googleplay/android-developer/answer/13327111 and https://support.google.com/googleplay/android-developer/answer/18265346 . Do not embed unrestricted web Paystack checkout in a Play-distributed app for digital goods unless a documented applicable policy exception/program permits it; coordinate with Week 5. Account deletion must have an in-app and external request path where required. UGC moderation/reporting/blocking must actually function. Do not assert compliance based on a checklist alone.
+Evidence belongs to the stated revision, not automatically a newer head. See issue #34 for subsequent exact-head retest results.
 
-## Rollback procedure (not executed)
-1. Stop promotion, keep registration and live payments disabled; record failing SHA/deployment and symptoms without sensitive data.
-2. Identify a previously tested compatible deployment and database migration state. Coordinate with Week 1/5 before any rollback affecting schema, ledger or entitlements.
-3. With founder approval, restore the known-good application deployment in staging first. Test health, authentication, cross-account denials, media entitlements and sandbox payment idempotency. Do not reverse/delete financial records to roll back app code.
-4. Record results and owner approval. No production promotion or store submission without explicit approval.
+## Gate status
 
-No physical device, emulator, hosted acceptance, signing, release or monitoring evidence was obtained in this slice. One-student pilot remains separately gated; 100 and 1,000 are later gates.
+| Gate | Status |
+|---|---|
+| Responsive and keyboard | Local Chromium verified across five widths and authenticated route sweep; manual TalkBack/physical device and final founder design remain |
+| Loading/errors/offline | Verified browser cases and API transport unit tests; no service worker, private cache or write replay |
+| Media and bandwidth | Protected local synthetic byte ranges, captions, revocation and no eager downloads verified; real codec test added; hosted Mux adaptive stream and real mobile data measurement pending |
+| Browser | Prior five-job CI runs green as recorded; latest exact head must be checked |
+| Android | Internal native Java public catalog client, SDK 36, strict HTTPS/read-only transport, bounded parsing, loading/error/retry UI; debug/instrumentation APKs and lint verified. No native private login, purchase or media. CI emulator not executed due to unavailable KVM. |
+| Mobile sessions | Memory-only native boundary verified with injected synthetic verifier; no persistent token, stale result, URL token or local role inference. Not wired to hosted Auth; no native sign-in/refresh/revocation integration or real-device proof. |
+| Play release | Internal listing draft, target API 36, provisional application ID. Release variant disabled. Final package, signing/upload-key custody, billing, privacy/deletion, rating, screenshots and testing track require approval/verification. |
+| Vercel staging | Minimal no-cache /api/health and exact SHA preview probe implemented/tested; observed protected preview still at older b15ea561...; no current exact-head staging acceptance or provider approval. |
+| Monitoring | Opt-in server diagnostic sink implemented/tested, no raw request or exception data copied; no Sentry/Firebase config or external delivery/alerts verified. |
+| Performance and dependencies | Local simulated network measurements and CI production npm audit; not real Android/production metrics. |
+| Rollback | Prior source loaded current isolated synthetic data and validated auth, protected media, balanced ledger, replay/refund; existing independent backup/restore tests preserved. Actual Vercel/staging and hosted DB rollback unexecuted. |
+
+## Android build and distribution boundaries
+
+Native code is original Java using Android platform APIs, not a complete native application. AGP 8.10.1, Gradle 8.11.1 pinned; API 36 target from current official Android requirements. JDK 17 selected to correct CI Java 25 incompatibility. Gradle download checksum pinned against publisher reference. No new runtime SDK dependency. See apps/android/README.md and scripts/build-android-internal.sh. The canonical repo is public, so no CI APK artifact was uploaded or public binary distributed without approval. A founder-controlled private transfer or local build is needed for physical testing. No signing key, live credentials, paid checkout or preview bypass secret belongs in an APK.
+
+References: https://developer.android.com/build/releases/agp-8-10-0-release-notes ; https://developer.android.com/google/play/requirements/target-sdk ; https://gradle.org/release-checksums/ ; https://nextjs.org/docs/app/api-reference/file-conventions/instrumentation . Google Play policies must be rechecked at submission: https://support.google.com/googleplay/android-developer/answer/9858738 ; https://support.google.com/googleplay/android-developer/answer/13327111 ; https://support.google.com/googleplay/android-developer/answer/18265346 . Do not embed unrestricted external digital-goods checkout in a Play-distributed app absent verified applicable policy compliance.
+
+## Hosted rollback boundary
+
+Do not change production or erase payment history. With owner approval, identify an exact verified compatible preview and independently restored staging database, keep enrollment and live payments disabled, run liveness and provider authorization/access/entitlement checks, and obtain independent review. The synthetic rehearsal is not evidence of Vercel or production rollback.
+
+One-student pilot remains separately gated; 100 and 1000 require later acceptance.
