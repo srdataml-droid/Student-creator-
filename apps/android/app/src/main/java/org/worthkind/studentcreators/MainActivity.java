@@ -22,6 +22,8 @@ public final class MainActivity extends Activity {
     private TextView heading, status;
     private Button retry, back, more;
     private Integer nextOffset;
+    private int retryOffset;
+    private boolean retryAppend;
     private final ArrayList<CatalogPreview.Row> displayed = new ArrayList<>();
     private ListView list;
     private String selectedCourse;
@@ -51,7 +53,7 @@ public final class MainActivity extends Activity {
         retry = new Button(this);
         retry.setId(R.id.catalog_retry);
         retry.setText("Retry");
-        retry.setOnClickListener(v -> loadPage(displayed.isEmpty() ? 0 : (nextOffset == null ? 0 : nextOffset), !displayed.isEmpty() && nextOffset != null));
+        retry.setOnClickListener(v -> loadPage(retryOffset, retryAppend));
         layout.addView(retry);
         back = new Button(this);
         back.setText("All courses");
@@ -88,6 +90,8 @@ public final class MainActivity extends Activity {
     }
     private void load() { displayed.clear(); nextOffset = null; loadPage(0, false); }
     private void loadPage(int offset, boolean append) {
+        retryOffset = offset;
+        retryAppend = append;
         int attempt = ++generation;
         if (pending != null) pending.cancel(true);
         if (!append) list.setAdapter(null);
