@@ -1,6 +1,7 @@
 import {test,expect} from '@playwright/test';
 import {readFile} from 'node:fs/promises';
 import {join} from 'node:path';
+if(process.env.PLAYWRIGHT_CHROME==='1')test.use({channel:'chrome'});
 const actor='11111111-1111-4111-8111-111111111111',lesson='22222222-2222-4222-8222-222222222222';
 test('authorized HLS fixture loads real media and tears down on route change',async({browser})=>{
  const dir=process.env.HLS_FIXTURE_DIR;
@@ -23,9 +24,10 @@ test('authorized HLS fixture loads real media and tears down on route change',as
  await page.getByRole('button',{name:'Play video',exact:true}).click();
  await expect(page.locator('video')).toBeVisible();
  await expect.poll(()=>requests,{timeout:15000}).toBeGreaterThan(1);
- await expect.poll(()=>page.locator('video').evaluate(v=>v.readyState),{timeout:20000}).toBeGreaterThanOrEqual(2);
- await page.locator('video').evaluate(async v=>{v.muted=true;await v.play();});
- await expect.poll(()=>page.locator('video').evaluate(v=>v.currentTime),{timeout:15000}).toBeGreaterThan(0);
+ await page.locator('video').evaluate(v=>{v.muted=true;void v.play().catch(()=>{});});
+ await expect.poll(()=>page.locator('video').evaluate(v=>({ready:v.readyState,error:v.error?.code??null})),{timeout:20000}).toMatchObject({ready:expect.any(Number),error:null});
+ await expect.poll(()=>page.locator('video').evaluate(v=>v.currentTime),{timeout:20000}).toBeGreaterThan(0);
+ await expect.poll(()=>page.locator('video').evaluate(v=>v.readyState)).toBeGreaterThanOrEqual(2);
  await page.goto('/saved');
  await expect(page.locator('video')).toHaveCount(0);
  expect(await page.evaluate(()=>Object.entries(localStorage).some(([k,v])=>k.includes('token')||v.includes('one.two.three')))).toBe(false);
