@@ -222,6 +222,12 @@ jobs:
           psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-privacy-fulfilment.sql
           psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-privacy-fulfilment.test.sql
 
+      - name: Verify exposed catalog RPC privilege boundaries (disposable live database)
+        run: |
+          export PGDATABASE=campus_ci_live
+          psql -1 -v ON_ERROR_STOP=1 -f db/production/0008_catalog_rpc_boundaries.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/catalog_rpc_boundaries.sql
+
       - name: Restore disposable PostgreSQL backup into isolated database
         env:
           PG_CONTAINER: ${{ job.services.postgres.id }}
