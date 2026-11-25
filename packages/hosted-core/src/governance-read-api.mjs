@@ -46,6 +46,8 @@ async function readCommandBody(request){
  return body&&typeof body==='object'&&!Array.isArray(body)?body:null;
 }
 function commandFor(path){
+ if(path==='finance/payouts')return {name:'week7_payout_queue',scope:'finance.review',allowed:['limit']};
+ if(/^finance\/payouts\/[0-9a-f-]{36}\/review$/i.test(path))return {name:'week7_review_payout',scope:'finance.review',allowed:['decision','note']};
  if(path==='privacy/fulfilment')return {name:'week7_privacy_fulfilment_queue',scope:'privacy.review',allowed:['limit']};
  if(/^(?:privacy\/requests\/[0-9a-f-]{36}\/record-fulfilment|privacy\/fulfilment\/[0-9a-f-]{36}\/record)$/i.test(path))return {name:'week7_record_privacy_fulfilment',scope:'privacy.review',allowed:['reference','summary']};
  if(/^(?:privacy\/requests\/[0-9a-f-]{36}\/confirm-fulfilment|privacy\/fulfilment\/[0-9a-f-]{36}\/confirm)$/i.test(path))return {name:'week7_confirm_privacy_fulfilment',scope:'privacy.review',allowed:['note']};
@@ -98,6 +100,9 @@ function validateCommand(cmd,body,path,actorId){
    return UUID.test(path.split('/')[2])&&hasText(body.note,10,500)?{_actor:actorId,_id:path.split('/')[2],_note:body.note.trim()}:null;
   case 'week7_recommend_retention':
    return UUID.test(id)&&hasText(body.reason,20,500)?{_actor:actorId,_id:id,_reason:body.reason.trim()}:null;
+  case 'week7_review_payout':
+   return UUID.test(path.split('/')[2])&&['reserve','reject'].includes(body.decision)&&hasText(body.note,10,500)?{_actor:actorId,_id:path.split('/')[2],_decision:body.decision,_note:body.note.trim()}:null;
+  case 'week7_payout_queue':
   case 'week7_paid_access_queue':
   case 'week7_copyright_queue':
   case 'week7_privacy_fulfilment_queue':
