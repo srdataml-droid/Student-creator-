@@ -35,6 +35,7 @@ export function createLearningServices({db,transaction,audit,error,requireVerifi
     "CREATE TABLE IF NOT EXISTS creator_availability (creator_id TEXT PRIMARY KEY REFERENCES users(id),slots_json TEXT NOT NULL,updated_at TEXT NOT NULL);",
     "CREATE TABLE IF NOT EXISTS learning_requests (id TEXT PRIMARY KEY,student_id TEXT NOT NULL REFERENCES users(id),creator_id TEXT NOT NULL REFERENCES users(id),kind TEXT NOT NULL CHECK(kind IN ('tutoring','assignment_explanation','project_guidance')),description TEXT NOT NULL,budget_kobo INTEGER,quote_kobo INTEGER,status TEXT NOT NULL CHECK(status IN ('requested','quoted','accepted','in_progress','submitted','completed','rejected','cancelled','disputed')),creation_key TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,UNIQUE(student_id,creation_key));",
     "CREATE TABLE IF NOT EXISTS learning_disputes (id TEXT PRIMARY KEY,request_id TEXT NOT NULL REFERENCES learning_requests(id),reporter_id TEXT NOT NULL REFERENCES users(id),reason TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','resolved')),resolution TEXT,created_at TEXT NOT NULL,reviewed_at TEXT,reviewed_by TEXT REFERENCES users(id));",
+    "CREATE TABLE IF NOT EXISTS learning_dispute_decisions (request_id TEXT PRIMARY KEY REFERENCES learning_requests(id),outcome TEXT NOT NULL CHECK(outcome IN ('resume_guidance','return_to_review','cancel_service')),reason TEXT NOT NULL,decided_by TEXT NOT NULL REFERENCES users(id),decided_at TEXT NOT NULL);",
     "CREATE TABLE IF NOT EXISTS learning_refund_reviews (id TEXT PRIMARY KEY,resource_kind TEXT NOT NULL CHECK(resource_kind IN ('class','service')),resource_id TEXT NOT NULL,student_id TEXT NOT NULL REFERENCES users(id),status TEXT NOT NULL DEFAULT 'pending_review' CHECK(status IN ('pending_review','recorded')),reason TEXT NOT NULL,created_at TEXT NOT NULL,UNIQUE(resource_kind,resource_id,student_id));",
     "CREATE TABLE IF NOT EXISTS learning_notifications (id TEXT PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),kind TEXT NOT NULL,resource_id TEXT NOT NULL,body TEXT NOT NULL,seen_at TEXT,created_at TEXT NOT NULL,UNIQUE(user_id,kind,resource_id));"
   ].join('\n'));
@@ -606,6 +607,41 @@ export function createLearningServices({db,transaction,audit,error,requireVerifi
         notice(row.reporter_id,'help_dispute_reviewed',row.request_id,'The service dispute was reviewed. Financial action is separate.');
         audit(actor.id,'help.dispute.reviewed',id);
         return {id,status:'resolved',financialAction:false};
+      });
+    },
+    finalizeHelpDispute(actor,requestId,{outcome,reason}={}){
+      if(!actor||actor.role!=='admin'||actor.suspended)throw error('ADMIN_REQUIRED',403);
+      if(!['resume_guidance','return_to_review','cancel_service'].includes(outcome))
+        throw error('INVALID_DISPUTE_OUTCOME',422);
+      const note=valText(reason,10,1000,error,'INVALID_REASON');
+      return transaction(()=>{
+        const prior=db.prepare('SELECT outcome,reason FROM learning_dispute_decisions WHERE request_id=?').get(requestId);
+        if(prior){
+          if(prior.outcome!==outcome||prior.reason!==note)throw error('DISPUTE_ALREADY_DECIDED',409);
+          return {requestId,outcome,status:outcome==='resume_guidance'?'in_progress':outcome==='return_to_review'?'submitted':'cancelled',replayed:true,financialAction:false};
+        }
+        const request=db.prepare('SELECT * FROM learning_requests WHERE id=?').get(requestId);
+        if(!request||request.status!=='disputed')throw error('REQUEST_NOT_FOUND',404);
+        const reviews=db.prepare("SELECT status FROM learning_disputes WHERE request_id=?").all(requestId);
+        if(!reviews.length||reviews.some(row=>row.status!=='resolved'))
+          throw error('DISPUTE_REVIEW_PENDING',409);
+        if(outcome!=='cancel_service'&&request.quote_kobo>0&&
+           !paid({id:request.student_id},'service',requestId))
+          throw error('PAYMENT_ENTITLEMENT_REQUIRED',402);
+        const nextStatus=outcome==='resume_guidance'?'in_progress':
+          outcome==='return_to_review'?'submitted':'cancelled';
+        db.prepare("UPDATE learning_requests SET status=?,updated_at=? WHERE id=? AND status='disputed'")
+          .run(nextStatus,timestamp(),requestId);
+        db.prepare('INSERT INTO learning_dispute_decisions(request_id,outcome,reason,decided_by,decided_at) VALUES(?,?,?,?,?)')
+          .run(requestId,outcome,note,actor.id,timestamp());
+        if(outcome==='cancel_service'&&request.quote_kobo>0)
+          refund('service',requestId,request.student_id,
+            'Resolved service dispute ended in cancellation; operator must verify any refund.');
+        for(const person of [request.student_id,request.creator_id])
+          notice(person,'help_dispute_finalized',requestId,
+            'An administrator finalized the service dispute. Review the updated request status.');
+        audit(actor.id,'help.dispute.finalized',requestId,{outcome});
+        return {requestId,outcome,status:nextStatus,replayed:false,financialAction:false};
       });
     },
     disputesForReview(actor){
