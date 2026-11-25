@@ -648,6 +648,11 @@ export function createLearningServices({db,transaction,audit,error,requireVerifi
       if(!actor||actor.role!=='admin'||actor.suspended)throw error('ADMIN_REQUIRED',403);
       return db.prepare("SELECT id,request_id AS requestId,reporter_id AS reporterId,reason,created_at AS createdAt FROM learning_disputes WHERE status='open' ORDER BY created_at LIMIT 100").all();
     },
+    disputesReadyForDecision(actor){
+      if(!actor||actor.role!=='admin'||actor.suspended)throw error('ADMIN_REQUIRED',403);
+      return db.prepare("SELECT r.id,r.student_id AS studentId,r.creator_id AS creatorId,r.quote_kobo AS quoteKobo,r.kind,r.created_at AS createdAt FROM learning_requests r WHERE r.status='disputed' AND EXISTS(SELECT 1 FROM learning_disputes d WHERE d.request_id=r.id AND d.status='resolved') AND NOT EXISTS(SELECT 1 FROM learning_disputes d WHERE d.request_id=r.id AND d.status='open') AND NOT EXISTS(SELECT 1 FROM learning_dispute_decisions v WHERE v.request_id=r.id) ORDER BY r.created_at LIMIT 100")
+        .all();
+    },
     refundReviews(actor){
       if(!actor||actor.role!=='admin'||actor.suspended)throw error('ADMIN_REQUIRED',403);
       return db.prepare("SELECT id,resource_kind AS resourceKind,resource_id AS resourceId,student_id AS studentId,reason,status,created_at AS createdAt FROM learning_refund_reviews WHERE status='pending_review' ORDER BY created_at LIMIT 100").all();
