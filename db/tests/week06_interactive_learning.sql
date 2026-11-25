@@ -35,6 +35,10 @@ INSERT INTO public.learning_participant_removals(class_id,student_id,revoke_toke
 VALUES('66666666-6666-4666-8666-666666666666',
 '33333333-3333-4333-8333-333333333333',
 1700000000,'The host removed a synthetic participant for safety');
+INSERT INTO public.learning_dispute_decisions(request_id,outcome,reason,decided_by)
+VALUES('77777777-7777-4777-8777-777777777777','return_to_review',
+'The student should verify the proposed explanation after dispute review.',
+'11111111-1111-4111-8111-111111111111');
 -- Cross-institution referential integrity is not a UI-only check.
 DO $$ BEGIN
   BEGIN
@@ -68,6 +72,10 @@ BEGIN
  BEGIN
    PERFORM 1 FROM public.learning_participant_removals;
    RAISE EXCEPTION 'Student could inspect or forge participant removal queue';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+ BEGIN
+   PERFORM 1 FROM public.learning_dispute_decisions;
+   RAISE EXCEPTION 'Student could see or forge an admin dispute decision';
  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  BEGIN
    INSERT INTO public.interactive_class_enrollments(class_id,student_id,state) VALUES(
