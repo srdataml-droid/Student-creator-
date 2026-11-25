@@ -19,15 +19,15 @@ export default async function Home(){
    posts=courses.flatMap(course=>getLocalCourseLessons(course.id).map(item=>toFeedPreview(item,course,bySchool.get(course.institutionId)||'Campus creator'))).sort((a,b)=>String(b.publishedAt||b.createdAt).localeCompare(String(a.publishedAt||a.createdAt))).slice(0,60);
   }else{({courses,posts,partial}=await loadHostedFeed({getCourses:()=>getPublicCourses({fetcher:boundedFetch}),getCatalog:buildCatalogRoute({fetcher:boundedFetch})}));}
  }catch{ready=false;}
- return <main id="main" className="creator-main modern-home">
+ return <main id="main" className={local?"creator-main modern-home":"creator-main modern-home hosted-home"}>
   <div className="feed-column">
    <h1 className="visually-hidden">Discover student creators</h1>
    {local?<FeedExperience posts={posts} courses={courses} ready={ready}/>:<section className="feed-area" aria-labelledby="hosted-discovery-title">
-    <div className="reference-feed-heading"><h2 id="hosted-discovery-title">Discover student work</h2></div>
+    <div className="reference-feed-heading"><h2 id="hosted-discovery-title">Discover student work</h2><p className="hint">Public previews from featured courses.</p></div>
     {!ready?<div className="feed-empty" role="status"><h3>Discovery temporarily unavailable</h3><p>The course catalog could not be loaded. Please refresh to retry.</p></div>:<>
      {partial&&<p className="hint" role="status">Some courses could not be loaded. Showing available previews.</p>}
-     {posts.length>0?<ul className="lesson-list">{posts.map(post=><li className="lesson" key={post.id}><p className="hint">{post.courseCode} · {post.courseTitle}</p><h3>{post.title}</h3>{post.previewText&&<p>{post.previewText}</p>}<Link className="secondary-link" href={'/courses/'+post.courseId}>Explore course</Link></li>)}</ul>:<div className="feed-empty"><h3>{courses.length?'No previews in the featured courses yet':'No courses published yet'}</h3><p>{courses.length?'Explore the course directory for more student work.':'Courses appear here when the directory is published.'}</p></div>}
-     {courses.length>0&&<section aria-labelledby="hosted-courses-title" className="course-section"><h2 id="hosted-courses-title">Explore courses</h2><ul className="lesson-list">{courses.map(course=><li className="lesson" key={course.id}><Link href={'/courses/'+course.id}>{course.code} · {course.title}</Link></li>)}</ul></section>}
+     {posts.length>0?<ul className="lesson-list hosted-preview-list">{posts.map(post=><li className="lesson" key={post.id}><p className="hint">{post.courseCode} · {post.courseTitle}</p><h3>{post.title}</h3>{post.previewText&&<p>{post.previewText}</p>}<Link className="secondary-link" href={'/courses/'+post.courseId}>Explore course</Link></li>)}</ul>:<div className="feed-empty"><h3>{courses.length?'No previews in the featured courses yet':'No courses published yet'}</h3><p>{courses.length?'Explore the course directory for more student work.':'Courses appear here when the directory is published.'}</p></div>}
+     {courses.length>0&&<section aria-labelledby="hosted-courses-title" className="course-section"><h2 id="hosted-courses-title">Explore courses</h2><ul className="lesson-list hosted-course-list">{courses.map(course=><li className="lesson" key={course.id}><Link href={'/courses/'+course.id}>{course.code} · {course.title}</Link></li>)}</ul></section>}
     </>}
    </section>}
   </div>
