@@ -409,6 +409,7 @@ jobs:
           npm ci --no-audit --no-fund
           npm install --no-save --no-package-lock --no-audit --no-fund @playwright/test@1.56.1
           npx playwright install --with-deps ${{ matrix.browser }}
+          if [ '${{ matrix.browser }}' = chromium ]; then npx playwright install chrome; fi
           sudo apt-get update -qq
           sudo apt-get install -y ffmpeg
       - name: Test actual local HLS segments, not real provider media
@@ -417,6 +418,7 @@ jobs:
           NEXT_TELEMETRY_DISABLED: '1'
         run: |
           set -euo pipefail
+          if [ '${{ matrix.browser }}' = chromium ]; then export PLAYWRIGHT_CHROME=1; fi
           export HLS_FIXTURE_DIR="$RUNNER_TEMP/hls-fixture"
           mkdir -p "$HLS_FIXTURE_DIR"
           ffmpeg -hide_banner -loglevel error -f lavfi -i color=c=blue:s=320x180:r=24 -t 6 -c:v libx264 -pix_fmt yuv420p -profile:v baseline -g 48 -sc_threshold 0 -f hls -hls_time 2 -hls_list_size 0 -hls_segment_filename "$HLS_FIXTURE_DIR/segment%03d.ts" "$HLS_FIXTURE_DIR/index.m3u8"
