@@ -7,13 +7,26 @@ import {api,friendlyError} from '../lib/local-client.js';
  * rechecks current verification, creator blocks and payment entitlement.
  * Watermark overlays deter casual copying; they are not DRM.
  */
-export default function ProtectedVideo({lessonId,label,hasCaptions=false}){
+export default function ProtectedVideo(props){
+  return <ProtectedVideoSession key={props.lessonId} {...props}/>;
+}
+function ProtectedVideoSession({lessonId,label,hasCaptions=false}){
   const [ready,setReady]=useState(false),[busy,setBusy]=useState(false),[error,setError]=useState('');
   const [watermark,setWatermark]=useState(null),[position,setPosition]=useState(0);
   const [expiresAtMs,setExpiresAtMs]=useState(null);
   const frame=useRef(null),videoRef=useRef(null);
   const resumeAt=useRef(0),resumePlaying=useRef(false),inFlight=useRef(null);
-  const alive=useRef(true);
+  const alive=useRef(true),expiryRef=useRef(null);
+  const suspendPlayback=useCallback((message)=>{
+    const v=videoRef.current;
+    if(v){
+      if(Number.isFinite(v.currentTime))resumeAt.current=Math.max(0,v.currentTime);
+      v.pause();
+    }
+    resumePlaying.current=false;
+    expiryRef.current=null;
+    setExpiresAtMs(null);setWatermark(null);setReady(false);setError(message);
+  },[]);
   useEffect(()=>{alive.current=true;return ()=>{alive.current=false;};},[]);
 
   const authorize=useCallback(async()=>{
@@ -32,7 +45,8 @@ export default function ProtectedVideo({lessonId,label,hasCaptions=false}){
         if(!alive.current)return;
         if(!Number.isSafeInteger(grant.expiresAt)||grant.expiresAt*1000<=Date.now())
           throw Error('INVALID_GRANT_EXPIRATION');
-        setExpiresAtMs(grant.expiresAt*1000);
+        expiryRef.current=grant.expiresAt*1000;
+        setExpiresAtMs(expiryRef.current);
         setWatermark(grant.watermark);setPosition(0);
         // For a manual renewal the existing player and its position survive.
         // A failed media element can be recreated by re-enabling playback.
@@ -43,24 +57,41 @@ export default function ProtectedVideo({lessonId,label,hasCaptions=false}){
         setError(friendlyError(cause));
         // An explicit revocation must stop the UI immediately. Temporary
         // connectivity failures do not discard a currently buffered video.
-        if(/AUTH_REQUIRED|VERIFICATION_REQUIRED|PURCHASE_REQUIRED|CREATOR_ACCESS_RESTRICTED|PLAYBACK_GRANT_LIMIT|FORBIDDEN/.test(String(cause?.message)))
-          setReady(false);
+        if([401,402,403].includes(cause?.status)||/AUTH_REQUIRED|VERIFICATION_REQUIRED|PURCHASE_REQUIRED|CREATOR_ACCESS_RESTRICTED|FORBIDDEN|INVALID_GRANT_EXPIRATION/.test(String(cause?.message)))
+          suspendPlayback(friendlyError(cause));
       }finally{
         if(alive.current)setBusy(false);
       }
     })();
     inFlight.current=task;
     try{return await task;}finally{if(inFlight.current===task)inFlight.current=null;}
-  },[lessonId]);
+  },[lessonId,suspendPlayback]);
 
-  // Renew shortly before expiration while keeping the video element alive.
-  // Uses only a small POST; media continues to have preload=none for data saving.
+  // No recurring authorization traffic while the viewer is paused, backgrounded
+  // or offline. Expiration always stops the UI, even if bytes remain buffered.
   useEffect(()=>{
     if(!ready||!expiresAtMs)return;
-    const delay=Math.max(1000,expiresAtMs-Date.now()-45000);
-    const timer=setTimeout(()=>{void authorize();},delay);
-    return ()=>clearTimeout(timer);
-  },[ready,expiresAtMs,authorize]);
+    const renewIfPlaying=()=>{
+      const v=videoRef.current;
+      if(document.visibilityState==='visible'&&navigator.onLine!==false&&
+         v&&!v.paused&&!v.ended&&expiresAtMs-Date.now()<=45000&&
+         expiryRef.current===expiresAtMs&&Date.now()<expiresAtMs)void authorize();
+    };
+    const expire=()=>{
+      if(expiryRef.current===expiresAtMs&&Date.now()>=expiresAtMs)
+        suspendPlayback('Video access expired. Enable playback to renew authorization.');
+    };
+    const renewalTimer=setTimeout(renewIfPlaying,Math.max(0,expiresAtMs-Date.now()-45000));
+    const expiryTimer=setTimeout(expire,Math.max(0,expiresAtMs-Date.now()));
+    const resume=()=>{expire();renewIfPlaying();};
+    document.addEventListener('visibilitychange',resume);
+    window.addEventListener('online',resume);
+    return ()=>{
+      clearTimeout(renewalTimer);clearTimeout(expiryTimer);
+      document.removeEventListener('visibilitychange',resume);
+      window.removeEventListener('online',resume);
+    };
+  },[ready,expiresAtMs,authorize,suspendPlayback]);
 
   useEffect(()=>{
     if(!ready||!watermark)return;
@@ -106,7 +137,12 @@ export default function ProtectedVideo({lessonId,label,hasCaptions=false}){
         onError={onMediaError}
         onTimeUpdate={event=>{if(Number.isFinite(event.currentTarget.currentTime))resumeAt.current=event.currentTarget.currentTime;}}
         onLoadedMetadata={restorePosition}
-        onPlay={()=>{if(expiresAtMs&&expiresAtMs<=Date.now()+20000)void authorize();}}>
+        onPlay={()=>{
+          if(!expiryRef.current||expiryRef.current<=Date.now()){
+            suspendPlayback('Video access expired. Enable playback to renew authorization.');return;
+          }
+          if(document.visibilityState==='visible'&&navigator.onLine!==false&&expiryRef.current<=Date.now()+45000)void authorize();
+        }}>
         {hasCaptions&&<track kind="captions" srcLang="en" label="English captions" src={`/api/local/lessons/${lessonId}/video/captions`} default/>}
         Your browser cannot play this video.
       </video>

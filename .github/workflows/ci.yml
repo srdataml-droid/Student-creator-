@@ -15,6 +15,20 @@ jobs:
           node-version: '22'
       - name: Run tests (no dependencies required)
         run: npm test
+      - name: Verify native catalog transport on JVM
+        run: bash scripts/test-android-catalog.sh
+      - name: Compile and lint internal Android debug app (SDK 36)
+        timeout-minutes: 8
+        run: bash scripts/build-android-internal.sh
+      - name: Run Android instrumentation if an isolated emulator is available
+        timeout-minutes: 10
+        env:
+          WK8_STANDARD_PUBLIC_RUNNER: ${{ github.head_ref == 'work/week-08' && github.event.repository.private == false }}
+        run: bash scripts/test-android-emulator.sh
+      - name: Rehearse Week 8 rollback against a previous green revision (synthetic only)
+        if: github.head_ref == 'work/week-08'
+        timeout-minutes: 3
+        run: bash scripts/rehearse-week8-rollback.sh
       - name: Verify source artefacts do not contain development secrets
         run: |
           if git ls-files | grep -E '(^|/)(\.env(\..*)?|.*\.pem|.*\.key)$' | grep -vE '\.env\.example$'; then
@@ -30,6 +44,9 @@ jobs:
       - name: Install from committed lockfile
         working-directory: apps/web
         run: npm ci --no-audit --no-fund
+      - name: Audit locked production dependencies (high and critical)
+        working-directory: apps/web
+        run: npm audit --omit=dev --audit-level=high
       - name: Build Next.js app without production credentials
         working-directory: apps/web
         run: npm run build
@@ -143,6 +160,9 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
+          # Committed, checksummed synthetic playable fixtures avoid runner ffmpeg dependency.
+          export PLAYWRIGHT_VALIDATE_CODEC=1
+          if command -v google-chrome >/dev/null; then export PLAYWRIGHT_CHROMIUM_EXECUTABLE="$(command -v google-chrome)"; fi
           export PAYMENT_FIXTURE_FILE="$RUNNER_TEMP/paid-browser-fixture.json"
           node scripts/seed-payment-browser-fixture.mjs "$PAYMENT_FIXTURE_FILE"
           export LOCAL_SQLITE_PATH="$(node -p 'JSON.parse(require("node:fs").readFileSync(process.env.PAYMENT_FIXTURE_FILE,"utf8")).path')"

@@ -28,6 +28,19 @@ async function join(page,schoolId,email,password){
   await page.getByRole('button',{name:'Create account'}).click();
   await expect(page.getByRole('heading',{name:'Account created'})).toBeVisible();
 }
+// Focused checks for visible form control labels. This is not a full WCAG audit.
+async function assertNamedFormControls(main,route){
+  const unnamed=await main.locator('input:not([type=hidden]),textarea,select').evaluateAll(controls=>
+    controls.filter(el=>{
+      if(!el.getClientRects().length||getComputedStyle(el).visibility==='hidden')return false;
+      if(['submit','reset','button','image'].includes(el.type))return false;
+      const aria=el.getAttribute('aria-label')?.trim();
+      const refs=(el.getAttribute('aria-labelledby')||'').split(/\\s+/).filter(Boolean);
+      return !aria&&!refs.some(id=>document.getElementById(id)?.textContent?.trim())&&
+        !Array.from(el.labels||[]).some(label=>label.textContent?.trim());
+    }).map(el=>({tag:el.tagName,id:el.id,type:el.type})));
+  expect(unnamed,`Missing control labels: ${route}`).toEqual([]);
+}
 async function readJson(response){
   expect(response.ok(),`HTTP ${response.status()} from ${response.url()}`).toBeTruthy();
   return response.json();
@@ -135,9 +148,91 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     await reviewed.getByRole('button',{name:'Approve'}).click();
     await expect(adminPage.getByText('Lesson approved and published.')).toBeVisible();
 
+    // Browsing the feed must not initiate protected media downloads or grant requests.
+    const eagerMediaRequests=[];
+    const trackEagerMedia=req=>{
+      const pathname=new URL(req.url()).pathname;
+      if(pathname.startsWith(`/api/local/lessons/${lessonId}/`)&&
+        /\/(video(?:\/captions)?|playback-grant)$/.test(pathname))
+        eagerMediaRequests.push(pathname);
+    };
+    viewerPage.on('request',trackEagerMedia);
     await viewerPage.goto('/');
-    await expect(viewerPage.getByRole('heading',{name:title})).toBeVisible();
+    const feedPost=viewerPage.getByRole('article',{name:title});
+    await expect(feedPost.getByRole('heading',{name:title})).toBeVisible();
+    await expect(feedPost.getByRole('button',{name:'Enable playback'})).toBeVisible();
+    await expect(feedPost.locator('video')).toHaveCount(0);
+    // Measure the protected, populated feed on a genuinely constrained
+    // Chromium network simulation. No video grant or bytes until requested.
+    const cdp=await viewer.newCDPSession(viewerPage);
+    try{
+      await cdp.send('Network.enable');
+      await cdp.send('Network.setCacheDisabled',{cacheDisabled:true});
+      await cdp.send('Network.emulateNetworkConditions',{offline:false,latency:150,downloadThroughput:200000,uploadThroughput:75000});
+      await viewerPage.addInitScript(()=>{
+        // Synthetic browser measurement only: no telemetry request or user data.
+        const vitals=window.__wk8Vitals={lcp:0,cls:0};
+        let windowStart=0,last=0,cluster=0;
+        try{new PerformanceObserver(list=>{
+          for(const e of list.getEntries())vitals.lcp=e.startTime;
+        }).observe({type:'largest-contentful-paint',buffered:true});}catch{}
+        try{new PerformanceObserver(list=>{
+          for(const e of list.getEntries()){
+            if(e.hadRecentInput)continue;
+            if(e.startTime-last>1000||e.startTime-windowStart>5000){windowStart=e.startTime;cluster=0;}
+            cluster+=e.value;last=e.startTime;vitals.cls=Math.max(vitals.cls,cluster);
+          }
+        }).observe({type:'layout-shift',buffered:true});}catch{}
+      });
+      await viewerPage.setViewportSize({width:360,height:780});
+      await viewerPage.reload({waitUntil:'load',timeout:45000});
+      await expect(feedPost.getByRole('button',{name:'Enable playback'})).toBeVisible({timeout:15000});
+      await expect.poll(()=>viewerPage.evaluate(()=>window.__wk8Vitals?.lcp||0),{timeout:10000}).toBeGreaterThan(0);
+      const performance=await viewerPage.evaluate(()=>{
+        const entries=[...performance.getEntriesByType('navigation'),...performance.getEntriesByType('resource')];
+        return {transferredBytes:entries.reduce((n,e)=>n+(e.transferSize||0),0),domContentLoadedMs:Math.round(performance.getEntriesByType('navigation')[0].domContentLoadedEventEnd),width:document.documentElement.scrollWidth,viewport:innerWidth,lcpMs:Math.round(window.__wk8Vitals.lcp),cls:window.__wk8Vitals.cls};
+      });
+      console.log('browser-alpha throttled feed metrics',JSON.stringify(performance));
+      expect(performance.transferredBytes).toBeGreaterThan(0);
+      expect(performance.transferredBytes).toBeLessThanOrEqual(2*1024*1024);
+      expect(performance.domContentLoadedMs).toBeGreaterThan(0);
+      expect(performance.domContentLoadedMs).toBeLessThanOrEqual(20000);
+      expect(performance.lcpMs).toBeLessThanOrEqual(8000);
+      expect(performance.cls).toBeLessThanOrEqual(.25);
+      expect(performance.width).toBeLessThanOrEqual(performance.viewport+1);
+    }finally{
+      await cdp.send('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});
+      await cdp.send('Network.setCacheDisabled',{cacheDisabled:false});
+      await cdp.detach();
+      await viewerPage.setViewportSize({width:1280,height:800});
+    }
+    // A delayed following response must not overwrite a newer filter selection.
+    let releaseFollowing,followingStarted;
+    const followingGate=new Promise(resolve=>{releaseFollowing=resolve;});
+    const followingRequest=new Promise(resolve=>{followingStarted=resolve;});
+    await viewerPage.route('**/api/local/following',async route=>{
+      followingStarted();
+      await followingGate;
+      await route.fulfill({status:403,contentType:'application/json',body:JSON.stringify({error:'VERIFICATION_REQUIRED'})});
+    });
+    try{
+      await viewerPage.getByRole('button',{name:'Following',exact:true}).click();
+      await followingRequest;
+      await expect(viewerPage.getByText('Loading creators you follow…')).toBeVisible();
+      await viewerPage.getByRole('button',{name:'For you',exact:true}).click();
+      const completed=viewerPage.waitForResponse(response=>response.url().endsWith('/api/local/following'));
+      releaseFollowing();
+      await completed;
+      await expect(feedPost).toBeVisible();
+      await expect(viewerPage.locator('.feed-notice')).toHaveCount(0);
+    }finally{
+      releaseFollowing();
+      await viewerPage.unroute('**/api/local/following');
+    }
+
     await viewerPage.goto(`/lessons/${lessonId}`);
+    viewerPage.off('request',trackEagerMedia);
+    expect(eagerMediaRequests).toEqual([]);
     await expect(viewerPage.getByRole('heading',{name:title})).toBeVisible();
     await expect(viewerPage.getByRole('button',{name:'Enable playback'})).toBeVisible();
     expect((await viewer.request.get(`/api/local/lessons/${lessonId}/video`)).status()).toBe(403);
@@ -252,6 +347,59 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     await viewerPage.locator('#lesson-comment-text').fill(comment);
     await viewerPage.getByRole('button',{name:'Post comment'}).click();
     await expect(viewerPage.getByText(comment)).toBeVisible();
+    // Exercise authenticated, populated content and communication routes,
+    // beyond the unauthenticated route-shell sweep.
+    for(const [targetPage,route] of [
+      [viewerPage,'/courses/'+courseId],
+      [viewerPage,'/communities/'+courseId],
+      [viewerPage,'/study/'+courseId],
+      [viewerPage,'/messages/'+creatorId],
+      [viewerPage,'/lessons/'+lessonId],
+      [viewerPage,'/watch/'+lessonId],
+      [viewerPage,'/creators/'+creatorId],
+      [creatorPage,'/studio'],
+      [adminPage,'/manage'],
+    ]){
+      await targetPage.goto(route);
+      const main=targetPage.getByRole('main');
+      await expect(main.getByRole('heading',{level:1})).toHaveCount(1);
+      await assertNamedFormControls(main,route);
+      for(const width of [320,412,768]){
+        await targetPage.setViewportSize({width,height:800});
+        const sizes=await targetPage.evaluate(()=>({viewport:innerWidth,document:document.documentElement.scrollWidth,offenders:[...document.querySelectorAll('body *')].filter(el=>{const r=el.getBoundingClientRect();return r.width>0&&r.right>innerWidth+1&&getComputedStyle(el).position!=='absolute';}).slice(0,6).map(el=>({tag:el.tagName,className:String(el.className),right:Math.round(el.getBoundingClientRect().right)}))}));
+        expect(sizes.document,`${route} authenticated at ${width}px: ${JSON.stringify(sizes.offenders)}`).toBeLessThanOrEqual(sizes.viewport+1);
+      }
+      await targetPage.setViewportSize({width:1280,height:800});
+    }
+    // Backgrounded conversations should not use mobile data, and a resumed
+    // conversation must stop rendering prior state when its session is denied.
+    const pollPage=await viewer.newPage();
+    let pollReads=0,deny=false;
+    await pollPage.addInitScript(()=>{
+      Object.defineProperty(document,'visibilityState',{configurable:true,get:()=>window.__testVisibility||'visible'});
+    });
+    await pollPage.route('**/api/local/messages/'+creatorId,async route=>{
+      if(route.request().method()==='GET'){
+        pollReads++;
+        if(deny)return route.fulfill({status:401,contentType:'application/json',body:JSON.stringify({error:'AUTH_REQUIRED'})});
+      }
+      await route.continue();
+    });
+    try{
+      await pollPage.clock.install();
+      await pollPage.goto('/messages/'+creatorId);
+      await expect(pollPage.getByRole('heading',{name:'Conversation'})).toBeVisible();
+      await expect(pollPage.getByRole('textbox',{name:'Message (max 2,000 characters)'})).toBeVisible();
+      await pollPage.evaluate(()=>{window.__testVisibility='hidden';document.dispatchEvent(new Event('visibilitychange'));});
+      const hiddenReads=pollReads;
+      await pollPage.clock.fastForward(30000);
+      expect(pollReads).toBe(hiddenReads);
+      deny=true;
+      await pollPage.evaluate(()=>{window.__testVisibility='visible';document.dispatchEvent(new Event('visibilitychange'));});
+      await expect(pollPage.getByText('You need to', {exact:false})).toBeVisible();
+      await expect(pollPage.getByRole('textbox',{name:'Message (max 2,000 characters)'})).toHaveCount(0);
+      expect(pollReads).toBe(hiddenReads+1);
+    }finally{await pollPage.close();}
     await viewerPage.goto(`/creators/${creatorId}`);
     await viewerPage.getByRole('button',{name:'+ Follow creator'}).click();
     await expect(viewerPage.getByRole('button',{name:/Following/})).toBeVisible();
@@ -284,6 +432,8 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     expect((await viewer.request.get(`/api/local/lessons/${lessonId}/comments`)).status()).toBe(403);
     await viewerPage.goto(`/lessons/${lessonId}`);
     await expect(viewerPage.getByText('Full posts require verified student membership',{exact:false})).toBeVisible();
+    await expect(viewerPage.getByRole('heading',{name:'Private creator work',level:1})).toBeVisible();
+    await expect(viewerPage.getByRole('main').getByRole('link',{name:'Explore other lessons'})).toBeVisible();
     // The real local backend is tested with a secret invitation code in Node;
     // this browser-only response override tests the private-code field without
     // configuring a real invitation or exposing an email in public CI logs.
@@ -300,4 +450,154 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
   }finally{
     await Promise.all([admin.close(),creator.close(),viewer.close()]);
   }
+});
+
+
+test('mobile shell communicates offline state and recovers without replaying actions', async ({browser}) => {
+  const context = await browser.newContext({baseURL: BASE, viewport: {width: 360, height: 780}});
+  try {
+    const page = await context.newPage();
+    await page.goto('/');
+    await expect(page.getByRole('navigation', {name: 'Mobile navigation'})).toBeVisible();
+    const offline = page.getByText("You're offline.", {exact: false});
+    await expect(offline).toHaveCount(0);
+    await context.setOffline(true);
+    await expect(offline).toBeVisible();
+    await context.setOffline(false);
+    await expect(offline).toHaveCount(0);
+    await page.keyboard.press('Tab');
+    await expect(page.getByRole('link', {name:'Skip to content'})).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(/#main$/);
+    await expect(page.getByRole('main')).toBeFocused();
+    const width = await page.evaluate(() => ({viewport: window.innerWidth, document: document.documentElement.scrollWidth}));
+    expect(width.document).toBeLessThanOrEqual(width.viewport + 1);
+  } finally {
+    await context.close();
+  }
+});
+
+
+test('mobile navigation announces the current route and supports small screens',async({browser})=>{
+  const context=await browser.newContext({baseURL:BASE,viewport:{width:320,height:740}});
+  try{
+    const page=await context.newPage();
+    await page.goto('/');
+    const nav=page.getByRole('navigation',{name:'Mobile navigation'});
+    await expect(nav.getByRole('link',{name:'Home'})).toHaveAttribute('aria-current','page');
+    await expect(nav.locator('[aria-current]')).toHaveCount(1);
+    await nav.getByRole('link',{name:'Explore'}).click();
+    await expect(page).toHaveURL(/\/search$/);
+    await expect(nav.getByRole('link',{name:'Explore'})).toHaveAttribute('aria-current','page');
+    await expect(nav.locator('[aria-current]')).toHaveCount(1);
+    const sizes=await page.evaluate(()=>({viewport:innerWidth,document:document.documentElement.scrollWidth,offenders:[...document.querySelectorAll('body *')].filter(el=>{const r=el.getBoundingClientRect();return r.width>0&&r.right>innerWidth+1&&getComputedStyle(el).position!=='absolute';}).slice(0,10).map(el=>({tag:el.tagName,className:String(el.className),right:Math.round(el.getBoundingClientRect().right)}))}));
+    expect(sizes.document,JSON.stringify(sizes.offenders)).toBeLessThanOrEqual(sizes.viewport+1);
+    await page.setViewportSize({width:1280,height:800});
+    await expect(nav).not.toBeVisible();
+  }finally{await context.close();}
+});
+
+test('missing page has a keyboard-reachable recovery route',async({browser})=>{
+  const context=await browser.newContext({baseURL:BASE,viewport:{width:360,height:780}});
+  try{
+    const page=await context.newPage();
+    const response=await page.goto('/not-a-student-creators-route');
+    expect(response.status()).toBe(404);
+    const main=page.getByRole('main');
+    await expect(main.getByRole('heading',{name:'This page is unavailable.'})).toBeVisible();
+    const home=main.getByRole('link',{name:'Go home'});
+    await home.focus();
+    await expect(home).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(BASE+'/');
+    await expect(page.getByRole('heading',{name:'The student feed',exact:false})).toBeVisible();
+  }finally{await context.close();}
+});
+
+test('registration read failure can be retried without submitting registration',async({browser})=>{
+  const context=await browser.newContext({baseURL:BASE,viewport:{width:360,height:780}});
+  try{
+    const page=await context.newPage();
+    let institutionReads=0,registrationWrites=0;
+    await page.route('**/api/local/institutions',async route=>{
+      institutionReads++;
+      if(institutionReads===1)return route.abort('failed');
+      return route.continue();
+    });
+    await page.route('**/api/local/auth/register',async route=>{
+      registrationWrites++;
+      return route.abort('blockedbyclient');
+    });
+    await page.goto('/join');
+    await expect(page.getByRole('main').getByRole('alert')).toContainText('Campus registration is temporarily unavailable');
+    await page.getByRole('button',{name:'Retry loading campuses'}).click();
+    await expect(page.locator('#campus')).toBeVisible();
+    expect(institutionReads).toBe(2);
+    expect(registrationWrites).toBe(0);
+  }finally{await context.close();}
+});
+
+test('touch-enabled mobile Chromium keeps navigation usable in portrait and landscape',async({browser})=>{
+  // This is a desktop-hosted browser simulation, not an Android emulator/device.
+  const context=await browser.newContext({baseURL:BASE,viewport:{width:412,height:915},isMobile:true,hasTouch:true,deviceScaleFactor:2.625,reducedMotion:'reduce'});
+  try{
+    const page=await context.newPage();
+    await page.goto('/');
+    const nav=page.getByRole('navigation',{name:'Mobile navigation'});
+    await expect(nav).toBeVisible();
+    const explore=nav.getByRole('link',{name:'Explore'});
+    const bounds=await explore.boundingBox();
+    expect(bounds.height).toBeGreaterThanOrEqual(44);
+    await explore.tap();
+    await expect(page).toHaveURL(new RegExp('/search$'));
+    await expect(page.getByRole('heading',{name:'Search approved lessons.'})).toBeVisible();
+    for(const viewport of [{width:412,height:915},{width:915,height:412}]){
+      await page.setViewportSize(viewport);
+      const sizes=await page.evaluate(()=>({viewport:innerWidth,document:document.documentElement.scrollWidth}));
+      expect(sizes.document).toBeLessThanOrEqual(sizes.viewport+1);
+    }
+    // Wider landscape falls back to the existing sidebar, not a second mobile shell.
+    await expect(nav).not.toBeVisible();
+    await expect(page.getByRole('link',{name:'Student Creators home'})).toBeVisible();
+  }finally{await context.close();}
+});
+
+
+test('public and gated page shells reflow at phone, tablet and desktop widths',async({browser})=>{
+  test.setTimeout(120000);
+  const context=await browser.newContext({baseURL:BASE,viewport:{width:320,height:740}});
+  try{
+    const page=await context.newPage();
+    const routes=['/','/search','/join','/sign-in','/recover-account','/account-security','/studio','/saved','/messages','/purchases','/verification','/manage'];
+    for(const route of routes){
+      await page.goto(route);
+      const main=page.getByRole('main');
+      await expect(main,`main landmark: ${route}`).toBeVisible();
+      await expect(main).toHaveAttribute('id','main');
+      await expect(main.getByRole('heading',{level:1}),`primary heading: ${route}`).toHaveCount(1);
+      await assertNamedFormControls(main,route);
+      for(const width of [320,360,412,768,1280]){
+        await page.setViewportSize({width,height:800});
+        const sizes=await page.evaluate(()=>({viewport:innerWidth,document:document.documentElement.scrollWidth,offenders:[...document.querySelectorAll('body *')].filter(el=>{const r=el.getBoundingClientRect();return r.width>0&&r.right>innerWidth+1&&getComputedStyle(el).position!=='absolute';}).slice(0,6).map(el=>({tag:el.tagName,className:String(el.className),right:Math.round(el.getBoundingClientRect().right)}))}));
+        expect(sizes.document,`${route} at ${width}px: ${JSON.stringify(sizes.offenders)}`).toBeLessThanOrEqual(sizes.viewport+1);
+      }
+    }
+    await page.setViewportSize({width:320,height:740});
+    await page.goto('/');
+    const accountNav=page.getByRole('navigation',{name:'Account and saved posts'});
+    await expect(accountNav).toBeVisible();
+    await accountNav.getByRole('link',{name:'Sign in'}).focus();
+    await expect(accountNav.getByRole('link',{name:'Sign in'})).toBeFocused();
+    await page.keyboard.press('Enter');
+    await expect(page).toHaveURL(new RegExp('/sign-in$'));
+  }finally{await context.close();}
+});
+
+
+test('release liveness endpoint is non-cacheable and exposes no provider configuration',async({request})=>{
+  const response=await request.get(BASE+'/api/health');
+  expect(response.status()).toBe(200);
+  expect(response.headers()['cache-control']).toContain('no-store');
+  expect(response.headers()['set-cookie']).toBeUndefined();
+  expect(await response.json()).toEqual({status:'serving',environment:'local',revision:null});
 });

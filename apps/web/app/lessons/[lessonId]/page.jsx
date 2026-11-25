@@ -17,8 +17,8 @@ export default async function LessonPage({params}){
      if(!preview||preview.priceKobo<20000)return notFound();
      return <main id="main" className="main"><Link className="back" href="/">← Back to creators</Link><h1>{preview.title}</h1><PurchasePanel lessonId={preview.id} priceKobo={preview.priceKobo}/></main>;
    }
-   if(error?.status===401||error?.status===403)return <main id="main" className="main"><p role="alert">Full posts require verified student membership and permission from the creator. <Link href="/sign-in">Sign in</Link> to request access.</p></main>;
-   return <main id="main" className="main"><p role="status">This lesson is currently unavailable.</p></main>;
+   if(error?.status===401||error?.status===403)return <main id="main" className="main"><section className="panel"><h1>Private creator work</h1><p role="alert">Full posts require verified student membership and permission from the creator. <Link href="/sign-in">Sign in</Link> to request access.</p><Link className="secondary-link" href="/search">Explore other lessons</Link></section></main>;
+   return <main id="main" className="main"><section className="panel"><h1>Lesson unavailable</h1><p role="status">This lesson is currently unavailable.</p><Link className="secondary-link" href="/search">Explore lessons</Link></section></main>;
  }
  if(!lesson)return notFound();
  const creator=getLocalPublicCreator(lesson.creatorId);

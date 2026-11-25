@@ -1,31 +1,38 @@
 'use client';
 import Link from 'next/link';
-import {useEffect,useMemo,useState} from 'react';
+import {useEffect,useMemo,useRef,useState} from 'react';
 import {api,friendlyError} from '../lib/local-client.js';
 import {savedIdsFromLessons,afterBookmarkRequest} from '../lib/bookmark-state.mjs';
 import ProtectedVideo from './ProtectedVideo.jsx';
 const relative=(date)=>{if(!date)return 'Recently';const d=new Date(date);return Number.isNaN(d.valueOf())?'Recently':d.toLocaleDateString('en-NG',{day:'numeric',month:'short',year:'numeric'});};
 const alias=(id)=>'Student creator · '+String(id||'').slice(0,5).toUpperCase();
-function Post({post,onSave,saved,pending,canPlay}){
+function Post({post,onSave,saved,pending,saving,canPlay}){
   const letter=String(post.title||'S')[0].toUpperCase();
   const paid=(post.priceKobo??0)>=20000;
   const priceText=paid?'₦'+(post.priceKobo/100).toLocaleString('en-NG'):'FREE';
   return <article className="creator-post" aria-label={post.title}>
-    <div className="post-author"><div className="creator-avatar" aria-hidden="true">{letter}</div><div className="post-author-info"><Link href={`/creators/${post.creatorId}`} className="post-handle">{alias(post.creatorId)}</Link><span>{post.institutionName} <span aria-hidden="true">·</span> {relative(post.publishedAt)}</span></div><Link href={`/courses/${post.courseId}`} className="post-course">{post.courseCode||'Course'}</Link></div>
-    <div className="post-content"><div className="post-kind">{post.hasVideo?'▶  VIDEO LESSON':'✎  STUDENT WORK'} · {priceText}</div><h3><Link href={`/lessons/${post.id}`}>{post.title}</Link></h3>{post.description&&<p>{post.description}</p>}</div>
-    {paid?<Link className="text-preview" href={`/lessons/${post.id}`}><span className="preview-label">Paid creator access · {priceText}</span><p>View this original work and its access terms. The creator retains copyright.</p><span className="preview-arrow">View access ↗</span></Link>:post.hasVideo?<div className="post-media">{canPlay?<ProtectedVideo lessonId={post.id} label={`Student video: ${post.title}`} hasCaptions={post.hasCaptions}/> :<Link className="text-preview" href="/sign-in"><span className="preview-label">Verified students only</span><p>Sign in and complete student verification to watch this video.</p></Link>}</div>:<Link className="text-preview" href={`/lessons/${post.id}`}><span className="preview-label">A preview of this creator's work</span><p>{post.previewText||'Open this work to see the full original explanation.'}</p><span className="preview-arrow">Read post ↗</span></Link>}
-    <div className="post-actions"><Link href={`/lessons/${post.id}`}>↗ <span>View post</span></Link>{post.hasVideo&&<Link href={`/watch/${post.id}`}>▶ <span>Watch</span></Link>}<Link href={`/messages/${post.creatorId}`}>◌ <span>Message creator</span></Link><button disabled={pending} onClick={()=>onSave(post.id)} type="button" aria-pressed={saved}>{pending?'Updating…':saved?'✓ Saved':'♧ Save'}</button></div>
+    <div className="post-author"><div className="creator-avatar" aria-hidden="true">{letter}</div><div className="post-author-info"><Link prefetch={false} href={`/creators/${post.creatorId}`} className="post-handle">{alias(post.creatorId)}</Link><span>{post.institutionName} <span aria-hidden="true">·</span> {relative(post.publishedAt)}</span></div><Link prefetch={false} href={`/courses/${post.courseId}`} className="post-course">{post.courseCode||'Course'}</Link></div>
+    <div className="post-content"><div className="post-kind">{post.hasVideo?'▶  VIDEO LESSON':'✎  STUDENT WORK'} · {priceText}</div><h3><Link prefetch={false} href={`/lessons/${post.id}`}>{post.title}</Link></h3>{post.description&&<p>{post.description}</p>}</div>
+    {paid?<Link prefetch={false} className="text-preview" href={`/lessons/${post.id}`}><span className="preview-label">Paid creator access · {priceText}</span><p>View this original work and its access terms. The creator retains copyright.</p><span className="preview-arrow">View access ↗</span></Link>:post.hasVideo?<div className="post-media">{canPlay?<ProtectedVideo lessonId={post.id} label={`Student video: ${post.title}`} hasCaptions={post.hasCaptions}/> :<Link className="text-preview" href="/sign-in"><span className="preview-label">Verified students only</span><p>Sign in and complete student verification to watch this video.</p></Link>}</div>:<Link prefetch={false} className="text-preview" href={`/lessons/${post.id}`}><span className="preview-label">A preview of this creator's work</span><p>{post.previewText||'Open this work to see the full original explanation.'}</p><span className="preview-arrow">Read post ↗</span></Link>}
+    <div className="post-actions"><Link prefetch={false} href={`/lessons/${post.id}`}>↗ <span>View post</span></Link>{post.hasVideo&&<Link prefetch={false} href={`/watch/${post.id}`}>▶ <span>Watch</span></Link>}<Link prefetch={false} href={`/messages/${post.creatorId}`}>◌ <span>Message creator</span></Link><button disabled={saving} onClick={()=>onSave(post.id)} type="button" aria-pressed={saved}>{pending?'Updating…':saved?'✓ Saved':'♧ Save'}</button></div>
   </article>;
 }
 export default function FeedExperience({posts=[],courses=[],ready=true}){
  const [tab,setTab]=useState('all'),[query,setQuery]=useState(''),[saved,setSaved]=useState([]),[pending,setPending]=useState(null),[error,setError]=useState(''),[following,setFollowing]=useState([]),[canPlay,setCanPlay]=useState(false);
+ const [followingLoading,setFollowingLoading]=useState(false);
+ const selection=useRef(0),bookmarkInFlight=useRef(false);
  useEffect(()=>{
    let active=true;
-   api('my/bookmarks').then(({lessons})=>{
-     if(active)setSaved(savedIdsFromLessons(lessons));
-   }).catch(()=>{/* Signed-out visitors can still browse public posts. */});
-   api('me').then(({user})=>{if(active)setCanPlay(Boolean(user?.role==='student'&&user?.verifiedAt&&!user?.suspended));}).catch(()=>{});
-   return ()=>{active=false;};
+   // Avoid a second unauthorized request for signed-out visitors.
+   api('me').then(async({user})=>{
+     if(!active)return;
+     setCanPlay(Boolean(user?.role==='student'&&user?.verifiedAt&&!user?.suspended));
+     if(user?.role==='student'){
+       const {lessons}=await api('my/bookmarks');
+       if(active)setSaved(savedIdsFromLessons(lessons));
+     }
+   }).catch(()=>{/* Public previews remain available. */});
+   return ()=>{active=false;selection.current++;};
  },[]);
  const shown=useMemo(()=>posts.filter(post=>{
    if(tab==='following'&&!following.includes(post.creatorId))return false;
@@ -35,26 +42,41 @@ export default function FeedExperience({posts=[],courses=[],ready=true}){
    return [post.title,post.description,post.courseCode,post.courseTitle,post.previewText,post.institutionName].join(' ').toLowerCase().includes(query.trim().toLowerCase());
  }),[tab,query,posts,following]);
  async function selectTab(key){
-   setTab(key);setError('');
+   const request=++selection.current;
+   setTab(key);setError('');setFollowingLoading(key==='following');
    if(key==='following'){
-     try{const response=await api('following');setFollowing(response.creators||[]);}
-     catch(err){setFollowing([]);setError(friendlyError(err));}
+     try{
+       const response=await api('following');
+       if(request===selection.current)setFollowing(response.creators||[]);
+     }catch(err){
+       if(request===selection.current){setFollowing([]);setError(friendlyError(err));}
+     }finally{
+       if(request===selection.current)setFollowingLoading(false);
+     }
    }
  }
  async function save(id){
+   if(bookmarkInFlight.current)return;
+   bookmarkInFlight.current=true;
    const alreadySaved=saved.includes(id);
    setError('');setPending(id);
    try{
      await api(`lessons/${id}/${alreadySaved?'unbookmark':'bookmark'}`,{method:'POST',body:{}});
      setSaved(list=>afterBookmarkRequest(list,id,alreadySaved));
-   }catch(e){setError(friendlyError(e));}
-   finally{setPending(null);}
+   }catch(e){
+     setError(friendlyError(e));
+     if(e?.message==='MUTATION_OUTCOME_UNKNOWN'){
+       // Refresh authoritative state without sending the mutation again.
+       try{const {lessons}=await api('my/bookmarks');setSaved(savedIdsFromLessons(lessons));}catch{}
+     }
+   }finally{bookmarkInFlight.current=false;setPending(null);}
  }
  return <section aria-labelledby="feed-title" className="feed-area">
-   <div className="feed-heading"><div><div className="feed-kicker">EXPLORE THE COMMUNITY</div><h2 id="feed-title">The student feed<span className="heading-spark">✳</span></h2></div><Link href="/studio" className="post-create">＋ Create post</Link></div>
+   <div className="feed-heading"><div><div className="feed-kicker">EXPLORE THE COMMUNITY</div><h2 id="feed-title">The student feed<span className="heading-spark" aria-hidden="true">✳</span></h2></div><Link href="/studio" className="post-create">＋ Create post</Link></div>
    <div className="feed-toolbar"><div role="group" aria-label="Filter posts" className="feed-tabs">{[['all','For you'],['following','Following'],['video','Videos'],['text','Notes'],['assignment','Assignments']].map(([key,label])=><button type="button" key={key} onClick={()=>selectTab(key)} className={tab===key?'active':''} aria-pressed={tab===key}>{label}</button>)}</div><label className="feed-search"><span aria-hidden="true">⌕</span><span className="visually-hidden">Search posts</span><input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Find posts, courses..." maxLength={80}/></label></div>
    {error&&<p className="feed-notice" role="alert">{error} <Link href="/sign-in">Sign in</Link></p>}
-   {!ready?<div className="feed-empty"><div className="empty-symbol">⚙</div><h3>Feed temporarily unavailable</h3><p>Please try again later.</p></div>:shown.length? <div className="post-stack">{shown.map(post=><Post post={post} key={post.id} onSave={save} pending={pending===post.id} saved={saved.includes(post.id)} canPlay={canPlay}/>)}</div>:<div className="feed-empty"><div className="empty-symbol">{posts.length?'⌕':'✦'}</div><h3>{posts.length?'No posts match yet':'This is where the first creators shine.'}</h3><p>{posts.length?'Try another filter or search.':'Your community starts with its first original post. Create work, submit it for review and it will appear in the feed.'}</p><div className="empty-buttons"><Link href="/studio" className="creator-btn filled">Share your work ↗</Link><Link href="/search" className="creator-btn outlined">Explore lessons</Link></div></div>}
+   {ready&&!followingLoading&&<p role="status" className="visually-hidden">{shown.length} {shown.length===1?'post':'posts'} shown.</p>}
+   {followingLoading?<p className="status" role="status">Loading creators you follow…</p>:!ready?<div className="feed-empty"><div className="empty-symbol" aria-hidden="true">⚙</div><h3>Feed temporarily unavailable</h3><p>Please try again later.</p></div>:shown.length? <div className="post-stack">{shown.map(post=><Post post={post} key={post.id} onSave={save} pending={pending===post.id} saving={pending!==null} saved={saved.includes(post.id)} canPlay={canPlay}/>)}</div>:<div className="feed-empty"><div className="empty-symbol" aria-hidden="true">{posts.length?'⌕':'✦'}</div><h3>{posts.length?'No posts match yet':'This is where the first creators shine.'}</h3><p>{posts.length?'Try another filter or search.':'Your community starts with its first original post. Create work, submit it for review and it will appear in the feed.'}</p><div className="empty-buttons"><Link href="/studio" className="creator-btn filled">Share your work ↗</Link><Link href="/search" className="creator-btn outlined">Explore lessons</Link></div></div>}
    <div className="feed-bottom">A better campus starts with what we share. <span>✺</span></div>
  </section>;
 }

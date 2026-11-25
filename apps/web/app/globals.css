@@ -412,3 +412,64 @@ button:disabled{opacity:.55;cursor:not-allowed}
   .verification-grid{grid-template-columns:minmax(0,1fr);gap:12px}
   .verification-grid .panel:last-child{grid-column:1}
 }
+
+
+/* Week 8: preserve the existing visual system; keep keyboard destinations visible. */
+.creator-body .skip{z-index:100}
+.creator-body #main{scroll-margin-top:82px}
+@media(max-width:760px){
+  .creator-body #main{scroll-margin-top:74px}
+  .mobile-creator-tabs a{min-height:44px}
+  .creator-body :is(a,button,input,select,textarea):focus-visible{
+    scroll-margin-block:78px 90px;
+  }
+}
+
+/* Keep the founder's palette; indicate the current mobile destination using existing colors. */
+.mobile-creator-tabs a[aria-current]{color:var(--brand-strong);background:var(--brand-soft);}
+.mobile-creator-tabs a[aria-current] small{text-decoration:underline;text-underline-offset:3px;}
+
+/* Narrow viewport reflow: shrink intrinsic form/grid widths rather than clip the page. */
+.search-filters{grid-template-columns:repeat(auto-fit,minmax(min(100%,190px),1fr))}
+.search-filters>div,.form-stack,.panel,.form-stack select{min-width:0;max-width:100%}
+@media(max-width:360px){
+  .nav-inner{gap:8px;padding-inline:10px}
+  .creator-logo{gap:6px;font-size:1rem}
+  .logo-glyph{width:30px;height:30px;flex-shrink:0}
+  .nav-join{gap:5px;padding-inline:9px;white-space:nowrap}
+  .creator-body .main{padding-inline:12px}
+  .creator-body .panel{padding-inline:15px}
+  .creator-body h1,.creator-body h2,.creator-body .status{overflow-wrap:anywhere}
+}
+
+/* Reflow for all existing panels and lists, without masking overflowing content. */
+.creator-body .app-content,.creator-body .main,.creator-body .panel{min-width:0}
+.creator-body :is(.studio-grid,.manage-grid,.auth-shell,.verification-grid,.search-filters)>*{min-width:0}
+.creator-body :is(.lesson-list,.review-list,.form-stack,.studio-meta,.post-content,.status,.hint){overflow-wrap:anywhere}
+.creator-body :is(input,select,textarea,video,img){max-width:100%}
+.creator-body :is(input,select,textarea){min-width:0}
+@media(max-width:760px){
+  .creator-body .main{padding-bottom:96px}
+  .creator-body .course-grid{grid-template-columns:repeat(auto-fill,minmax(min(100%,235px),1fr))}
+  .creator-body :is(.studio-grid,.manage-grid,.auth-shell,.campus-onboarding .auth-shell){grid-template-columns:minmax(0,1fr)}
+  .creator-body :is(.heading-row,.studio-meta,.button-row){flex-wrap:wrap}
+  .creator-body .form-stack :is(button,input:not([type=checkbox]):not([type=radio]),select){min-height:44px}
+}
+/* Native focus indicator for all interactive controls, including custom form buttons. */
+.creator-body :is(button,a,input,select,textarea,summary):focus-visible{outline:3px solid #047b5d;outline-offset:3px}
+
+/* Secondary routes remain reachable when the desktop sidebar is hidden. */
+.footer-account-links{display:none}
+@media(max-width:760px){
+  .footer-account-links{display:flex;flex-wrap:wrap;gap:8px;width:100%;font-size:.85rem}
+  .footer-account-links a{display:inline-flex;align-items:center;min-height:44px;padding:0 8px;text-decoration:underline;text-underline-offset:3px}
+  .creator-footer{padding-bottom:calc(90px + env(safe-area-inset-bottom,0px))}
+}
+
+/* Accessible text contrast within the existing light creator palette. */
+.creator-body .creator-footer{color:#56655c}
+.feed-tabs button:not(.active),.post-actions a,.post-actions button,.feed-empty p,.feed-bottom{color:#52645b}
+@media(max-width:760px){
+  .feed-tabs button{min-height:44px}
+  .post-actions :is(a,button){display:inline-flex;align-items:center;min-height:44px}
+}
