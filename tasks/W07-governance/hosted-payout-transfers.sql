@@ -71,7 +71,7 @@ DECLARE actor uuid:=auth.uid(); g live_finance.payout_gate%ROWTYPE; e live_finan
 BEGIN
  IF actor IS NULL OR NOT student_creators_private.current_session_active() THEN RAISE EXCEPTION 'AUTH_REQUIRED' USING ERRCODE='42501'; END IF;
  IF _action='list' THEN
-  RETURN jsonb_build_object('balance',live_finance.payout_balance(actor),'items',(SELECT coalesce(jsonb_agg(to_jsonb(q) ORDER BY q.created_at DESC,q.id),'[]'::jsonb) FROM (SELECT r.id,r.amount_kobo,r.state,r.policy_version,r.created_at,r.reviewed_at,t.provider_status AS transfer_status,t.bank_state FROM live_finance.payout_requests r LEFT JOIN live_finance.payout_transfers t ON t.payout_id=r.id WHERE r.creator_id=actor ORDER BY r.created_at DESC,r.id LIMIT 50) q),'transferEnabled',false);
+  RETURN jsonb_build_object('balance',live_finance.payout_balance(actor),'items',(SELECT coalesce(jsonb_agg(to_jsonb(q) ORDER BY q.created_at DESC,q.id),'[]'::jsonb) FROM (SELECT req.id,req.amount_kobo,req.state,req.policy_version,req.created_at,req.reviewed_at,tx.provider_status AS transfer_status,tx.bank_state FROM live_finance.payout_requests req LEFT JOIN live_finance.payout_transfers tx ON tx.payout_id=req.id WHERE req.creator_id=actor ORDER BY req.created_at DESC,req.id LIMIT 50) q),'transferEnabled',false);
  END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended(actor::text||':payout',0));
  IF _action='cancel' THEN
