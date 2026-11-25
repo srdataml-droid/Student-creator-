@@ -33,6 +33,53 @@ async function readJson(response){
   return response.json();
 }
 
+
+// Responsive shell: no enrollment, purchases, external services, or fake feed content.
+test('frontend revamp supports active navigation, search and compact mobile access',async({browser})=>{
+ const context=await browser.newContext({baseURL:BASE,viewport:{width:1280,height:900}});
+ try{
+  const page=await context.newPage();
+  await page.goto('/');
+  await expect(page.getByRole('heading',{name:'Discover',exact:true})).toBeVisible();
+  const primary=page.getByRole('navigation',{name:'Primary navigation'});
+  await expect(primary.getByRole('link',{name:'For you'})).toHaveAttribute('aria-current','page');
+  await page.getByRole('searchbox',{name:'Search Student Creators'}).fill('Calculus');
+  await page.getByRole('button',{name:'Submit search'}).click();
+  await expect(page).toHaveURL(/\/search\?q=Calculus/);
+  await expect(primary.getByRole('link',{name:'Explore'})).toHaveAttribute('aria-current','page');
+  for(const width of [320,360,390,768,1280]){
+   await page.setViewportSize({width,height:850});
+   await page.goto('/');
+   const overflow=await page.evaluate(()=>document.documentElement.scrollWidth-window.innerWidth);
+   expect(overflow,'Home horizontal overflow at '+width).toBeLessThanOrEqual(1);
+   await expect(page.getByRole('heading',{name:'Discover',exact:true})).toBeVisible();
+   const mobile=page.getByRole('navigation',{name:'Mobile navigation'});
+   if(width<=760){
+    await expect(mobile).toBeVisible();
+    await expect(mobile.getByRole('link',{name:'Home',exact:true})).toHaveAttribute('aria-current','page');
+    await mobile.getByRole('link',{name:'Explore',exact:true}).click();
+    await expect(page).toHaveURL(/\/search$/);
+    await expect(mobile.getByRole('link',{name:'Explore',exact:true})).toHaveAttribute('aria-current','page');
+    const menu=page.getByRole('button',{name:'Account and navigation menu'});
+    await menu.click();
+    const panel=page.getByRole('navigation',{name:'Account menu'});
+    await expect(panel.getByRole('link',{name:'Saved posts',exact:true})).toBeVisible();
+    await expect(panel.getByRole('link',{name:'Account security',exact:true})).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveAttribute('aria-expanded','false');
+    await expect(menu).toBeFocused();
+    await menu.click();
+    await panel.getByRole('link',{name:'Log in',exact:true}).click();
+    await expect(page).toHaveURL(/\/sign-in$/);
+    await expect(page.locator('#email')).toBeVisible();
+    await expect(page.locator('#password')).toBeVisible();
+    const formOverflow=await page.evaluate(()=>document.documentElement.scrollWidth-window.innerWidth);
+    expect(formOverflow,'Login horizontal overflow at '+width).toBeLessThanOrEqual(1);
+   }else{await expect(primary).toBeVisible();await expect(mobile).toBeHidden();}
+  }
+ }finally{await context.close();}
+});
+
 test('synthetic creator, moderator and viewer journey keeps media access server-enforced',async({browser,request})=>{
   // Includes two independently moderated videos and a paid buyer path in CI.
   test.setTimeout(300_000);
