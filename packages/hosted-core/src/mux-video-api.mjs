@@ -111,8 +111,13 @@ export function createMuxPlaybackHandler({auth,store,mux,signingKeyId,privateKey
    // differently associated asset must never get a fresh signed token.
    const current=assetSnapshot(await mux.getAsset(lesson.assetId),lesson.reservationId,lesson.uploadId,lesson.assetId,mux.testAsset!==false);
    if(current.state!=='ready'||current.playbackId!==lesson.playbackId)return json(403,{error:'PLAYBACK_UNAVAILABLE'});
-   const grant=await issueAuthorizedMuxPlayback({viewer:user,lessonId,loadLesson:async()=>lesson,
-    authorizeViewer:async({viewer})=>viewer.id===lesson.viewerId,signingKeyId,privateKeyBase64,ttlSeconds:120});
+   // The provider call may have overlapped a refund, ban or session revocation.
+   const again=await auth.getUser(token);
+   if(again?.id!==user.id)return json(401,{error:'AUTH_REQUIRED'});
+   const fresh=await store.authorizedPlayback({viewer:user.id,lessonId});
+   if(!fresh||['id','viewerId','assetId','uploadId','reservationId','playbackId','status','videoStatus','playbackPolicy'].some(k=>fresh[k]!==lesson[k]))return json(403,{error:'PLAYBACK_FORBIDDEN'});
+   const grant=await issueAuthorizedMuxPlayback({viewer:user,lessonId,loadLesson:async()=>fresh,
+    authorizeViewer:async({viewer})=>viewer.id===fresh.viewerId,signingKeyId,privateKeyBase64,ttlSeconds:120});
    return json(200,grant);
   }catch{return json(503,{error:'MUX_PLAYBACK_UNAVAILABLE'});}
  };
