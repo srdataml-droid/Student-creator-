@@ -184,6 +184,19 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
 
     await viewerPage.goto('/');
     await expect(viewerPage.getByRole('heading',{name:title})).toBeVisible();
+    // Reference-driven discovery: compact media tile, no video bytes loaded in feed.
+    const feedCard=viewerPage.getByRole('article',{name:title,exact:true});
+    await expect(feedCard.locator('.discovery-media')).toBeVisible();
+    await expect(feedCard.locator('video')).toHaveCount(0);
+    await viewerPage.setViewportSize({width:360,height:780});
+    const bounds=await feedCard.locator('.discovery-media').boundingBox();
+    expect(bounds.width).toBeLessThanOrEqual(360);
+    expect(Math.abs(bounds.width/bounds.height-16/9)).toBeLessThan(0.03);
+    expect(await viewerPage.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(361);
+    await expect(viewerPage.getByRole('button',{name:'Free',exact:true})).toBeVisible();
+    await viewerPage.getByRole('button',{name:'Free',exact:true}).click();
+    await expect(feedCard).toBeVisible();
+    await viewerPage.setViewportSize({width:1280,height:800});
     await viewerPage.goto(`/lessons/${lessonId}`);
     await expect(viewerPage.getByRole('heading',{name:title})).toBeVisible();
     await expect(viewerPage.getByRole('button',{name:'Enable playback'})).toBeVisible();
