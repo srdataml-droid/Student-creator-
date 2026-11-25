@@ -80,6 +80,11 @@ export function hostedCreatorRequest(operation,input={}){
  case 'liveClassCheckout':{if(!/^[A-Za-z0-9._-]{3,128}$/.test(input.termsVersion||''))throw Error('INVALID_TERMS_VERSION');return {path:'/api/classes/'+id(input.classId)+'/live-checkout',method:'POST',headers:{'idempotency-key':key(input.creationKey),'x-student-creators-terms-version':input.termsVersion}};}
  case 'classEnrollments':return json('/api/social/classEnrollments',{classId:id(input.classId),limit:100});
  case 'removeClassParticipant':return json('/api/social/removeClassParticipant',{classId:id(input.classId),studentId:id(input.studentId),reason:bounded(input.reason,8,500)});
+ case 'saveCreatorProfile':return json('/api/social/saveCreatorProfile',{handle:bounded(input.handle,3,24),displayName:bounded(input.displayName,3,60),bio:bounded(input.bio??'',0,280)});
+ case 'editDraft':{if(input.rightsAttested!==true)throw Error('INVALID_DRAFT');return json('/api/social/editDraft',{contentId:id(input.contentId),title:bounded(input.title,3,160),description:bounded(input.description??'',0,2500),previewText:bounded(input.previewText??'',0,800),rightsAttested:true});}
+ case 'institutionAppeals':case 'privacyRequests':return json('/api/social/'+operation,{});
+ case 'submitInstitutionAppeal':return json('/api/social/submitInstitutionAppeal',{reason:bounded(input.reason,20,800)});
+ case 'submitPrivacyRequest':return json('/api/social/submitPrivacyRequest',{kind:choice(input.kind,['access','correction','erasure','restriction','portability']),reason:bounded(input.reason,20,1000)});
  default:throw Error('UNKNOWN_CREATOR_OPERATION');
  }
 }
