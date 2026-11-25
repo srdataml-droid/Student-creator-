@@ -91,6 +91,9 @@ DO $$ DECLARE r uuid; q jsonb; BEGIN
  BEGIN PERFORM public.week7_review_payout('9b000000-0000-4000-8000-000000000003',r,'reserve','Synthetic denial'); RAISE EXCEPTION 'Privacy reviewer can reserve'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  q:=public.week7_review_payout('f1910000-0000-4000-8000-000000000003',r,'reserve','Synthetic finance review');
  IF q->>'state'<>'reserved' OR q->>'transferEnabled'<>'false' OR live_finance.payout_balance('9b000000-0000-4000-8000-000000000001')->>'availableKobo'<>'17000' THEN RAISE EXCEPTION 'Reservation mismatch'; END IF;
+ q:=public.week7_payout_liability_report('f1910000-0000-4000-8000-000000000003');
+ IF q->>'clearedKobo'<>'27000' OR q->>'reservedKobo'<>'10000' OR q->>'availableKobo'<>'17000' OR q->>'reservationShortfallKobo'<>'0' OR q->>'bankCreditVerified'<>'false' OR q->>'transferEnabled'<>'false' OR (q->>'journalNetKobo')::numeric<>(q->>'clearedKobo')::numeric+(q->>'unclearedNetKobo')::numeric THEN RAISE EXCEPTION 'Liability reconciliation mismatch'; END IF;
+ BEGIN PERFORM public.week7_payout_liability_report('9b000000-0000-4000-8000-000000000003'); RAISE EXCEPTION 'Privacy staff accessed payout liabilities'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
 SET LOCAL ROLE authenticated;
 DO $$ DECLARE r uuid; BEGIN

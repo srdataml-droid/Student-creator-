@@ -46,6 +46,7 @@ async function readCommandBody(request){
  return body&&typeof body==='object'&&!Array.isArray(body)?body:null;
 }
 function commandFor(path){
+ if(path==='finance/payout-liabilities')return {name:'week7_payout_liability_report',scope:'finance.review',allowed:[]};
  if(path==='finance/payouts')return {name:'week7_payout_queue',scope:'finance.review',allowed:['limit']};
  if(/^finance\/payouts\/[0-9a-f-]{36}\/review$/i.test(path))return {name:'week7_review_payout',scope:'finance.review',allowed:['decision','note']};
  if(path==='privacy/fulfilment')return {name:'week7_privacy_fulfilment_queue',scope:'privacy.review',allowed:['limit']};
@@ -82,6 +83,7 @@ function validateCommand(cmd,body,path,actorId){
  if(Object.keys(body).some(key=>!cmd.allowed.includes(key)))return null;
  const id=path.split('/')[1];
  switch(cmd.name){
+  case 'week7_payout_liability_report':return {_actor:actorId};
   case 'week7_finance_report':{
    if(typeof body.from!=='string'||typeof body.to!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(body.from)||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(body.to))return null;
    const f=Date.parse(body.from),t=Date.parse(body.to);return Number.isFinite(f)&&Number.isFinite(t)&&t>f&&t-f<=366*86400000&&t<=Date.now()+86400000?{_actor:actorId,_from:new Date(f).toISOString(),_to:new Date(t).toISOString()}:null;
