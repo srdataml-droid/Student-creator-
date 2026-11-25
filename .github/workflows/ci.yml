@@ -84,8 +84,12 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/tests/hosted_rls_isolation.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/0010_week01_current_session_guard.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/current_session_guard.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0012_week01_mux_webhook_delivery.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/mux_webhook_delivery.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/0014_week01_mux_video.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/mux_video.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0017_week01_mux_event_worker.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/mux_event_worker.sql
 
   browser-alpha:
     runs-on: ubuntu-24.04
