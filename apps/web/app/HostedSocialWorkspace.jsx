@@ -36,10 +36,30 @@ export function HostedFeedBoundary({children,query=''}){
  return <p role="status">{account.session.state==='checking'?'Checking account…':'Account status unavailable. Sign in again to load your feed.'}</p>;
 }
 function Player({lessonId}){
- const account=useHostedAccount(),job=useJob(),video=useRef(null);const [grant,setGrant]=useState(null),[resume,setResume]=useState(0),[playerError,setPlayerError]=useState('');
- useEffect(()=>{if(!grant)return;const timer=setTimeout(()=>{setGrant(null);},Math.max(0,grant.expiresAt*1000-Date.now()));return()=>clearTimeout(timer);},[grant]);
+ const account=useHostedAccount(),job=useJob(),video=useRef(null),position=useRef(0),lastSaved=useRef(0);
+ const [grant,setGrant]=useState(null),[resume,setResume]=useState(0),[playerError,setPlayerError]=useState('');
+ const storageKey='student-creators:resume:'+account.session.userId+':'+lessonId;
+ useEffect(()=>{try{const value=Number(localStorage.getItem(storageKey)||0);if(Number.isFinite(value)&&value>=0&&value<86400){position.current=value;setResume(value);}}catch{}},[storageKey]);
+ function record(time){if(!Number.isFinite(time)||time<0||time>=86400)return;position.current=time;if(Math.abs(time-lastSaved.current)>=5){lastSaved.current=time;try{localStorage.setItem(storageKey,String(Math.floor(time)));}catch{}}}
+ useEffect(()=>{
+  if(!grant)return;const element=video.current;if(!element)return;let cancelled=false,hls;
+  const stop=()=>{element.pause();hls?.destroy();hls=null;element.removeAttribute('src');element.load();};
+  const fail=()=>{if(cancelled)return;setPlayerError('Playback stopped. Request a fresh playback grant to try again.');setGrant(null);};
+  const timer=setTimeout(()=>{if(!cancelled){stop();setGrant(null);}},Math.max(0,grant.expiresAt*1000-Date.now()));
+  async function connect(){
+   if(element.canPlayType('application/vnd.apple.mpegurl')){element.src=grant.url;return;}
+   const {default:Hls}=await import('hls.js');
+   if(cancelled)return;
+   if(!Hls.isSupported())throw Error('HLS_UNSUPPORTED');
+   hls=new Hls({enableWorker:false,capLevelToPlayerSize:true,maxBufferLength:25});
+   hls.on(Hls.Events.ERROR,(_event,data)=>{if(data.fatal)fail();});
+   hls.loadSource(grant.url);hls.attachMedia(element);
+  }
+  void connect().catch(fail);
+  return()=>{cancelled=true;clearTimeout(timer);stop();try{localStorage.setItem(storageKey,String(Math.floor(position.current)));}catch{}};
+ },[grant,storageKey]);
  async function start(){setPlayerError('');await job.run(async()=>{const r=validatePlaybackGrant(await account.creatorRequest('playback',{lessonId}));setGrant(r);});}
- return <section className="panel"><h2>Video</h2>{grant?<video ref={video} controls playsInline preload="metadata" referrerPolicy="no-referrer" src={grant.url} onLoadedMetadata={e=>{if(resume>0&&resume<e.currentTarget.duration)e.currentTarget.currentTime=resume;}} onTimeUpdate={e=>setResume(e.currentTarget.currentTime)} onError={()=>{setGrant(null);setPlayerError('Playback stopped. Request a fresh playback grant to try again.');}}/>:<button type="button" className="primary-link" disabled={job.busy} onClick={()=>{if(!document.createElement('video').canPlayType('application/vnd.apple.mpegurl')){job.run(async()=>{throw Error('HLS_UNSUPPORTED');});return;}start();}}>{resume?'Resume video':'Request playback'}</button>}<p className="hint">Signed playback requires a supported native HLS browser and current viewing permission. Position is kept only in this open screen. Other browsers need an HLS player integration.</p>{playerError&&<p role="alert">{playerError}</p>}<Feedback job={job}/></section>;
+ return <section className="panel"><h2>Video</h2>{grant?<video ref={video} controls playsInline preload="metadata" onLoadedMetadata={e=>{const t=position.current;if(t>0&&t<e.currentTarget.duration)e.currentTarget.currentTime=t;}} onTimeUpdate={e=>record(e.currentTarget.currentTime)} onError={()=>{setGrant(null);setPlayerError('Playback stopped. Request a fresh playback grant to try again.');}} onEnded={()=>{position.current=0;setResume(0);try{localStorage.removeItem(storageKey);}catch{}}}/>:<button type="button" className="primary-link" disabled={job.busy} onClick={start}>{resume||position.current?'Resume video':'Play video'}</button>}<p className="hint">Viewing permission is checked for each playback grant. Your position is saved on this device only.</p>{playerError&&<p role="alert">{playerError}</p>}<Feedback job={job}/></section>;
 }
 function Engagement({lessonId}){
  const account=useHostedAccount(),job=useJob(),keyRef=useRef('');const [rows,setRows]=useState(null),[liked,setLiked]=useState(null),[text,setText]=useState('');
