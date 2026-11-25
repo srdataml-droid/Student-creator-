@@ -198,6 +198,8 @@ export function createHostedGovernanceHandler({getEnv=()=>process.env,fetcher=fe
      if(!res.ok){
        const detail=await res.json().catch(()=>({}));
        const safeCodes={
+         PAYOUT_CONFLICT:[409,'PAYOUT_CONFLICT'],
+         PAYOUT_FORBIDDEN:[403,'PAYOUT_FORBIDDEN'],
          ACCESS_REVIEW_CONFLICT:[409,'ACCESS_REVIEW_CONFLICT'],
          COPYRIGHT_REVIEW_CONFLICT:[409,'COPYRIGHT_REVIEW_CONFLICT'],
          RETENTION_REVIEW_CONFLICT:[409,'RETENTION_REVIEW_CONFLICT'],

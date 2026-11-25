@@ -46,6 +46,18 @@ ALTER TABLE live_finance.payout_clearance ENABLE ROW LEVEL SECURITY;
 ALTER TABLE live_finance.payout_requests ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON live_finance.payout_gate,live_finance.payout_recipient_evidence,live_finance.payout_clearance,live_finance.payout_requests FROM PUBLIC,anon,authenticated,service_role;
 CREATE TRIGGER payout_clearance_immutable BEFORE UPDATE OR DELETE ON live_finance.payout_clearance FOR EACH ROW EXECUTE FUNCTION live_finance.deny_mutation();
+CREATE FUNCTION live_finance.check_payout_clearance() RETURNS trigger LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
+BEGIN
+ IF NOT public.week7_staff_has_capability(NEW.recorded_by,'finance.review') OR NOT public.week7_staff_has_capability(NEW.confirmed_by,'finance.review') OR NEW.cleared_at>now() THEN RAISE EXCEPTION 'CLEARANCE_EVIDENCE_REQUIRED' USING ERRCODE='42501'; END IF;
+ IF NEW.source='lesson' THEN
+  IF NOT EXISTS(SELECT 1 FROM live_finance.receipts r JOIN public.orders o ON o.id=r.order_id WHERE r.transaction_id=NEW.transaction_id AND NOT r.duplicate AND o.creator_id=NEW.creator_id AND o.status='paid' AND o.environment='live' AND NOT EXISTS(SELECT 1 FROM live_finance.reversals v WHERE v.transaction_id=r.transaction_id)) OR EXISTS(SELECT 1 FROM live_finance.learning_receipts r WHERE r.transaction_id=NEW.transaction_id) THEN RAISE EXCEPTION 'CLEARANCE_RECEIPT_MISMATCH' USING ERRCODE='23514'; END IF;
+ ELSE
+  IF NOT EXISTS(SELECT 1 FROM live_finance.learning_receipts r JOIN live_finance.learning_orders o ON o.id=r.order_id WHERE r.transaction_id=NEW.transaction_id AND NOT r.duplicate AND r.delivered AND o.creator_id=NEW.creator_id AND o.state='paid' AND NOT EXISTS(SELECT 1 FROM live_finance.learning_refunds v WHERE v.transaction_id=r.transaction_id)) OR EXISTS(SELECT 1 FROM live_finance.receipts r WHERE r.transaction_id=NEW.transaction_id) THEN RAISE EXCEPTION 'CLEARANCE_RECEIPT_MISMATCH' USING ERRCODE='23514'; END IF;
+ END IF;
+ RETURN NEW;
+END $$;
+REVOKE ALL ON FUNCTION live_finance.check_payout_clearance() FROM PUBLIC,anon,authenticated,service_role;
+CREATE TRIGGER payout_clearance_check BEFORE INSERT ON live_finance.payout_clearance FOR EACH ROW EXECUTE FUNCTION live_finance.check_payout_clearance();
 -- Compute from journal movements on cleared receipts; reversed credits are
 -- removed, negative fee/refund movements are never promoted to spendable money.
 CREATE FUNCTION live_finance.payout_balance(_creator uuid) RETURNS jsonb LANGUAGE sql STABLE SECURITY DEFINER SET search_path='' AS $$
@@ -94,7 +106,7 @@ BEGIN
   RETURN jsonb_build_object('id',r.id,'state',r.state,'replayed',true,'transferEnabled',false);
  END IF;
  b:=live_finance.payout_balance(actor);
- IF _amount NOT BETWEEN g.minimum_kobo AND g.maximum_kobo OR _amount>(b->>'availableKobo')::numeric OR EXISTS(SELECT 1 FROM live_finance.payout_requests WHERE creator_id=actor AND state='pending_review') THEN RAISE EXCEPTION 'PAYOUT_CONFLICT' USING ERRCODE='23505'; END IF;
+ IF _amount NOT BETWEEN g.minimum_kobo AND g.maximum_kobo OR _amount>(b->>'availableKobo')::numeric OR EXISTS(SELECT 1 FROM live_finance.payout_requests WHERE creator_id=actor AND state='pending_review') OR (SELECT count(*) FROM live_finance.payout_requests WHERE creator_id=actor AND created_at>now()-interval '1 day')>=10 THEN RAISE EXCEPTION 'PAYOUT_CONFLICT' USING ERRCODE='23505'; END IF;
  INSERT INTO live_finance.payout_requests(creator_id,request_key,amount_kobo,policy_version,recipient_reference) VALUES(actor,_key,_amount,g.version,e.recipient_reference) RETURNING * INTO r;
  INSERT INTO public.audit_events(actor_id,action,target_kind,target_id) VALUES(actor,'payout.requested','payout_request',r.id);
  RETURN jsonb_build_object('id',r.id,'state',r.state,'replayed',false,'transferEnabled',false);
@@ -123,6 +135,7 @@ BEGIN
  IF _decision='reserve' THEN
   SELECT * INTO g FROM live_finance.payout_gate WHERE singleton FOR SHARE;
   IF NOT g.enabled OR g.version<>r.policy_version OR r.amount_kobo NOT BETWEEN g.minimum_kobo AND g.maximum_kobo OR NOT public.affiliation_eligible(r.creator_id) OR NOT EXISTS(SELECT 1 FROM live_finance.payout_recipient_evidence e WHERE e.creator_id=r.creator_id AND e.recipient_reference=r.recipient_reference AND e.revoked_at IS NULL AND e.verified_at<=now() AND e.valid_until>now()) THEN RAISE EXCEPTION 'PAYOUT_FORBIDDEN' USING ERRCODE='42501'; END IF;
+  PERFORM 1 FROM live_finance.payout_recipient_evidence e WHERE e.creator_id=r.creator_id FOR SHARE;
   -- Serialize with settlement/reversal order writers before recalculating.
   PERFORM 1 FROM public.orders o WHERE o.creator_id=r.creator_id AND o.environment='live' ORDER BY o.id FOR UPDATE;
   PERFORM 1 FROM live_finance.learning_orders o WHERE o.creator_id=r.creator_id ORDER BY o.id FOR UPDATE;

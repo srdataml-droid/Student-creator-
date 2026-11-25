@@ -60,5 +60,44 @@ DO $$ DECLARE q jsonb; l jsonb; c jsonb; s jsonb; BEGIN
  IF l->>'verifiedChargesKobo' IS DISTINCT FROM '0' OR c->>'creatorPendingMovementKobo' IS DISTINCT FROM '0' OR c->>'reversalsKobo' IS DISTINCT FROM '20000' OR s->>'creatorPendingMovementKobo' IS DISTINCT FROM '27000' OR s ? 'platformPendingMovementKobo' THEN RAISE EXCEPTION 'Creator journal isolation or refund reporting failed'; END IF;
  BEGIN PERFORM public.my_creator_finance_report(now()-interval '400 days',now()); RAISE EXCEPTION 'Unbounded reporting accepted'; EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
 END $$;
+DO $$ BEGIN
+ IF public.creator_payout_request('list')->'balance'->>'availableKobo'<>'0' THEN RAISE EXCEPTION 'Uncleared earnings counted as money'; END IF;
+ BEGIN PERFORM public.creator_payout_request('request',10000,'fixture-payout-request-1'); RAISE EXCEPTION 'Disabled payout requested'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+END $$;
+RESET ROLE;
+-- All policy and bank evidence below are disposable fixtures; never production terms.
+INSERT INTO auth.users(id,email,email_confirmed_at) VALUES('f1910000-0000-4000-8000-000000000004','independent-finance@example.invalid',now());
+INSERT INTO public.platform_staff(user_id,role,active) VALUES('f1910000-0000-4000-8000-000000000004','admin',true);
+INSERT INTO public.governance_staff_role_grants(user_id,role) VALUES('f1910000-0000-4000-8000-000000000004','finance_reviewer');
+UPDATE live_finance.payout_gate SET enabled=true,version='fixture-payout-policy',minimum_kobo=100,maximum_kobo=50000,approved_at=now() WHERE singleton;
+INSERT INTO live_finance.payout_recipient_evidence(creator_id,recipient_reference,kyc_evidence_reference,verified_at,valid_until) VALUES('9b000000-0000-4000-8000-000000000001','fixture-recipient-ref','fixture-kyc-ref',now(),now()+interval '1 hour');
+DO $$ BEGIN
+ BEGIN
+ INSERT INTO live_finance.payout_clearance(transaction_id,creator_id,source,settlement_reference,bank_evidence_reference,recorded_by,confirmed_by) VALUES('9700011112','9b000000-0000-4000-8000-000000000001','learning','fixture-settlement-ref','fixture-bank-ref','f1910000-0000-4000-8000-000000000003','f1910000-0000-4000-8000-000000000004');
+ RAISE EXCEPTION 'Reversed receipt cleared'; EXCEPTION WHEN check_violation THEN NULL; END;
+END $$;
+INSERT INTO live_finance.payout_clearance(transaction_id,creator_id,source,settlement_reference,bank_evidence_reference,recorded_by,confirmed_by) VALUES('9700011113','9b000000-0000-4000-8000-000000000001','learning','fixture-settlement-ref','fixture-bank-ref','f1910000-0000-4000-8000-000000000003','f1910000-0000-4000-8000-000000000004');
+SET LOCAL ROLE authenticated;
+DO $$ DECLARE q jsonb; BEGIN
+ IF public.creator_payout_request('list')->'balance'->>'availableKobo'<>'27000' THEN RAISE EXCEPTION 'Cleared earnings mismatch'; END IF;
+ BEGIN PERFORM public.creator_payout_request('request',28000,'fixture-payout-excess-key'); RAISE EXCEPTION 'Overdraw allowed'; EXCEPTION WHEN unique_violation THEN NULL; END;
+ q:=public.creator_payout_request('request',10000,'fixture-payout-request-1');
+ IF q->>'state'<>'pending_review' OR q->>'transferEnabled'<>'false' THEN RAISE EXCEPTION 'Payout state invalid'; END IF;
+ IF public.creator_payout_request('request',10000,'fixture-payout-request-1')->>'replayed'<>'true' THEN RAISE EXCEPTION 'Payout replay invalid'; END IF;
+END $$;
+RESET ROLE;
+DO $$ DECLARE r uuid; q jsonb; BEGIN
+ SELECT id INTO r FROM live_finance.payout_requests WHERE request_key='fixture-payout-request-1';
+ BEGIN PERFORM public.week7_review_payout('9b000000-0000-4000-8000-000000000003',r,'reserve','Synthetic denial'); RAISE EXCEPTION 'Privacy reviewer can reserve'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+ q:=public.week7_review_payout('f1910000-0000-4000-8000-000000000003',r,'reserve','Synthetic finance review');
+ IF q->>'state'<>'reserved' OR q->>'transferEnabled'<>'false' OR live_finance.payout_balance('9b000000-0000-4000-8000-000000000001')->>'availableKobo'<>'17000' THEN RAISE EXCEPTION 'Reservation mismatch'; END IF;
+END $$;
+SET LOCAL ROLE authenticated;
+DO $$ DECLARE r uuid; BEGIN
+ r:=(public.creator_payout_request('list')->'items'->0->>'id')::uuid;
+ IF public.creator_payout_request('cancel',NULL,NULL,r)->>'state'<>'cancelled' OR public.creator_payout_request('list')->'balance'->>'availableKobo'<>'27000' THEN RAISE EXCEPTION 'Reservation release mismatch'; END IF;
+END $$;
+SELECT set_config('request.jwt.claim.sub','9b000000-0000-4000-8000-000000000002',true),set_config('request.jwt.claims','{"sub":"9b000000-0000-4000-8000-000000000002","role":"authenticated","session_id":"9b000000-0000-4000-8000-000000000002"}',true);
+DO $$ BEGIN IF jsonb_array_length(public.creator_payout_request('list')->'items')<>0 OR public.creator_payout_request('list')->'balance'->>'availableKobo'<>'0' THEN RAISE EXCEPTION 'Cross-creator payout disclosure'; END IF; END $$;
 RESET ROLE;
 ROLLBACK;
