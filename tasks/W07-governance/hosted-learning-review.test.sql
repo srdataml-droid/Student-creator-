@@ -61,7 +61,7 @@ SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','9b000000-0000-4000-8000-000000000002',true),set_config('request.jwt.claims','{"sub":"9b000000-0000-4000-8000-000000000002","role":"authenticated","session_id":"9b000000-0000-4000-8000-000000000002"}',true);
 SELECT public.hosted_learning_action('dispute_help','{"requestId":"9b000000-0000-4000-8000-000000000014","reason":"Synthetic disputed tutoring session"}');
 RESET ROLE;
-DO $ DECLARE m uuid:='9b000000-0000-4000-8000-000000000004'; f uuid:='9b000000-0000-4000-8000-000000000005'; s uuid:='9b000000-0000-4000-8000-000000000014'; d uuid; review uuid; e jsonb;
+DO $$ DECLARE m uuid:='9b000000-0000-4000-8000-000000000004'; f uuid:='9b000000-0000-4000-8000-000000000005'; s uuid:='9b000000-0000-4000-8000-000000000014'; d uuid; review uuid; e jsonb;
 BEGIN
  SELECT id INTO d FROM public.personal_learning_disputes WHERE request_id=s;
  IF jsonb_array_length(public.week7_learning_review_queue(m,'disputes',10)->'items')<>1 THEN RAISE EXCEPTION 'Dispute queue failed'; END IF;
@@ -78,5 +78,5 @@ BEGIN
  PERFORM public.week7_record_learning_refund_review(f,review,'Synthetic provider refund verified');
  IF (SELECT state FROM public.learning_refund_reviews WHERE id=review)<>'recorded' THEN RAISE EXCEPTION 'Review not recorded'; END IF;
  IF has_function_privilege('authenticated','public.week7_record_learning_refund_review(uuid,uuid,text)','EXECUTE') THEN RAISE EXCEPTION 'Browser has refund review RPC'; END IF;
-END $;
+END $$;
 ROLLBACK;
