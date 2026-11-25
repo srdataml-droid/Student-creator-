@@ -29,7 +29,7 @@ public final class MainActivity extends Activity {
     private Button retry, back, more;
     private Integer nextOffset;
     private EditText filter;
-    private boolean resettingFilter;
+    private boolean resettingFilter, startedOnce, loading, interrupted;
     private final ArrayList<CatalogPreview.Row> visibleRows = new ArrayList<>();
     private int retryOffset;
     private boolean retryAppend;
@@ -108,9 +108,20 @@ public final class MainActivity extends Activity {
         try { transport = new CatalogTransport(BuildConfig.CATALOG_ORIGIN); }
         catch (IllegalArgumentException e) { transport = null; }
     }
-    @Override protected void onStart() { super.onStart(); load(); }
+    @Override protected void onStart() {
+        super.onStart();
+        // A new Activity re-reads public data. A resumed Activity keeps its
+        // in-memory pages and only retries an interrupted read on request.
+        if (!startedOnce) { startedOnce = true; load(); }
+        else if (interrupted) {
+            interrupted = false;
+            status.setText("Loading was interrupted. Retry when connected.");
+            retry.setVisibility(View.VISIBLE);
+        }
+    }
     @Override protected void onStop() {
         generation++;
+        if (loading) { interrupted = true; loading = false; }
         if (pending != null) pending.cancel(true);
         super.onStop();
     }
@@ -162,6 +173,7 @@ public final class MainActivity extends Activity {
             status.setText("The private test build has no approved catalog connection.");
             return;
         }
+        loading = true;
         status.setText("Loading public previews…");
         String course = selectedCourse;
         pending = executor.submit(() -> {
@@ -170,6 +182,7 @@ public final class MainActivity extends Activity {
                     course == null ? transport.courses() : transport.lessons(course, offset), course, offset);
                 runOnUiThread(() -> {
                     if (generation != attempt || isFinishing()) return;
+                    loading = false;
                     int previousSize = visibleRows.size();
                     if (!append) displayed.clear();
                     java.util.HashSet<String> seen = new java.util.HashSet<>();
@@ -186,6 +199,7 @@ public final class MainActivity extends Activity {
             } catch (Exception e) {
                 runOnUiThread(() -> {
                     if (generation != attempt || isFinishing()) return;
+                    loading = false;
                     status.setText(append ? "Unable to load more previews. Existing results remain available; retry when connected." : "Unable to load the catalog. Check your connection and retry.");
                     retry.setVisibility(View.VISIBLE);
                 });
