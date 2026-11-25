@@ -58,3 +58,6 @@ Transaction-local notification triggers on new messages, follows, likes, lesson 
 
 ## Sixteenth increment: hosted abuse intake and review
 Account and recipient-only message reports, duplicate and hourly quota checks, admin-only queues for message/account/comment/community cases and audited resolution. Reported messages only are included in staff queue, never arbitrary private inbox access; reviews do not auto-suspend. Existing platform staff role is the Week 7 coordination boundary; no separate identity or punishment system. Tests added for unauthorized reports/review, private evidence and no automatic sanctions. Exact-head CI pending. No external code copied.
+
+## Seventeenth increment: hosted message paging
+Read-only invoker RPCs for paged history and inbox, bounded result sizes, actor-owned keyset cursors, private unread counts from RLS-visible recipient acknowledgments, and own contact-block indicator. Tests reject cross-pair cursors and unrelated history reads. Existing local paging implementation supplied the reference; no external code copied. Exact-head CI pending; hosted runtime remains unwired.
