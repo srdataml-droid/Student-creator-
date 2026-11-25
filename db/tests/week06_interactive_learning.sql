@@ -31,6 +31,10 @@ VALUES('99999999-9999-4999-8999-999999999998','class',
 '66666666-6666-4666-8666-666666666666',
 '33333333-3333-4333-8333-333333333333','Requires Week 5 verified settlement and policy');
 
+INSERT INTO public.learning_participant_removals(class_id,student_id,revoke_token_ts,reason)
+VALUES('66666666-6666-4666-8666-666666666666',
+'33333333-3333-4333-8333-333333333333',
+1700000000,'The host removed a synthetic participant for safety');
 -- Cross-institution referential integrity is not a UI-only check.
 DO $$ BEGIN
   BEGIN
@@ -60,6 +64,10 @@ BEGIN
  BEGIN
    PERFORM 1 FROM public.learning_refund_reviews;
    RAISE EXCEPTION 'Student could read server-only refund queue';
+ EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+ BEGIN
+   PERFORM 1 FROM public.learning_participant_removals;
+   RAISE EXCEPTION 'Student could inspect or forge participant removal queue';
  EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  BEGIN
    INSERT INTO public.interactive_class_enrollments(class_id,student_id,state) VALUES(
