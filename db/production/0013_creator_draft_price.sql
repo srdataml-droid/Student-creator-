@@ -25,3 +25,19 @@ CREATE FUNCTION public.set_draft_price(_content uuid,_amount bigint) RETURNS jso
 $$;
 REVOKE ALL ON FUNCTION public.set_draft_price(uuid,bigint) FROM PUBLIC,anon,authenticated,service_role;
 GRANT EXECUTE ON FUNCTION public.set_draft_price(uuid,bigint) TO authenticated;
+
+CREATE FUNCTION student_catalog_private.get_draft_price(_content uuid) RETURNS jsonb
+LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path='' AS $$
+DECLARE actor uuid:=auth.uid(); c public.content_items%ROWTYPE; p bigint;
+BEGIN
+ IF actor IS NULL OR NOT public.current_student_eligible() THEN RAISE EXCEPTION 'STUDENT_REQUIRED' USING ERRCODE='42501'; END IF;
+ SELECT * INTO c FROM public.content_items WHERE id=_content AND creator_id=actor;
+ IF NOT FOUND THEN RAISE EXCEPTION 'CONTENT_NOT_FOUND' USING ERRCODE='42501'; END IF;
+ SELECT price_kobo INTO p FROM public.listings WHERE content_id=c.id AND state='active';
+ RETURN jsonb_build_object('contentId',c.id,'priceKobo',COALESCE(p,0),'currency','NGN','editable',c.status IN ('draft','rejected') AND c.published_at IS NULL AND NOT EXISTS(SELECT 1 FROM public.orders WHERE content_id=c.id) AND NOT EXISTS(SELECT 1 FROM public.listings WHERE content_id=c.id AND state<>'active'));
+END $$;
+REVOKE ALL ON FUNCTION student_catalog_private.get_draft_price(uuid) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION student_catalog_private.get_draft_price(uuid) TO authenticated;
+CREATE FUNCTION public.get_draft_price(_content uuid) RETURNS jsonb LANGUAGE sql STABLE SECURITY INVOKER SET search_path='' AS $$ SELECT student_catalog_private.get_draft_price(_content) $$;
+REVOKE ALL ON FUNCTION public.get_draft_price(uuid) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.get_draft_price(uuid) TO authenticated;
