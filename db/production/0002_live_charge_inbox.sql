@@ -1,4 +1,4 @@
--- Week 5 hosted sandbox recovery; requires 0015. No provider call or schedule here.
+-- Live hosted recovery; requires production 0001. No provider call or schedule here.
 -- Input to enqueue must come from a signature-verified raw Paystack event.
 -- Every successful completion requires an independently verified receipt.
 create table live_finance.charge_inbox (
@@ -32,7 +32,7 @@ create trigger live_inbox_identity_guard before update on live_finance.charge_in
 
 -- Buyer-specific lookup. Backend must authenticate current session before calling.
 create function public.live_get_order(p_buyer uuid,p_ref text)
-returns jsonb language plpgsql security definer set search_path='' as $
+returns jsonb language plpgsql security definer set search_path='' as $$
 declare r jsonb;
 begin
  if p_buyer is null or not public.affiliation_eligible(p_buyer) then raise exception 'NOT_ELIGIBLE' using errcode='42501'; end if;
@@ -46,7 +46,7 @@ begin
 end $$;
 
 create function public.live_enqueue_charge(p_ref text,p_tx text,p_digest text)
-returns jsonb language plpgsql security definer set search_path='' as $
+returns jsonb language plpgsql security definer set search_path='' as $$
 declare oid uuid; existing live_finance.charge_inbox%rowtype;
 begin
  if p_ref is null or p_tx is null or p_tx !~ '^[A-Za-z0-9_-]{1,128}$' or p_digest is null or p_digest !~ '^[0-9a-f]{64}$' then raise exception 'INVALID_EVENT' using errcode='22023'; end if;
@@ -66,7 +66,7 @@ end $$;
 -- Independent workers cannot claim the same active lease. Expired final attempts
 -- are marked dead_letter and retained for operator investigation.
 create function public.live_claim_charge()
-returns jsonb language plpgsql security definer set search_path='' as $
+returns jsonb language plpgsql security definer set search_path='' as $$
 declare e live_finance.charge_inbox%rowtype; result jsonb;
 begin
  update live_finance.charge_inbox set state='dead_letter',lease_token=null,lease_until=null,last_error_code='RETRY_EXHAUSTED' where state='processing' and attempts=8 and lease_until<=clock_timestamp();
@@ -81,7 +81,7 @@ begin
 end $$;
 
 create function public.live_finish_charge(p_tx text,p_lease uuid,p_error text default null)
-returns jsonb language plpgsql security definer set search_path='' as $
+returns jsonb language plpgsql security definer set search_path='' as $$
 declare e live_finance.charge_inbox%rowtype; new_state text;
 begin
  if p_error is not null and p_error !~ '^[A-Z_]{1,60}$' then raise exception 'INVALID_ERROR_CODE' using errcode='22023'; end if;

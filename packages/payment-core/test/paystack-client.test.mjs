@@ -109,7 +109,7 @@ test('live checkout requires both private founder configuration and server autho
   }
 });
 test('live verification remains possible for reconciliation after checkout is disabled (mock only)',async()=>{
-  const api=createPaystackClient({secretKey:'sk_live_mockContractOnly',environment:'live',fetchImpl:async()=>ok({...verified(),domain:'live'})});
+  const api=createPaystackClient({secretKey:'sk_live_mockContractOnly',environment:'live',fetchImpl:async()=>ok({...verified(),domain:'live',fees:100})});
   assert.equal((await api.verify({...order,domain:'live'})).domain,'live');
 });
 test('rejects fresh provider checkout URLs containing credentials or nonstandard HTTPS ports',async()=>{
@@ -134,3 +134,5 @@ test('distribution gate denies Play checkout before provider network and does no
   else process.env.STUDENT_CREATORS_DISTRIBUTION_CHANNEL=prior;
  }
 });
+
+test('live verification never assumes missing fees are zero',async()=>{const api=createPaystackClient({secretKey:'sk_live_mockContractOnly',environment:'live',fetchImpl:async()=>ok({...verified(),domain:'live'})});await code(()=>api.verify({...order,domain:'live'}),'MISSING_PROVIDER_FEE');});

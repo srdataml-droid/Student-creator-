@@ -29,7 +29,7 @@ export function createHostedCheckoutHandler({auth,store,gateway,origin,domain='t
    const user=await auth.getUser(token);if(!user)return json(401,{error:'AUTH_REQUIRED'});
    const o=domain==='live'?await store.reserve(user.id,lessonId,key,terms):await store.reserve(user.id,lessonId,key);if(!o||!UUID.test(o.orderId??''))return json(403,{error:'CHECKOUT_UNAVAILABLE'});
    if(o.status==='ready'){
-    if(o.domain!==domain||!refPattern(domain).test(o.reference??'')||(domain==='live'&&(await auth.getUser(token))?.id!==user.id))throw unavailable();
+    if(o.domain!==domain||!refPattern(domain).test(o.reference??'')||(domain==='live'&&((await auth.getUser(token))?.id!==user.id||await store.canReturn(user.id,o.reference,terms)!==true)))throw unavailable();
     return json(200,{orderId:o.orderId,authorizationUrl:checkoutUrl(o.authorizationUrl)});
    }
    if(o.create!==true)return json(o.status==='paid'?200:202,{orderId:o.orderId,status:o.status});
