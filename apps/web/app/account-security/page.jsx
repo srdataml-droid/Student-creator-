@@ -1,8 +1,9 @@
 'use client';
+import {useHostedAccount} from '../HostedAccountProvider.jsx';
 import Link from 'next/link';
 import {useEffect,useState} from 'react';
 import {api,friendlyError} from '../../lib/local-client.js';
-export default function AccountSecurity(){
+function LocalAccountSecurity(){
  const [state,setState]=useState('loading'),[status,setStatus]=useState(null),[token,setToken]=useState(''),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState('');
  async function refresh(){try{setStatus(await api('me/email-status'));setState('ready');}catch(e){setState(e.status===401?'signed-out':e.status===403?'student-only':'unavailable');}}
  useEffect(()=>{refresh();},[]);
@@ -21,3 +22,12 @@ export default function AccountSecurity(){
  {message&&<p role="status" className="form-success">{message}</p>}{error&&<p role="alert" className="form-error">{error}</p>}
  </div></section></main>;
 }
+
+function HostedSecurity({account}){
+ const [busy,setBusy]=useState(false),[error,setError]=useState('');
+ async function signOut(){setBusy(true);setError('');try{await account.logout();}catch{setError('Sign-out was not fully confirmed. Check the session status.');}finally{setBusy(false);}}
+ return <main id="main" className="main hosted-account-page"><section className="account-form-wrap"><h1>Account security</h1>
+ {account.session.state==='checking'?<p role="status">Checking your session…</p>:account.session.state==='signed-in'?<><p role="status">Signed in to your account.</p><p className="hint">Campus membership and other devices are not verified by this screen.</p><button className="primary-link" type="button" disabled={busy} onClick={signOut}>{busy?'Signing out…':'Sign out this device'}</button></>:account.session.state==='unavailable'?<><p role="alert">Session status is unavailable.</p><button className="quiet-button" type="button" disabled={busy} onClick={signOut}>Try sign out</button></>:<Link className="primary-link" href="/sign-in">Sign in</Link>}
+ {error&&<p role="alert">{error}</p>}<p><Link href="/recover-account">Reset password</Link></p></section></main>;
+}
+export default function AccountSecurity(){const hosted=useHostedAccount();return hosted?<HostedSecurity account={hosted}/>:<LocalAccountSecurity/>;}
