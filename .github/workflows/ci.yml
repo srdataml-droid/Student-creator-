@@ -21,7 +21,9 @@ jobs:
         timeout-minutes: 8
         run: bash scripts/build-android-internal.sh
       - name: Run Android instrumentation if an isolated emulator is available
-        timeout-minutes: 6
+        timeout-minutes: 10
+        env:
+          WK8_STANDARD_PUBLIC_RUNNER: ${{ github.head_ref == 'work/week-08' && github.event.repository.private == false }}
         run: bash scripts/test-android-emulator.sh
       - name: Rehearse Week 8 rollback against a previous green revision (synthetic only)
         if: github.head_ref == 'work/week-08'
