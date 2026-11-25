@@ -13,13 +13,17 @@ CREATE TABLE public.private_identity_uploads (
  created_at timestamptz NOT NULL DEFAULT now(),
  uploaded_at timestamptz,
  scanned_at timestamptz,
+ scan_attempts integer NOT NULL DEFAULT 0 CHECK(scan_attempts BETWEEN 0 AND 5),
+ next_scan_at timestamptz NOT NULL DEFAULT now(),
+ scan_lease_id uuid,
+ scan_lease_until timestamptz,
+ CHECK((scan_lease_id IS NULL)=(scan_lease_until IS NULL)),
  CHECK(object_key='private/'||owner_id::text||'/'||request_id::text||'/'||id::text||
  CASE mime_type WHEN 'image/jpeg' THEN '.jpg' WHEN 'image/png' THEN '.png' ELSE '.pdf' END)
 );
 ALTER TABLE public.private_identity_uploads ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.private_identity_uploads FROM PUBLIC,anon,authenticated,service_role;
--- Only a reviewed trusted worker can read the pending queue, never browsers.
-GRANT SELECT ON public.private_identity_uploads TO service_role;
+-- Queue access uses service-only bounded lease RPCs below; no browser or direct service table access.
 
 CREATE FUNCTION public.reserve_private_identity_upload(_owner uuid,_request uuid,_mime text,_bytes integer,_digest text)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path TO '' AS $$
@@ -62,23 +66,46 @@ BEGIN
  AND u.request_id=_request AND u.digest=_digest AND u.state IN ('quarantined','clean','malicious','inconclusive'));
 END $$;
 
--- Trusted scanner calls only after downloading the exact bytes and checking digest.
--- Scan outcome is never supplied by the student route. No verification approval occurs.
-CREATE FUNCTION public.record_private_identity_scan(_upload uuid,_digest text,_verdict text,_scanner text)
+-- One bounded lease per worker. Failed/crashed attempts leave the evidence
+-- inaccessible. No claim after five attempts; operator review is required.
+CREATE FUNCTION public.claim_private_identity_scan()
+RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path TO '' AS $$
+DECLARE r public.private_identity_uploads;
+BEGIN
+ SELECT u.* INTO r FROM public.private_identity_uploads u
+ WHERE u.state IN ('quarantined','inconclusive') AND u.scan_attempts<5
+ AND u.next_scan_at<=now() AND (u.scan_lease_until IS NULL OR u.scan_lease_until<=now())
+ AND EXISTS(SELECT 1 FROM public.verification_requests v WHERE v.id=u.request_id AND v.status='pending' AND v.expires_at>now())
+ ORDER BY u.next_scan_at,u.created_at,u.id LIMIT 1 FOR UPDATE SKIP LOCKED;
+ IF NOT FOUND THEN RETURN NULL; END IF;
+ UPDATE public.private_identity_uploads SET scan_attempts=scan_attempts+1,scan_lease_id=gen_random_uuid(),
+ scan_lease_until=now()+interval '90 seconds' WHERE id=r.id RETURNING * INTO r;
+ RETURN jsonb_build_object('id',r.id,'objectKey',r.object_key,'ownerId',r.owner_id,'requestId',r.request_id,
+ 'mime',r.mime_type,'bytes',r.bytes,'digest',r.digest,'leaseId',r.scan_lease_id);
+END $$;
+
+-- Trusted scanner calls only after downloading exact bytes and checking digest.
+-- A late or expired worker cannot override a newer lease or a terminal verdict.
+CREATE FUNCTION public.record_private_identity_scan(_upload uuid,_lease uuid,_digest text,_verdict text,_scanner text)
 RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path TO '' AS $$
 DECLARE r public.private_identity_uploads;
 BEGIN
  IF _verdict IS NULL OR _verdict NOT IN ('clean','malicious','inconclusive') OR _scanner IS NULL
  OR length(_scanner) NOT BETWEEN 1 AND 120 THEN RETURN false; END IF;
- SELECT * INTO r FROM public.private_identity_uploads WHERE id=_upload AND digest=_digest FOR UPDATE;
+ SELECT * INTO r FROM public.private_identity_uploads WHERE id=_upload AND digest=_digest
+ AND scan_lease_id=_lease AND scan_lease_until>now() AND state IN ('quarantined','inconclusive') FOR UPDATE;
  IF NOT FOUND THEN RETURN false; END IF;
- IF r.state IN ('clean','malicious') THEN RETURN r.state=_verdict; END IF;
- IF r.state NOT IN ('quarantined','inconclusive') THEN RETURN false; END IF;
- UPDATE public.private_identity_uploads SET state=_verdict,scanner_version=_scanner,scanned_at=now() WHERE id=r.id;
+ UPDATE public.private_identity_uploads SET state=_verdict,scanner_version=_scanner,scanned_at=now(),
+ scan_lease_id=NULL,scan_lease_until=NULL,
+ next_scan_at=now()+make_interval(mins=>5*scan_attempts)
+ WHERE id=r.id;
  IF _verdict='clean' THEN
   UPDATE public.verification_requests SET private_evidence_path=r.object_key
   WHERE id=r.request_id AND user_id=r.owner_id AND status='pending' AND expires_at>now()
   AND (private_evidence_path IS NULL OR private_evidence_path=r.object_key);
+ ELSIF _verdict='malicious' THEN
+  INSERT INTO public.audit_events(action,target_kind,target_id)
+  VALUES('identity.evidence.scan_malicious','verification_request',r.request_id);
  END IF;
  RETURN true;
 END $$;
@@ -103,9 +130,11 @@ END $$;
 
 REVOKE ALL ON FUNCTION public.reserve_private_identity_upload(uuid,uuid,text,integer,text),
  public.mark_private_identity_uploaded(uuid,uuid,uuid,text),
- public.record_private_identity_scan(uuid,text,text,text),
+ public.claim_private_identity_scan(),
+ public.record_private_identity_scan(uuid,uuid,text,text,text),
  public.get_private_identity_review_object(uuid,uuid) FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION public.reserve_private_identity_upload(uuid,uuid,text,integer,text),
  public.mark_private_identity_uploaded(uuid,uuid,uuid,text),
- public.record_private_identity_scan(uuid,text,text,text),
+ public.claim_private_identity_scan(),
+ public.record_private_identity_scan(uuid,uuid,text,text,text),
  public.get_private_identity_review_object(uuid,uuid) TO service_role;

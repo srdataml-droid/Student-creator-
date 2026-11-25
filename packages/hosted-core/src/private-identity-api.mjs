@@ -103,7 +103,8 @@ export function createPrivateIdentityProvider({url,serverKey,fetcher=fetch}){
    reserve:({owner,requestId,mime,bytes,digest})=>rpc('reserve_private_identity_upload',{_owner:owner,_request:requestId,_mime:mime,_bytes:bytes,_digest:digest}),
    markUploaded:({owner,requestId,uploadId,digest})=>rpc('mark_private_identity_uploaded',{_owner:owner,_request:requestId,_upload:uploadId,_digest:digest}),
    review:({actor,requestId})=>rpc('get_private_identity_review_object',{_actor:actor,_request:requestId}),
-   recordScan:({uploadId,digest,verdict,scanner})=>rpc('record_private_identity_scan',{_upload:uploadId,_digest:digest,_verdict:verdict,_scanner:scanner})
+   claimScan:()=>rpc('claim_private_identity_scan',{}),
+   recordScan:({uploadId,leaseId,digest,verdict,scanner})=>rpc('record_private_identity_scan',{_upload:uploadId,_lease:leaseId,_digest:digest,_verdict:verdict,_scanner:scanner})
   },
   storage:{
    read,
