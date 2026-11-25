@@ -92,18 +92,20 @@ test('Supabase adapter verifies user with public key, DB with server key, and de
   const seen=[];
   const fetcher=async(url,options)=>{
     seen.push({url:String(url),...options});
-    if(String(url).includes('/auth/v1/user')) return Response.json({id:ID.student});
+    if(String(url).includes('/auth/v1/user')) return Response.json({id:ID.student,email:'synthetic@example.invalid',email_confirmed_at:'2026-01-01T00:00:00Z'});
+    if(String(url).includes('/student_creators_session_active')||String(url).includes('/affiliation_eligible'))return Response.json(true);
     if(String(url).includes('student_profiles')) return Response.json([{user_id:ID.student,institution_id:ID.school,verified_at:'2026-11-19',suspended:false}]);
     if(String(url).includes('courses'))return Response.json([{id:ID.course,institution_id:ID.school,active:true}]);
     if(String(url).includes('course_topics'))return Response.json([{id:ID.topic,course_id:ID.course}]);
     throw new Error('Unknown route');
   };
   const {auth,store}=createSupabaseDraftDependencies({url:'https://example.supabase.co',publicKey:'pub',serverKey:'service',fetcher});
-  assert.deepEqual(await auth.getUser('student-jwt'),{id:ID.student});
+  const token='e30.'+Buffer.from(JSON.stringify({sub:ID.student,session_id:ID.lesson,role:'authenticated',exp:Math.floor(Date.now()/1000)+600})).toString('base64url')+'.signature';
+  assert.deepEqual(await auth.getUser(token),{id:ID.student});
   assert.equal((await store.getProfile(ID.student)).institutionId,ID.school);
   assert.equal((await store.getCourse(ID.course)).active,true);
   assert.equal((await store.getTopic(ID.topic)).courseId,ID.course);
-  assert.equal(seen[0].headers.authorization,'Bearer student-jwt');assert.equal(seen[0].headers.apikey,'pub');
+  assert.equal(seen[0].headers.authorization,'Bearer '+token);assert.equal(seen[0].headers.apikey,'pub');
   assert.equal(seen[1].headers.authorization,'Bearer service');assert.equal(seen[1].headers.apikey,'service');
 });
 test('Supabase adapter does not create duplicates when PostgREST reports conflict',async()=>{
