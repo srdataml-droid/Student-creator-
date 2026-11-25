@@ -130,3 +130,20 @@
 .creator-body .admin-console .hero .intro{color:#b1c4b8}
 .creator-body .admin-console .panel,.creator-body .admin-console .status{color:#e9f6ee}
 @media(max-width:760px){.creator-body .creator-post .post-author-info{min-width:0}.creator-body .post-course{max-width:36%;overflow-wrap:anywhere}.creator-body .modern-home .feed-tabs{width:100%}}
+
+/* Inbox and creator workspace: direct task navigation, no new data contracts. */
+.inbox-page .inbox-card{border:1px solid var(--line);background:#fff;border-radius:12px;max-width:790px}
+.inbox-card-heading{display:flex;align-items:center;gap:12px;padding:16px 20px;border-bottom:1px solid var(--line)}
+.inbox-card-heading h2{margin:0;font-size:1rem;letter-spacing:-.015em}.inbox-card-heading>.quiet-button{margin-left:auto;font-size:.8rem;padding:8px 12px}
+.inbox-state{margin:0;padding:36px 24px;text-align:center}.inbox-state h3{font-size:1.08rem;margin:0 0 8px}.inbox-state p{color:var(--muted);font-size:.87rem;margin:0 0 18px}
+.inbox-list{list-style:none;margin:0;padding:0}.inbox-list>li+li{border-top:1px solid var(--line)}
+.inbox-row{display:flex;align-items:center;gap:14px;padding:16px 20px;text-decoration:none}.inbox-row:hover{background:#f5f8f5}.inbox-avatar{display:grid;place-items:center;width:44px;height:44px;flex:none;border-radius:50%;background:var(--brand-soft);color:var(--brand-strong);font-size:.75rem;font-weight:700}
+.inbox-row-copy{flex:1;min-width:0}.inbox-row-copy strong,.inbox-row-copy time{display:block}.inbox-row-copy strong{font-size:.9rem}.inbox-row-copy time{font-size:.75rem;color:var(--muted);margin-top:5px}
+.workspace-shortcuts{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:22px;padding:8px;background:#fff;border:1px solid var(--line);border-radius:12px}
+.workspace-shortcuts a{display:flex;align-items:center;justify-content:center;text-decoration:none;border-radius:8px;min-height:44px;padding:9px 17px;font-weight:650;font-size:.85rem;color:var(--brand-strong)}.workspace-shortcuts a:hover{background:var(--brand-soft)}
+#studio-editor,#studio-content,#studio-profile,#studio-earnings{scroll-margin-top:84px}
+.creator-profile-edit,.synthetic-earnings{margin-bottom:18px}.creator-body .studio-grid{grid-template-columns:minmax(0,1.12fr) minmax(0,1fr)}
+.creator-body .studio-grid .panel{min-width:0}.creator-body .studio-grid .review-list li{padding:14px}
+.creator-body .studio-grid input[type=number]{width:100%;max-width:180px;min-height:44px;padding:8px 11px;border:1px solid var(--line);border-radius:8px}
+@media(max-width:1000px){.creator-body .studio-grid{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:760px){.workspace-shortcuts a{flex:1 1 42%;padding:8px;font-size:.8rem}.inbox-card-heading{padding:12px 14px}.inbox-row{padding:13px 14px}.inbox-state{padding:28px 18px}}
