@@ -86,6 +86,8 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/migrations/0016_week05_charge_inbox.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/week05_test_commerce.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/week05_charge_inbox.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0017_week05_checkout_sessions.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/week05_checkout_sessions.sql
 
   browser-alpha:
     runs-on: ubuntu-24.04
