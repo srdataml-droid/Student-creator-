@@ -5,9 +5,9 @@ const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]
 /** Shared hosted browser transport. Access tokens exist only in this closure;
  * refresh cookies are managed by the server. Never use browser storage. */
 export function createHostedBrowserAuth({fetcher=fetch,now=Date.now}={}){
- let token=null,expiresAt=0,tail=Promise.resolve();
+ let token=null,userId=null,expiresAt=0,tail=Promise.resolve();
  const serialize=fn=>{const pending=tail.then(fn);tail=pending.catch(()=>{});return pending;};
- const clear=()=>{token=null;expiresAt=0;};
+ const clear=()=>{token=null;userId=null;expiresAt=0;};
  async function request(action,body){
   if(!actions.has(action))throw Error('INVALID_AUTH_ACTION');
   const response=await fetcher('/api/hosted-auth/'+action,{method:'POST',credentials:'same-origin',cache:'no-store',redirect:'error',headers:{...(body?{'content-type':'application/json'}:{}),...(action==='logout'&&token&&expiresAt>now()?{authorization:'Bearer '+token}:{})},...(body?{body:JSON.stringify(body)}:{})});
@@ -26,7 +26,8 @@ export function createHostedBrowserAuth({fetcher=fetch,now=Date.now}={}){
   logout:()=>serialize(async()=>{try{const result=await request('logout');if(result.signedOut!==true)throw Error('LOGOUT_UNCONFIRMED');return {remoteRevoked:result.remoteRevoked===true};}finally{clear();}}),
   authorized:(operation,input)=>serialize(async()=>{
    const spec=hostedCreatorRequest(operation,input);
-   if(!token||expiresAt<=now()+30000){try{accept(await request('refresh'));}catch(e){clear();throw e;}}
+   if(!userId)throw Object.assign(Error('AUTH_REQUIRED'),{status:401});
+   if(!token||expiresAt<=now()+30000){const expected=userId;try{const refreshed=accept(await request('refresh'));if(refreshed.userId!==expected)throw Object.assign(Error('ACCOUNT_CHANGED'),{status:401});}catch(e){clear();throw e;}}
    const response=await fetcher(spec.path,{method:spec.method,headers:{...spec.headers,authorization:'Bearer '+token},...(spec.body!==undefined?{body:spec.body}:{}),credentials:'same-origin',cache:'no-store',redirect:'error',referrerPolicy:'no-referrer'});
    if(response.status===401)clear();
    const data=await response.json().catch(()=>null);
@@ -37,7 +38,7 @@ export function createHostedBrowserAuth({fetcher=fetch,now=Date.now}={}){
  };
  function accept(data){
   if(!JWT.test(data.accessToken||'')||data.accessToken.length>8192||!UUID.test(data.userId||'')||!Number.isSafeInteger(data.expiresIn)||data.expiresIn<1||data.expiresIn>86400){clear();throw Error('INVALID_AUTH_RESPONSE');}
-  token=data.accessToken;expiresAt=now()+data.expiresIn*1000;
+  token=data.accessToken;userId=data.userId;expiresAt=now()+data.expiresIn*1000;
   return {userId:data.userId,expiresAt}; // no token crosses into React state
  }
 }
