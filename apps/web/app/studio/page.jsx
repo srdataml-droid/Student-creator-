@@ -1,11 +1,13 @@
 'use client';
+import {useHostedAccount} from '../HostedAccountProvider.jsx';
+import {HostedCreatorStudio} from '../HostedCreatorWorkspace.jsx';
 import Link from 'next/link';
 import {useEffect,useRef,useState} from 'react';
 import {makeDraftKey,parseAccessPrice,mediaSelectionError,submissionBlock} from '../../lib/studio-workflow.mjs';
 import {api,friendlyError} from '../../lib/local-client.js';
 import CreatorRestrictions from './CreatorRestrictions.jsx';
 const fresh=()=>({courseId:'',topicId:'',title:'',description:'',previewText:'',lessonText:'',rightsAttested:false,creationKey:''});
-export default function Studio(){
+function LocalStudio(){
  const [earnings,setEarnings]=useState(null),[priceInputs,setPriceInputs]=useState({}),[user,setUser]=useState(null),[courses,setCourses]=useState([]),[topics,setTopics]=useState([]),[items,setItems]=useState([]),[inbox,setInbox]=useState([]),[state,setState]=useState('loading'),[form,setForm]=useState(fresh),[error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false),[editingId,setEditingId]=useState(null),[videoFiles,setVideoFiles]=useState({}),[captionFiles,setCaptionFiles]=useState({}),[profile,setProfile]=useState({handle:'',displayName:'',bio:''}),[profileBusy,setProfileBusy]=useState(false),[profileError,setProfileError]=useState(''),[profileSaved,setProfileSaved]=useState('');
  const mutation=useRef(false),draftKey=useRef(''),mediaInputs=useRef({});
  const [topicsState,setTopicsState]=useState('idle');
@@ -109,3 +111,10 @@ export default function Studio(){
  </>}
  </main>;
 }
+
+function HostedStudioEntry(){
+ const [courses,setCourses]=useState([]),[status,setStatus]=useState('loading');
+ useEffect(()=>{let active=true;fetch('/api/courses',{credentials:'same-origin',cache:'no-store',redirect:'error'}).then(async r=>{if(!r.ok)throw Error('unavailable');const result=await r.json();if(result.state!=='ready'||!Array.isArray(result.courses))throw Error('unavailable');if(active){setCourses(result.courses);setStatus('ready');}}).catch(()=>{if(active)setStatus('error');});return()=>{active=false;};},[]);
+ return status==='loading'?<main id="main" className="main"><h1>Creator studio</h1><p role="status">Loading courses…</p></main>:<HostedCreatorStudio courses={courses} catalogAvailable={status==='ready'}/>;
+}
+export default function Studio(){const hosted=useHostedAccount();return hosted?<HostedStudioEntry/>:<LocalStudio/>;}
