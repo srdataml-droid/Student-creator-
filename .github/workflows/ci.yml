@@ -192,6 +192,8 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-learning-review.test.sql
           psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-finance-report.sql
           psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-finance-report.test.sql
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-copyright-review.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-copyright-review.test.sql
 
       - name: Verify hosted institutional appeals
         run: |

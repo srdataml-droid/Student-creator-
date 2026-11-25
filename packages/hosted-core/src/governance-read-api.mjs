@@ -46,6 +46,8 @@ async function readCommandBody(request){
  return body&&typeof body==='object'&&!Array.isArray(body)?body:null;
 }
 function commandFor(path){
+ if(path==='copyright/claims')return {name:'week7_copyright_queue',scope:'copyright.review',allowed:['limit']};
+ if(/^copyright\/claims\/[0-9a-f-]{36}\/review$/i.test(path))return {name:'week7_review_copyright',scope:'copyright.review',allowed:['decision','note']};
  if(path==='finance/report')return {name:'week7_finance_report',scope:'finance.review',allowed:['from','to']};
  if(path==='privacy/requests')return {name:'week7_privacy_queue',scope:'privacy.review',allowed:['limit']};
  if(/^privacy\/requests\/[0-9a-f-]{36}\/review$/i.test(path))return {name:'week7_review_privacy_request',scope:'privacy.review',allowed:['decision','note']};
@@ -73,8 +75,11 @@ function validateCommand(cmd,body,path,actorId){
    if(typeof body.from!=='string'||typeof body.to!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(body.from)||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(body.to))return null;
    const f=Date.parse(body.from),t=Date.parse(body.to);return Number.isFinite(f)&&Number.isFinite(t)&&t>f&&t-f<=366*86400000&&t<=Date.now()+86400000?{_actor:actorId,_from:new Date(f).toISOString(),_to:new Date(t).toISOString()}:null;
   }
+  case 'week7_review_copyright':
+   return UUID.test(path.split('/')[2])&&['dismiss','uphold','release','retain'].includes(body.decision)&&hasText(body.note,10,500)?{_actor:actorId,_id:path.split('/')[2],_decision:body.decision,_note:body.note.trim()}:null;
   case 'week7_review_privacy_request':
    return UUID.test(path.split('/')[2])&&['under_review','approved_for_manual_fulfilment','declined'].includes(body.decision)&&hasText(body.note,10,500)?{_actor:actorId,_id:path.split('/')[2],_decision:body.decision,_note:body.note.trim()}:null;
+  case 'week7_copyright_queue':
   case 'week7_privacy_queue':
   case 'week7_identity_queue':
   case 'week7_identity_revalidation_queue':
@@ -166,6 +171,7 @@ export function createHostedGovernanceHandler({getEnv=()=>process.env,fetcher=fe
      if(!res.ok){
        const detail=await res.json().catch(()=>({}));
        const safeCodes={
+         COPYRIGHT_REVIEW_CONFLICT:[409,'COPYRIGHT_REVIEW_CONFLICT'],
          PRIVACY_REVIEW_CONFLICT:[409,'PRIVACY_REVIEW_CONFLICT'],
          APPEAL_ALREADY_REVIEWED:[409,'APPEAL_ALREADY_REVIEWED'],
          LEARNING_REVIEW_CONFLICT:[409,'LEARNING_REVIEW_CONFLICT'],
