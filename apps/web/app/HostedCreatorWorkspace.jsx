@@ -4,6 +4,7 @@ import {ReviewSubmission} from './HostedSocialWorkspace.jsx';
 import {HostedEarnings} from './HostedLearningWorkspace.jsx';
 import {useRef,useState} from 'react';
 import {makeDraftKey} from '../lib/studio-workflow.mjs';
+import {uploadMediaSource} from '../lib/hosted-media-source.mjs';
 import {readMuxStatus,putMuxVideo} from '../lib/hosted-creator-client.mjs';
 import {useHostedAccount} from './HostedAccountProvider.jsx';
 const errorText=e=>e.status===401?'Sign in again to continue.':e.status===403?'Your account does not have permission for this action.':e.status===404?'The requested record or service is unavailable.':e.status===429?'Too many attempts. Try later.':e.status===409?'This request conflicts with a saved record. Do not repeat with different evidence.':e.message==='INVALID_IDENTITY_FILE'?'Choose a JPEG, PNG or PDF of 8 bytes to 4 MiB.':e.message==='INVALID_VIDEO_FILE'?'Choose a nonempty MP4 up to 100 MiB.':e.message==='INVALID_ID'?'Enter a valid record ID.':'The request could not be confirmed. Check the details and service availability.';
@@ -36,7 +37,7 @@ export function HostedCreatorStudio({courses=[],catalogAvailable}){
  <label className="check-line"><input name="rights" type="checkbox" required disabled={action.busy}/>I own or have permission to publish this material.</label>
  <button className="primary-link" disabled={action.busy}>{action.busy?'Saving…':'Save private draft'}</button></form>}
  <Feedback action={action}/>{draft&&<div><h3>{draft.title}</h3><p>Draft ID: <code>{draft.id}</code></p><p className="hint">This draft is private until it passes review.</p></div>}<h3>Your content</h3><button type="button" disabled={action.busy} onClick={()=>action.run(()=>account.reloadAccount())}>Refresh drafts</button>{account.accountState?.drafts&&<ul className="lesson-list">{account.accountState.drafts.map(x=><li key={x.id}><strong>{x.title}</strong> · {x.status.replaceAll('_',' ')} <button type="button" disabled={action.busy} onClick={()=>setLessonId(x.id)}>Select content</button></li>)}</ul>}</section>
- <MuxUpload key={draft?.id||'manual'} lessonId={lessonId} setLessonId={setLessonId}/><ReviewSubmission key={lessonId} lessonId={lessonId.trim()}/><HostedPrivacy/><HostedEarnings/></HostedGate>;
+ {account.mediaMode==='private'?<PrivateMediaUpload key={lessonId} lessonId={lessonId}/>:<MuxUpload key={lessonId||'manual'} lessonId={lessonId} setLessonId={setLessonId}/>}<ReviewSubmission key={lessonId} lessonId={lessonId.trim()}/><HostedPrivacy/><HostedEarnings/></HostedGate>;
 }
 function MuxUpload({lessonId,setLessonId}){
  const account=useHostedAccount(),action=useAction();const [state,setState]=useState(null),[file,setFile]=useState(null);const fileRef=useRef(null);
@@ -61,4 +62,9 @@ function HostedPrivacy(){
  {['view','comment','message'].map(k=><label key={k}>{k}<select name={k} required defaultValue=""><option value="" disabled>Choose permission</option><option value="allow">Allow</option><option value="deny">Restrict</option></select></label>)}<button className="primary-link" disabled={action.busy}>Save restrictions</button></form></>}
  {preference!==null&&<><p>New messages: {preference?'Allowed':'Restricted'}</p><button className="secondary-link" disabled={action.busy} type="button" onClick={()=>action.run(async notice=>{await account.creatorRequest('setMessagePreference',{allowMessages:!preference});setPreference(null);notice('Preference request accepted. Reload settings to verify.');})}>{preference?'Restrict new messages':'Allow new messages'}</button></>}
  <Feedback action={action}/></section>;
+}
+
+function PrivateMediaUpload({lessonId}){
+ const account=useHostedAccount(),action=useAction(),fileInput=useRef(null),[file,setFile]=useState(null),[status,setStatus]=useState(null);
+ return <section className="panel"><h2>Upload original video</h2><p className="hint">Your original file is checked privately before processing. It is not public until approved.</p>{!lessonId?<p>Select or create a draft first.</p>:<><button type="button" className="quiet-button" disabled={action.busy} onClick={()=>action.run(async()=>{const r=await account.creatorRequest('mediaSourceStatus',{lessonId});setStatus(r.state);})}>Refresh upload status</button>{status&&<p role="status">Upload status: {status}</p>}<form className="form-stack" onSubmit={e=>{e.preventDefault();action.run(async notice=>{const r=await uploadMediaSource({file,lessonId,actorId:account.session.userId,request:account.creatorRequest});setStatus(r.state);setFile(null);if(fileInput.current)fileInput.current.value='';notice(r.state==='queued'?'Video submitted for scanning.':'Existing upload status retrieved.');});}}><label htmlFor="private-video">MP4 or WebM (up to 100 MiB)</label><input id="private-video" type="file" accept="video/mp4,video/webm" ref={fileInput} disabled={action.busy} required onChange={e=>setFile(e.target.files?.[0]||null)}/><button type="submit" className="primary-link" disabled={action.busy||!file}>{action.busy?'Checking and uploading…':'Upload video'}</button></form></>}<Feedback action={action}/></section>;
 }
