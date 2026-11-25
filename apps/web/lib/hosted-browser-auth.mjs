@@ -1,3 +1,4 @@
+import {hostedCreatorRequest} from './hosted-creator-client.mjs';
 const actions=new Set(['invite','sign-in','refresh','logout','recover','complete']);
 const JWT=/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -23,6 +24,15 @@ export function createHostedBrowserAuth({fetcher=fetch,now=Date.now}={}){
   recover:email=>serialize(async()=>{const result=await request('recover',{email});if(result.accepted!==true)throw Error('RECOVERY_UNCONFIRMED');return true;}),
   complete:(email,purpose,code,password)=>serialize(async()=>{clear();const result=await request('complete',{email,purpose,code,password});if(result.completed!==true||result.signInRequired!==true)throw Error('COMPLETION_UNCONFIRMED');return true;}),
   logout:()=>serialize(async()=>{try{const result=await request('logout');if(result.signedOut!==true)throw Error('LOGOUT_UNCONFIRMED');return {remoteRevoked:result.remoteRevoked===true};}finally{clear();}}),
+  authorized:(operation,input)=>serialize(async()=>{
+   const spec=hostedCreatorRequest(operation,input);
+   if(!token||expiresAt<=now()+30000){try{accept(await request('refresh'));}catch(e){clear();throw e;}}
+   const response=await fetcher(spec.path,{method:spec.method,headers:{...spec.headers,authorization:'Bearer '+token},...(spec.body!==undefined?{body:spec.body}:{}),credentials:'same-origin',cache:'no-store',redirect:'error',referrerPolicy:'no-referrer'});
+   if(response.status===401)clear();
+   const data=await response.json().catch(()=>null);
+   if(!response.ok||!data||typeof data!=='object')throw Object.assign(Error('HOSTED_CREATOR_REQUEST_FAILED'),{status:response.status,code:typeof data?.error==='string'&&/^[A-Z_]{1,80}$/.test(data.error)?data.error:undefined});
+   return data;
+  }),
   hasFreshSession:()=>Boolean(token&&expiresAt>now()+30000)
  };
  function accept(data){
