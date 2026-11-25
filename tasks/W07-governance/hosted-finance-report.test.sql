@@ -110,7 +110,7 @@ SELECT set_config('request.jwt.claim.sub','9b000000-0000-4000-8000-000000000001'
 SET LOCAL ROLE authenticated;
 SELECT public.creator_payout_request('request',10000,'fixture-payout-transfer-1');
 RESET ROLE;
-DO $ DECLARE r uuid;q jsonb;lease uuid;ref text;c uuid:='9b000000-0000-4000-8000-000000000001';a uuid:='f1910000-0000-4000-8000-000000000003';b uuid:='f1910000-0000-4000-8000-000000000004'; BEGIN
+DO $$ DECLARE r uuid;q jsonb;lease uuid;ref text;c uuid:='9b000000-0000-4000-8000-000000000001';a uuid:='f1910000-0000-4000-8000-000000000003';b uuid:='f1910000-0000-4000-8000-000000000004'; BEGIN
  SELECT id INTO r FROM live_finance.payout_requests WHERE request_key='fixture-payout-transfer-1';
  PERFORM public.week7_review_payout(a,r,'reserve','Synthetic finance review');
  BEGIN PERFORM public.week7_manage_payout_transfer(b,r,'authorize');RAISE EXCEPTION 'Transfer gate bypass';EXCEPTION WHEN insufficient_privilege THEN NULL;END;
@@ -139,6 +139,6 @@ DO $ DECLARE r uuid;q jsonb;lease uuid;ref text;c uuid:='9b000000-0000-4000-8000
  IF live_finance.payout_balance(c)->>'availableKobo'<>'17000' THEN RAISE EXCEPTION 'Unconfirmed return released funds';END IF;
  PERFORM public.week7_manage_payout_transfer(a,r,'confirm_returned','fixture-bank-return');
  IF live_finance.payout_balance(c)->>'availableKobo'<>'27000' THEN RAISE EXCEPTION 'Confirmed return mismatch';END IF;
-END $;
+END $$;
 
 ROLLBACK;
