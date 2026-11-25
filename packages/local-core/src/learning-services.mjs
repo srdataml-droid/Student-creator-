@@ -31,6 +31,7 @@ export function createLearningServices({db,transaction,audit,error,requireVerifi
     "CREATE TABLE IF NOT EXISTS interactive_class_enrollments (class_id TEXT NOT NULL REFERENCES interactive_classes(id),student_id TEXT NOT NULL REFERENCES users(id),status TEXT NOT NULL CHECK(status IN ('enrolled','withdrawn')),created_at TEXT NOT NULL,updated_at TEXT NOT NULL,PRIMARY KEY(class_id,student_id));",
     "CREATE TABLE IF NOT EXISTS interactive_class_presence (provider_event_id TEXT PRIMARY KEY,class_id TEXT NOT NULL REFERENCES interactive_classes(id),student_id TEXT NOT NULL REFERENCES users(id),kind TEXT NOT NULL CHECK(kind IN ('joined','left')),created_at TEXT NOT NULL);",
     "CREATE TABLE IF NOT EXISTS learning_room_closures (class_id TEXT PRIMARY KEY REFERENCES interactive_classes(id),room_name TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','done')),attempts INTEGER NOT NULL DEFAULT 0,updated_at TEXT NOT NULL);",
+    "CREATE TABLE IF NOT EXISTS learning_participant_removals (class_id TEXT NOT NULL REFERENCES interactive_classes(id),student_id TEXT NOT NULL REFERENCES users(id),state TEXT NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','done')),attempts INTEGER NOT NULL DEFAULT 0,revoke_token_ts INTEGER NOT NULL,reason TEXT NOT NULL,updated_at TEXT NOT NULL,PRIMARY KEY(class_id,student_id));",
     "CREATE TABLE IF NOT EXISTS creator_availability (creator_id TEXT PRIMARY KEY REFERENCES users(id),slots_json TEXT NOT NULL,updated_at TEXT NOT NULL);",
     "CREATE TABLE IF NOT EXISTS learning_requests (id TEXT PRIMARY KEY,student_id TEXT NOT NULL REFERENCES users(id),creator_id TEXT NOT NULL REFERENCES users(id),kind TEXT NOT NULL CHECK(kind IN ('tutoring','assignment_explanation','project_guidance')),description TEXT NOT NULL,budget_kobo INTEGER,quote_kobo INTEGER,status TEXT NOT NULL CHECK(status IN ('requested','quoted','accepted','in_progress','submitted','completed','rejected','cancelled','disputed')),creation_key TEXT NOT NULL,created_at TEXT NOT NULL,updated_at TEXT NOT NULL,UNIQUE(student_id,creation_key));",
     "CREATE TABLE IF NOT EXISTS learning_disputes (id TEXT PRIMARY KEY,request_id TEXT NOT NULL REFERENCES learning_requests(id),reporter_id TEXT NOT NULL REFERENCES users(id),reason TEXT NOT NULL,status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','resolved')),resolution TEXT,created_at TEXT NOT NULL,reviewed_at TEXT,reviewed_by TEXT REFERENCES users(id));",
@@ -149,6 +150,69 @@ export function createLearningServices({db,transaction,audit,error,requireVerifi
         if(change)audit(actor.id,'class.withdrawn',id);
         return {classId:id,enrolled:false,replayed:change===0,refundReviewRequested:Boolean(change&&row.price_kobo>0)};
       });
+    },
+    removeClassParticipant(actor,classId,studentId,reason){
+      const cls=classRow(actor,classId);
+      if(cls.host_id!==actor.id)throw error('FORBIDDEN',403);
+      if(!uuid.test(studentId)||studentId===actor.id)throw error('INVALID_PARTICIPANT',422);
+      const explanation=valText(reason,8,500,error,'INVALID_REASON');
+      return transaction(()=>{
+        const latest=db.prepare('SELECT status FROM interactive_classes WHERE id=?').get(classId);
+        if(!['scheduled','room_open'].includes(latest.status))throw error('CLASS_CLOSED',409);
+        const attendee=db.prepare('SELECT status FROM interactive_class_enrollments WHERE class_id=? AND student_id=?')
+          .get(classId,studentId);
+        if(!attendee)throw error('NOT_ENROLLED',404);
+        if(attendee.status==='withdrawn')return {classId,studentId,removed:true,replayed:true};
+        const cutoff=Math.ceil(now()/1000)+1;
+        db.prepare("UPDATE interactive_class_enrollments SET status='withdrawn',updated_at=? WHERE class_id=? AND student_id=? AND status='enrolled'")
+          .run(timestamp(),classId,studentId);
+        db.prepare("INSERT INTO learning_participant_removals(class_id,student_id,state,attempts,revoke_token_ts,reason,updated_at) VALUES(?,?,'pending',0,?,?,?) ON CONFLICT(class_id,student_id) DO UPDATE SET state='pending',revoke_token_ts=excluded.revoke_token_ts,reason=excluded.reason,updated_at=excluded.updated_at")
+          .run(classId,studentId,cutoff,explanation,timestamp());
+        notice(studentId,'class_participant_removed',classId,'The class host ended your enrollment. Contact support if you disagree.');
+        if(cls.price_kobo>0)refund('class',classId,studentId,'Host removed attendee from a paid class. Review charge, refund policy and provider settlement.');
+        audit(actor.id,'class.participant.removed',classId,{studentId});
+        return {classId,studentId,removed:true,replayed:false,providerRemovalQueued:true};
+      });
+    },
+    async removeClassParticipantProvider(actor,classId,studentId,roomService){
+      const cls=classRow(actor,classId);
+      if(cls.host_id!==actor.id)throw error('FORBIDDEN',403);
+      const row=db.prepare("SELECT revoke_token_ts,state FROM learning_participant_removals WHERE class_id=? AND student_id=?")
+        .get(classId,studentId);
+      if(!row)throw error('NOT_ENROLLED',404);
+      if(row.state==='done')return {providerRemoved:true,replayed:true};
+      if(!roomService||typeof roomService.removeParticipant!=='function')
+        throw error('LIVEKIT_ROOM_SERVICE_NOT_CONFIGURED',503);
+      await roomService.removeParticipant(cls.room_name,'student-'+studentId,{revokeTokenTs:row.revoke_token_ts});
+      return transaction(()=>{
+        db.prepare("UPDATE learning_participant_removals SET state='done',attempts=attempts+1,updated_at=? WHERE class_id=? AND student_id=?")
+          .run(timestamp(),classId,studentId);
+        audit(actor.id,'class.participant.provider_removed',classId,{studentId});
+        return {providerRemoved:true,replayed:false};
+      });
+    },
+    async drainParticipantRemovals(actor,roomService){
+      if(!actor||actor.role!=='admin'||actor.suspended)throw error('ADMIN_REQUIRED',403);
+      if(!roomService||typeof roomService.removeParticipant!=='function')
+        throw error('LIVEKIT_ROOM_SERVICE_NOT_CONFIGURED',503);
+      const jobs=db.prepare("SELECT r.class_id,r.student_id,r.revoke_token_ts,c.room_name FROM learning_participant_removals r JOIN interactive_classes c ON c.id=r.class_id WHERE r.state='pending' ORDER BY r.updated_at LIMIT 20").all();
+      let completed=0,failed=0;
+      for(const job of jobs){
+        try{
+          await roomService.removeParticipant(job.room_name,'student-'+job.student_id,{revokeTokenTs:job.revoke_token_ts});
+          transaction(()=>{
+            db.prepare("UPDATE learning_participant_removals SET state='done',attempts=attempts+1,updated_at=? WHERE class_id=? AND student_id=? AND state='pending'")
+              .run(timestamp(),job.class_id,job.student_id);
+            audit(actor.id,'class.participant.provider_removed',job.class_id,{studentId:job.student_id});
+          });
+          completed++;
+        }catch{
+          db.prepare("UPDATE learning_participant_removals SET attempts=attempts+1,updated_at=? WHERE class_id=? AND student_id=?")
+            .run(timestamp(),job.class_id,job.student_id);
+          failed++;
+        }
+      }
+      return {completed,failed,remaining:db.prepare("SELECT count(*) AS n FROM learning_participant_removals WHERE state='pending'").get().n};
     },
     preflightOpenClass(actor,id){
       const row=classRow(actor,id);
