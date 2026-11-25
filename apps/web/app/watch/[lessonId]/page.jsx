@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import {HostedLesson} from '../../HostedSocialWorkspace.jsx';
 import {notFound,redirect} from 'next/navigation';
 import {getLocalViewablePublishedLesson,getLocalPublicCreator,getLocalCourseLessons,isLocalMode} from '../../../lib/local-public.mjs';
 import ProtectedVideo from '../../ProtectedVideo.jsx';
@@ -9,7 +10,7 @@ import LessonComments from '../../lessons/[lessonId]/LessonComments.jsx';
 export const dynamic='force-dynamic';
 export default async function WatchLesson({params}){
  const {lessonId}=await params;
- if(!isLocalMode())return notFound();
+ if(!isLocalMode())return <HostedLesson lessonId={lessonId}/>;
  let lesson;
  try{lesson=await getLocalViewablePublishedLesson(lessonId);}
  catch(error){
