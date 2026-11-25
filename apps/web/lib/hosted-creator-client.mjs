@@ -105,10 +105,11 @@ export function readCheckoutResult(data){
  return {orderId:data.orderId,status:data.status};
 }
 export function readClassGrant(data,classId,now=Math.floor(Date.now()/1000)){
- if(data?.classId!==id(classId)||!['host','participant'].includes(data.role)||typeof data.token!=='string'||data.token.length>8192||! /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(data.token)||!Number.isSafeInteger(data.expiresAt)||data.expiresAt<=now||data.expiresAt>now+900)throw Error('INVALID_CLASS_GRANT');
+ if(data?.classId!==id(classId)||!['host','participant'].includes(data.role)||typeof data.token!=='string'||data.token.length>8192||! /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(data.token)||typeof data.expiresAt!=='string')throw Error('INVALID_CLASS_GRANT');
+ const expiry=Date.parse(data.expiresAt)/1000;if(!Number.isSafeInteger(expiry)||expiry<=now||expiry>now+900)throw Error('INVALID_CLASS_GRANT');
  const u=new URL(data.url);
  if(u.protocol!=='wss:'||!u.hostname.endsWith('.livekit.cloud')||u.username||u.password||u.port||u.pathname!=='/'||u.search||u.hash)throw Error('INVALID_CLASS_URL');
- return {url:u.origin,token:data.token,role:data.role,expiresAt:data.expiresAt};
+ return {url:u.origin,token:data.token,role:data.role,expiresAt:expiry};
 }
 export function readCommunityPosts(rows,courseId){
  if(!Array.isArray(rows)||rows.length>100)throw Error('INVALID_COMMUNITY_RESPONSE');
