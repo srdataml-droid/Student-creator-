@@ -36,3 +36,10 @@ test('authorized creator calls use in-memory bearer, refresh once, and never rep
  await assert.rejects(c.authorized('https://evil.test'),/UNKNOWN_CREATOR_OPERATION/);
  assert.equal(calls.length,3);
 });
+
+test('a changed refresh identity cannot write to another account',async()=>{
+ const calls=[];let now=1000;const c=createHostedBrowserAuth({now:()=>now,fetcher:async(url)=>{calls.push(url);return Response.json(url.endsWith('refresh')?{...session,userId:'22222222-2222-4222-8222-222222222222'}:session);}});
+ await c.signIn('x@example.com','private-password');now+=3600000;
+ await assert.rejects(c.authorized('setMessagePreference',{allowMessages:true}),{status:401});
+ assert.deepEqual(calls,['/api/hosted-auth/sign-in','/api/hosted-auth/refresh']);assert.equal(c.hasFreshSession(),false);
+});
