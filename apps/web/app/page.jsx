@@ -21,8 +21,6 @@ export default async function Home({searchParams}){
   <div className="feed-column">
    <h1 className="visually-hidden">Discover student creators</h1>
    <FeedExperience posts={posts} courses={courses} ready={ready}/>
-    </>}
-   </section>}
   </div>
   <aside className="creator-aside" aria-label="Discover more">
    <section className="aside-panel"><h2>Get started</h2><p>Join your campus community to follow creators, save posts and share your own work.</p><div className="home-rail-actions"><Link href="/join" className="creator-btn filled">Create account</Link><Link href="/sign-in" className="creator-btn outlined">Log in</Link></div></section>
