@@ -154,6 +154,14 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     await viewerPage.route('**/api/local/classes/'+roomId+'/room-token',route=>route.fulfill({
       status:200,contentType:'application/json',body:JSON.stringify({room:{role:'participant',url:'wss://example.invalid',token:'synthetic-participant-token'}})
     }));
+    // Simulated provider attendance UI; real signed-webhook ingestion is
+    // separately integration tested with raw-body HMAC verification in Node.
+    let mockRemoved=false;
+    await creatorPage.route('**/api/local/classes/'+roomId+'/attendance',route=>route.fulfill({
+      status:200,contentType:'application/json',body:JSON.stringify({
+        attendance:[{studentId:viewerId,providerEvents:1,enrollmentStatus:mockRemoved?'withdrawn':'enrolled'}]
+      })
+    }));
     await creatorPage.goto('/classes/'+roomId+'/room');
     await expect(creatorPage.getByRole('button',{name:'Join live class'})).toBeVisible();
     await creatorPage.getByRole('button',{name:'Join live class'}).click();
@@ -166,6 +174,12 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     await expect(viewerPage.getByText('Connected as a participant.',{exact:false})).toBeVisible();
     await expect(viewerPage.getByRole('button',{name:'Turn on microphone'})).toHaveCount(0);
     await expect(viewerPage.getByRole('button',{name:'Share screen'})).toHaveCount(0);
+    await expect(creatorPage.getByRole('button',{name:'Remove participant'})).toBeVisible();
+    await creatorPage.locator('#class-remove-'+viewerId).fill('Host removed the learner from this synthetic classroom session');
+    mockRemoved=true;
+    await creatorPage.getByRole('button',{name:'Remove participant'}).click();
+    await expect(creatorPage.getByText('Participant access revoked',{exact:false})).toBeVisible();
+    expect((await viewer.request.post('/api/local/classes/'+roomId+'/room-token',{data:{}})).status()).toBe(403);
     await viewerPage.getByRole('button',{name:'Leave class'}).click();
     await expect(viewerPage.getByRole('button',{name:'Join live class'})).toBeVisible();
     await creatorPage.getByRole('button',{name:'Leave class'}).click();
