@@ -74,7 +74,7 @@ function validateCommand(cmd,body,path,actorId){
      {_actor:actorId,_proposal_id:id,_note:body.note.trim()}:null;
   case 'week7_assign_staff_role':
   case 'week7_revoke_staff_role':
-   return UUID.test(body.userId)&&Object.hasOwn(GOVERNANCE_ROLES,body.role)?
+   return typeof body.userId==='string'&&UUID.test(body.userId)&&typeof body.role==='string'&&Object.keys(GOVERNANCE_ROLES).includes(body.role)?
      {_actor:actorId,_staff:body.userId,_role:body.role}:null;
   default:return null;
  }

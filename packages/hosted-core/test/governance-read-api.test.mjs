@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {createHostedGovernanceHandler} from '../src/governance-read-api.mjs';
 
 const staffId='99999999-9999-4999-8999-999999999999';
-const otherId='11111111-1111-4111-8111-111111111111';
+const otherId='49b89226-570e-4d53-a76a-64a2579a1276';
 const goodToken='e30.'+Buffer.from(JSON.stringify({sub:staffId,session_id:staffId,role:'authenticated',exp:Math.floor(Date.now()/1000)+3600})).toString('base64url')+'.signaturebase64';
 const env={
  APP_DATA_MODE:'hosted',STUDENT_CREATORS_GOVERNANCE_ENABLED:'true',STUDENT_CREATORS_ENVIRONMENT:'production',STUDENT_CREATORS_PUBLIC_REGISTRATION:'false',STUDENT_CREATORS_PAYSTACK_TEST_ENABLED:'false',
@@ -137,7 +137,7 @@ test('hosted operator changes only via scoped atomic RPC with verified actor ID'
  const mismatched=await post(['roles','assign'],{userId:otherId,role:'invented_owner'});
  assert.equal(mismatched.status,422);
  const grant=await post(['roles','assign'],{userId:otherId,role:'verification_reviewer'});
- assert.equal(grant.status,200);
+ assert.equal(grant.status,200,JSON.stringify({response:await grant.clone().json(),rpcPaths:x.calls.filter(c=>c.url.includes('/rpc/week7_')).map(c=>new URL(c.url).pathname)}));
  const retention=await post(['retention'],{dataset:'verification_evidence',days:30,
   rationale:'Propose evidence minimization pending legal and founder approval.'});
  assert.equal(retention.status,201);

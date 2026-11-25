@@ -1,13 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createHash,createHmac,randomUUID} from 'node:crypto';
-import {mkdtempSync,rmSync} from 'node:fs';
-import {tmpdir} from 'node:os';
-import {join} from 'node:path';
 import {createLiveKitRoomService} from '../src/livekit-room-service.mjs';
-import {openLocalStore} from '../src/store.mjs';
-import {createLocalHandler} from '../src/http.mjs';
-import {createClassTokenIssuer} from '../src/livekit-class-tokens.mjs';
 
 const API_KEY='server-key-week-six-2026';
 const SECRET='a-private-very-long-synthetic-signing-secret-for-tests';
@@ -71,83 +65,6 @@ test('raw webhook verification requires exact signed body, correct issuer, expir
  assert.throws(()=>service.verifyWebhook(data,'Bearer '+token.slice(0,10)),{code:'LIVEKIT_WEBHOOK_UNVERIFIED'});
 });
 
-test('signed LiveKit webhook alone can record verified attendance; paid and unverified participants denied',async()=>{
- const dir=mkdtempSync(join(tmpdir(),'wk06-livekit-webhook-'));
- const entitled=new Set(),events=[];
- const store=openLocalStore(join(dir,'app.sqlite'),{
-   paymentEntitlements:{hasActiveEntitlement:({buyerId,resourceKind,resourceId})=>entitled.has(buyerId+':'+resourceKind+':'+resourceId)}
- });
- const roomSvc=withGateway(async (url,opts)=>{events.push(url.split('/').at(-1));return Response.json({name:'ok'});});
- const handle=createLocalHandler(store,{liveKitRoomService:roomSvc,
-   classTokenIssuer:createClassTokenIssuer({url:'wss://student-live.example.invalid',apiKey:API_KEY,apiSecret:SECRET})});
- async function request(path,method='GET',body,token,headers={}){
-   const res=await handle(new Request('http://localhost:3000/api/local/'+path,{
-      method,
-      headers:{...(method==='POST'?{origin:'http://localhost:3000'}:{}),
-        ...(token?{cookie:'campus_local_session='+token}:{}),
-        ...(body!==undefined?{'content-type':'application/json'}:{}),...headers},
-      ...(body===undefined?{}:{body:typeof body==='string'?body:JSON.stringify(body)})}),path.split('/'));
-   return {status:res.status,data:await res.json()};
- }
- try{
-   store.bootstrapAdmin('admin@livekit.invalid','Admin Synthetic Password 2026');
-   const admin=store.login('admin@livekit.invalid','Admin Synthetic Password 2026');
-   const school=store.createInstitution(admin.user,'Streaming Test Campus');
-   const course=store.createCourse(admin.user,{institutionId:school.id,code:'W6123',title:'Night Streaming'});
-   const users=[];
-   for(let i=0;i<3;i++){
-     const name='student'+i+'@livekit.invalid',pw='Student Synthetic Password 2026';
-     const u=store.register({email:name,password:pw,institutionId:school.id});
-     store.verifyStudent(admin.user,u.id);
-     users.push(store.login(name,pw));
-   }
-   const [host,viewer,outsider]=users,starts=new Date(Date.now()+6*60000).toISOString(),ends=new Date(Date.now()+66*60000).toISOString();
-   const cls=await request('courses/'+course.id+'/classes','POST',{
-      title:'Validated LiveKit night session',description:'Synthetic two-person session',
-      startsAt:starts,endsAt:ends,capacity:3,priceKobo:20000,creationKey:'wk06-signed-provider-key-2026'
-   },host.token);
-   assert.equal(cls.status,201);
-   const id=cls.data.class.id;
-   assert.equal((await request('classes/'+id+'/enroll','POST',{},viewer.token)).status,200);
-   assert.equal((await request('classes/'+id+'/open','POST',{},outsider.token)).status,403);
-   // Provider cannot be created for an unauthorized host: only approved creator can open.
-   const opened=await request('classes/'+id+'/open','POST',{},host.token);
-   assert.equal(opened.status,200);
-   assert.deepEqual(events,['CreateRoom']);
-   assert.equal((await request('classes/'+id+'/room-token','POST',{},viewer.token)).status,402);
-   entitled.add(viewer.user.id+':class:'+id);
-   assert.equal((await request('classes/'+id+'/room-token','POST',{},viewer.token)).status,200);
-   const event={id:randomUUID(),event:'participant_joined',room:{name:'wk-class-'+id},
-     participant:{identity:'student-'+viewer.user.id}};
-   const raw=JSON.stringify(event),sig=signEvent(raw);
-   async function webhook(body,auth,mime='application/webhook+json'){
-     return request('livekit/webhook','POST',body,null,{'content-type':mime,'authorization':auth});
-   }
-   assert.equal((await webhook(raw,'invalid')).status,401);
-   assert.equal((await webhook(raw+' ',sig)).status,401);
-   assert.equal((await webhook(raw,sig,'application/json')).status,415);
-   const first=await webhook(raw,sig);
-   assert.equal(first.status,200);assert.equal(first.data.recorded,true);
-   const retry=await webhook(raw,sig);
-   assert.equal(retry.status,200);assert.equal(retry.data.replayed,true);
-   assert.equal((await request('classes/'+id+'/attendance','GET',undefined,host.token)).data.attendance.length,1);
-   // A signed event about an uninvolved student is not proof of course enrollment.
-   const forgedJoin=JSON.stringify({...event,id:randomUUID(),
-     participant:{identity:'student-'+outsider.user.id}});
-   assert.equal((await webhook(forgedJoin,signEvent(forgedJoin))).status,403);
-   entitled.delete(viewer.user.id+':class:'+id);
-   const afterRefund=JSON.stringify({...event,id:randomUUID()});
-   assert.equal((await webhook(afterRefund,signEvent(afterRefund))).status,402);
-   const cancel=await request('classes/'+id+'/cancel','POST',{reason:'Host canceled the class due to a connectivity issue'},host.token);
-   assert.equal(cancel.status,200);assert.equal(cancel.data.class.providerClosed,true);
-   assert.deepEqual(events,['CreateRoom','DeleteRoom']);
-   assert.equal((await request('classes/'+id+'/room-token','POST',{},host.token)).status,409);
-   const late=JSON.stringify({...event,id:randomUUID()});
-   const lateDelivery=await webhook(late,signEvent(late));
-   assert.equal(lateDelivery.status,200);
-   assert.equal(lateDelivery.data.ignored,true);
-   assert.equal(lateDelivery.data.reason,'CLASS_CLOSED');
-   // Closed-class delivery is authenticated before being ignored.
-   assert.equal((await webhook(late,'forged-provider-token')).status,401);
- }finally{store.close();rmSync(dir,{recursive:true,force:true});}
-});
+// The Week 6 local HTTP integration remains on PR #46. This hosted branch
+// does not import its SQLite handlers; hosted attendance integration is tested
+// by hosted-livekit-class.test.mjs and the hosted SQL contract.
