@@ -272,6 +272,9 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
         if(path==='me/learning-notifications'){
           if(!actor)return unauthorized();return responses({notifications:store.notifications(actor)});
         }
+        if(path==='admin/learning-disputes/pending-finalization'){
+          if(!actor)return unauthorized();return responses({requests:store.disputesReadyForDecision(actor)});
+        }
         if(path==='admin/learning-disputes'){
           if(!actor)return unauthorized();return responses({disputes:store.disputesForReview(actor)});
         }
