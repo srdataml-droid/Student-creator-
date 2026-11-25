@@ -430,13 +430,20 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
       }
       if(segments.length===3&&segments[0]==='classes'){
         const id=segments[1],action=segments[2];
-        if(['enroll','withdraw','open','finish','cancel','room-token'].includes(action)){
+        if(['enroll','withdraw','open','finish','cancel','remove-participant','room-token'].includes(action)){
           if(action==='cancel'){
             if(Object.keys(body).some(k=>k!=='reason'))return fail('UNEXPECTED_BODY',400);
             const result=store.cancelClass(actor,id,body.reason);
             let providerClosed=false;
             if(liveRooms)providerClosed=Boolean((await store.closeClassRoomProvider(actor,id,liveRooms).catch(()=>null))?.providerClosed);
             return responses({class:{...result,providerClosed}});
+          }
+          if(action==='remove-participant'){
+            if(Object.keys(body).some(k=>!['studentId','reason'].includes(k)))return fail('UNEXPECTED_BODY',400);
+            const result=store.removeClassParticipant(actor,id,body.studentId,body.reason);
+            let providerRemoved=false;
+            if(liveRooms)providerRemoved=Boolean((await store.removeClassParticipantProvider(actor,id,body.studentId,liveRooms).catch(()=>null))?.providerRemoved);
+            return responses({removal:{...result,providerRemoved}});
           }
           if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
           if(action==='enroll')return responses({enrollment:store.enrollClass(actor,id)});
@@ -508,6 +515,10 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
       if(path==='admin/learning-emails/drain'){
         if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
         return responses({delivery:await store.drainLearningEmailOutbox(actor,sendLearningEmail)});
+      }
+      if(path==='admin/learning-participant-removals/drain'){
+        if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
+        return responses({result:await store.drainParticipantRemovals(actor,liveRooms)});
       }
       if(path==='admin/learning-reminders/queue'){
         if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
