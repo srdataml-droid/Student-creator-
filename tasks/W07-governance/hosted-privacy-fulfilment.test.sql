@@ -40,5 +40,7 @@ BEGIN
  proposal:=(public.week7_propose_retention(p,'verification_evidence',30,'Synthetic proposal for independent review')->>'id')::uuid;
  r:=public.week7_recommend_retention(independent,proposal,'Synthetic review recommendation only');
  IF r->>'policyApproved'<>'false' OR r->>'automaticDeletion'<>'false' OR (SELECT state FROM public.governance_retention_proposals WHERE id=proposal)<>'proposed' THEN RAISE EXCEPTION 'Recommendation approved policy'; END IF;
+ BEGIN PERFORM public.week7_recommend_retention(independent,proposal,'Duplicate synthetic recommendation'); RAISE EXCEPTION 'Duplicate recommendation'; EXCEPTION WHEN unique_violation THEN NULL; END;
+ IF has_function_privilege('authenticated','public.week7_confirm_privacy_fulfilment(uuid,uuid,text)','EXECUTE') THEN RAISE EXCEPTION 'Client confirmation bypass'; END IF;
 END $$;
 ROLLBACK;

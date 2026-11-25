@@ -47,8 +47,8 @@ async function readCommandBody(request){
 }
 function commandFor(path){
  if(path==='privacy/fulfilment')return {name:'week7_privacy_fulfilment_queue',scope:'privacy.review',allowed:['limit']};
- if(/^privacy\/requests\/[0-9a-f-]{36}\/record-fulfilment$/i.test(path))return {name:'week7_record_privacy_fulfilment',scope:'privacy.review',allowed:['reference','summary']};
- if(/^privacy\/requests\/[0-9a-f-]{36}\/confirm-fulfilment$/i.test(path))return {name:'week7_confirm_privacy_fulfilment',scope:'privacy.review',allowed:['note']};
+ if(/^(?:privacy\/requests\/[0-9a-f-]{36}\/record-fulfilment|privacy\/fulfilment\/[0-9a-f-]{36}\/record)$/i.test(path))return {name:'week7_record_privacy_fulfilment',scope:'privacy.review',allowed:['reference','summary']};
+ if(/^(?:privacy\/requests\/[0-9a-f-]{36}\/confirm-fulfilment|privacy\/fulfilment\/[0-9a-f-]{36}\/confirm)$/i.test(path))return {name:'week7_confirm_privacy_fulfilment',scope:'privacy.review',allowed:['note']};
  if(/^retention\/[0-9a-f-]{36}\/recommend$/i.test(path))return {name:'week7_recommend_retention',scope:'retention.review',allowed:['reason']};
 
  if(path==='finance/access-reviews')return {name:'week7_paid_access_queue',scope:'finance.review',allowed:['limit']};
@@ -196,7 +196,7 @@ export function createHostedGovernanceHandler({getEnv=()=>process.env,fetcher=fe
          ACCESS_REVIEW_CONFLICT:[409,'ACCESS_REVIEW_CONFLICT'],
          COPYRIGHT_REVIEW_CONFLICT:[409,'COPYRIGHT_REVIEW_CONFLICT'],
          RETENTION_REVIEW_CONFLICT:[409,'RETENTION_REVIEW_CONFLICT'],
-         PRIVACY_REVIEW_CONFLICT:[409,'PRIVACY_REVIEW_CONFLICT'],
+         PRIVACY_REVIEW_CONFLICT:[409,'PRIVACY_REVIEW_CONFLICT'],PRIVACY_FULFILMENT_CONFLICT:[409,'PRIVACY_FULFILMENT_CONFLICT'],
          IDENTITY_REVIEW_CONFLICT:[409,'IDENTITY_REVIEW_CONFLICT'],
          IDENTITY_POLICY_REQUIRED:[403,'IDENTITY_POLICY_REQUIRED'],
          APPEAL_ALREADY_REVIEWED:[409,'APPEAL_ALREADY_REVIEWED'],
