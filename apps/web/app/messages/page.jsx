@@ -1,8 +1,10 @@
 'use client';
+import {useHostedAccount} from '../HostedAccountProvider.jsx';
+import {HostedInbox} from '../HostedSocialWorkspace.jsx';
 import Link from 'next/link';
 import {useEffect,useState} from 'react';
 import {api} from '../../lib/local-client.js';
-export default function Inbox(){
+function LocalInbox(){
  const [state,setState]=useState('loading'),[threads,setThreads]=useState([]),[attempt,setAttempt]=useState(0);
  useEffect(()=>{
   let active=true;setState('loading');
@@ -17,3 +19,5 @@ export default function Inbox(){
   </section>
  </main>;
 }
+
+export default function Inbox(props){const account=useHostedAccount();return account?<HostedInbox key={account.session.userId||account.session.state}/>:<LocalInbox {...props}/>;}

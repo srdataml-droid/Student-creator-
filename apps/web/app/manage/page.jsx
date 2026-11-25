@@ -1,8 +1,10 @@
 'use client';
+import {useHostedAccount} from '../HostedAccountProvider.jsx';
+import {HostedModeration} from '../HostedSocialWorkspace.jsx';
 import Link from 'next/link';
 import {useEffect,useState} from 'react';
 import {api,friendlyError} from '../../lib/local-client.js';
-export default function Manage(){
+function LocalManage(){
  const [user,setUser]=useState(null),[state,setState]=useState('loading'),[schools,setSchools]=useState([]),[courses,setCourses]=useState([]),[people,setPeople]=useState([]),[students,setStudents]=useState([]),[queue,setQueue]=useState([]),[reports,setReports]=useState([]),[communityReports,setCommunityReports]=useState([]),[commentReports,setCommentReports]=useState([]);
  const [schoolName,setSchoolName]=useState(''),[course,setCourse]=useState({institutionId:'',code:'',title:''}),[topic,setTopic]=useState({courseId:'',name:''}),[reasons,setReasons]=useState({});
  const [error,setError]=useState(''),[message,setMessage]=useState(''),[busy,setBusy]=useState(false);
@@ -62,3 +64,5 @@ export default function Manage(){
  </div></>}
  </main>;
 }
+
+export default function Manage(props){const account=useHostedAccount();return account?<HostedModeration key={account.session.userId||account.session.state}/>:<LocalManage {...props}/>;}
