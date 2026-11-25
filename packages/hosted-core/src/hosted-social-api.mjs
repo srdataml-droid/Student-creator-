@@ -32,6 +32,7 @@ function mapError(status,data){
 }
 function operation(name,input,actor){
  switch(name){
+ case 'myActivityDashboard':{const b=shape(input,['days']);const days=b.days??7;if(![7,28].includes(days))throw fault('INVALID_INPUT',422);return rpc('my_activity_dashboard',{_days:days});}
  case 'myPayouts':shape(input,[]);return rpc('creator_payout_request',{_action:'list'});
  case 'requestPayout':{const b=shape(input,['amountKobo','requestKey']);if(!Number.isSafeInteger(b.amountKobo)||b.amountKobo<1)throw fault('INVALID_INPUT',422);return rpc('creator_payout_request',{_action:'request',_amount:b.amountKobo,_key:key(b.requestKey)});}
  case 'cancelPayout':{const b=shape(input,['requestId']);return rpc('creator_payout_request',{_action:'cancel',_id:id(b.requestId)});}

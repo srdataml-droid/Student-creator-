@@ -244,6 +244,8 @@ jobs:
           psql -1 -v ON_ERROR_STOP=1 -f db/production/0011_media_source_quarantine.sql
           psql -1 -v ON_ERROR_STOP=1 -f db/production/0013_media_quarantine_recovery.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/media_source_quarantine.sql
+          psql -1 -v ON_ERROR_STOP=1 -f db/production/0014_activity_dashboard.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/activity_dashboard.sql
           psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-bookmarks.test.sql
 
       - name: Restore disposable PostgreSQL backup into isolated database
