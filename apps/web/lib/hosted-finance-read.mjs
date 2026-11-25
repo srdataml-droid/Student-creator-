@@ -12,7 +12,7 @@ export function financeReadConfig(env){
  try{if(!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(key)||key.length>4096)throw Error();const p=JSON.parse(Buffer.from(key.split('.')[1],'base64url').toString('utf8'));if(p.role==='anon'&&p.ref===REF)return c;}catch{}
  throw fail(503,'FINANCE_UNAVAILABLE');
 }
-export function createFinanceReadHandler({env=process.env,fetcher=fetch,config=()=>financeReadConfig(env)}={}){
+export function createFinanceReadHandler({env=process.env,fetcher=fetch,config=()=>financeReadConfig(env),lessonId=null}={}){
  return async function GET(request){
   try{
    if(request.method!=='GET')return response(405,{error:'METHOD_NOT_ALLOWED'});
@@ -32,6 +32,7 @@ export function createFinanceReadHandler({env=process.env,fetcher=fetch,config=(
    // Existing restrictive session RLS on the own-profile read denies a revoked session.
    const profile=await read('/rest/v1/student_profiles',{select:'user_id,suspended',user_id:'eq.'+user.id,limit:'1'});
    if(!Array.isArray(profile)||profile.length!==1||profile[0].user_id!==user.id||profile[0].suspended!==false)return response(403,{error:'ACCOUNT_UNAVAILABLE'});
+   if(lessonId!==null){if(!UUID.test(lessonId))return response(404,{error:'CONTENT_UNAVAILABLE'});const rows=await read('/rest/v1/listings',{select:'content_id,price_kobo,currency,state',content_id:'eq.'+lessonId,state:'eq.active',limit:'2'});if(!Array.isArray(rows)||rows.length!==1||rows[0].content_id!==lessonId||rows[0].state!=='active'||rows[0].currency!=='NGN'||!Number.isSafeInteger(rows[0].price_kobo)||rows[0].price_kobo<20000)return response(404,{error:'CONTENT_UNAVAILABLE'});return response(200,{priceKobo:rows[0].price_kobo,currency:'NGN'});}
    const [orders,entitlements]=await Promise.all([
     read('/rest/v1/orders',{select:'id,buyer_id,content_id,amount_kobo,currency,environment,status,created_at',buyer_id:'eq.'+user.id,order:'created_at.desc,id.desc',limit:'101'}),
     read('/rest/v1/entitlements',{select:'id,buyer_id,content_id,order_id,state,expires_at',buyer_id:'eq.'+user.id,limit:'1001'})
