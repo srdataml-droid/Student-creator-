@@ -1,6 +1,6 @@
 /** Browser API helper. Cookies remain HttpOnly; no session tokens are exposed to JavaScript. */
-export async function api(path,{method='GET',body}={}){
-  const response=await fetch(`/api/local/${path}`,{method,credentials:'same-origin',cache:'no-store',headers:{...(body!==undefined?{'content-type':'application/json'}:{})},...(body!==undefined?{body:JSON.stringify(body)}:{})});
+export async function api(path,{method='GET',body,signal}={}){
+  const response=await fetch(`/api/local/${path}`,{method,credentials:'same-origin',cache:'no-store',signal,headers:{...(body!==undefined?{'content-type':'application/json'}:{})},...(body!==undefined?{body:JSON.stringify(body)}:{})});
   const data=await response.json().catch(()=>({error:'INVALID_SERVER_RESPONSE'}));
   if(!response.ok)throw Object.assign(new Error(data?.error||'REQUEST_FAILED'),{status:response.status});
   return data;

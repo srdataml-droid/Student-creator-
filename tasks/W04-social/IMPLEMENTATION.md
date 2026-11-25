@@ -76,3 +76,5 @@ Added POST /api/social/[operation], explicitly gated by hosted staging approval,
 
 ## Twenty-second increment: hosted like parity
 Previous exact head 95758a53 passed all five jobs in run 45534377067. Found remaining direct like write grant could bypass hourly local quota. Replace it with current-session, current-student, view-aware and audited RPC; 60 new likes per hour including unlike/re-like, own unlike remains available. Adapter uses the RPC and adds own likes/follow status reads. Disposable SQL negative tests added. No live environment changes.
+## Twenty-third increment: conversation UI privacy and delivery
+Keyed conversation component remounts on peer change, aborts prior requests on unmount, filters results to exact pair, clears history on session/eligibility loss, serializes polling, and acknowledges inbound rendered history in bounded batches only while document is visible. Uses returned send result instead of a second GET; no implicit retry of send. Pure state tests added. Existing local UI remains operational; actual hosted browser sign-in not yet connected. Exact-head CI pending.
