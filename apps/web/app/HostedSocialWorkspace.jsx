@@ -47,13 +47,12 @@ function Player({lessonId}){
   const fail=()=>{if(cancelled)return;setPlayerError('Playback stopped. Request a fresh playback grant to try again.');setGrant(null);};
   const timer=setTimeout(()=>{if(!cancelled){stop();setGrant(null);}},Math.max(0,grant.expiresAt*1000-Date.now()));
   async function connect(){
-   if(element.canPlayType('application/vnd.apple.mpegurl')){element.src=grant.url;return;}
    const {default:Hls}=await import('hls.js');
    if(cancelled)return;
-   if(!Hls.isSupported())throw Error('HLS_UNSUPPORTED');
+   if(!Hls.isSupported()){if(element.canPlayType('application/vnd.apple.mpegurl')){element.src=grant.url;return;}throw Error('HLS_UNSUPPORTED');}
    hls=new Hls({enableWorker:false,capLevelToPlayerSize:true,maxBufferLength:25});
    hls.on(Hls.Events.ERROR,(_event,data)=>{if(data.fatal)fail();});
-   hls.loadSource(grant.url);hls.attachMedia(element);
+   hls.on(Hls.Events.MEDIA_ATTACHED,()=>{if(!cancelled)hls.loadSource(grant.url);});hls.attachMedia(element);
   }
   void connect().catch(fail);
   return()=>{cancelled=true;clearTimeout(timer);stop();try{localStorage.setItem(storageKey,String(Math.floor(position.current)));}catch{}};
