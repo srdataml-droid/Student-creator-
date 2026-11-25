@@ -7,6 +7,9 @@ export default function HostedAccountProvider({hosted,children}){
  const client=useMemo(()=>hosted?createHostedBrowserAuth():null,[hosted]);
  const [session,setSession]=useState({state:'checking',role:null});
  const [notice,setNotice]=useState('');
+ const [accountState,setAccountState]=useState(null);
+ const actor=session.userId;
+ useEffect(()=>{let active=true;setAccountState(null);if(client&&actor)client.authorized('accountState',{}).then(r=>{if(active&&r.userId===actor)setAccountState(r);}).catch(e=>{if(active&&e.status===401)setSession({state:'guest',role:null});});return()=>{active=false;};},[client,actor]);
  useEffect(()=>{
   if(!client)return;
   let active=true;
@@ -20,7 +23,9 @@ export default function HostedAccountProvider({hosted,children}){
   document.addEventListener('visibilitychange',onVisible);
   return()=>{active=false;document.removeEventListener('visibilitychange',onVisible);};
  },[client]);
- const value=client?{session,notice,
+ const ownState=accountState?.userId===actor?accountState:null;
+ const value=client?{session:{...session,role:ownState?.admin?'admin':ownState?.student?'student':null},notice,accountState:ownState,
+  async reloadAccount(){const r=await client.authorized('accountState',{});if(r.userId!==actor)throw Error('ACCOUNT_CHANGED');setAccountState(r);return r;},
   async signIn(email,password){const result=await client.signIn(email,password);setNotice('');setSession({state:'signed-in',role:null,userId:result.userId});},
   invite:code=>client.invite(code),recover:email=>client.recover(email),
   async creatorRequest(operation,input){try{return await client.authorized(operation,input);}catch(e){if(e.status===401)setSession({state:'guest',role:null});throw e;}},
