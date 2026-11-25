@@ -32,13 +32,16 @@ public final class CatalogTransport {
         }
     }
     URI coursesUri() { return origin.resolve("/api/courses"); }
-    URI lessonsUri(String courseId) {
+    URI lessonsUri(String courseId) { return lessonsUri(courseId, 0); }
+    URI lessonsUri(String courseId, int offset) {
+        if (offset < 0 || offset > 1000 || offset % 20 != 0) throw new IllegalArgumentException("Invalid page offset");
         if (courseId == null || !ID.matcher(courseId).matches())
             throw new IllegalArgumentException("Invalid course identifier");
-        return origin.resolve("/api/lessons?courseId=" + courseId + "&limit=20");
+        return origin.resolve("/api/lessons?courseId=" + courseId + "&limit=20" + (offset == 0 ? "" : "&offset=" + offset));
     }
     public String courses() throws IOException { return read(coursesUri()); }
-    public String lessons(String id) throws IOException { return read(lessonsUri(id)); }
+    public String lessons(String id) throws IOException { return lessons(id, 0); }
+    public String lessons(String id, int offset) throws IOException { return read(lessonsUri(id, offset)); }
     private String read(URI destination) throws IOException {
         HttpURLConnection c = connections.open(destination);
         try {

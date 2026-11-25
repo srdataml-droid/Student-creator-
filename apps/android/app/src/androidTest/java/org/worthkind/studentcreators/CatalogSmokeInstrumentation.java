@@ -36,6 +36,15 @@ public final class CatalogSmokeInstrumentation extends Instrumentation {
                 CatalogPreview.parse("{\"state\":\"not_configured\",\"courses\":[]}",null);
                 throw new AssertionError("Unconfigured response accepted");
             } catch (org.json.JSONException expected) {}
+            JSONArray full = new JSONArray();
+            for (int i=0;i<20;i++) full.put(new JSONObject(lesson.toString()).put("id",
+                String.format(java.util.Locale.ROOT,"%08x-1234-4234-8234-123456789abc",i+1)));
+            JSONObject paged = new JSONObject().put("items",full).put("nextOffset",20);
+            CatalogPreview.Page first = CatalogPreview.parsePage(paged.toString(),courseId,0);
+            check(first.rows.size()==20 && Integer.valueOf(20).equals(first.nextOffset));
+            check(CatalogPreview.parsePage(paged.put("nextOffset",0).toString(),courseId,0).nextOffset==null);
+            check(CatalogPreview.parsePage(paged.put("nextOffset","https://example.invalid").toString(),courseId,0).nextOffset==null);
+            check(CatalogPreview.parsePage(paged.put("nextOffset",1020).toString(),courseId,1000).nextOffset==null);
             Intent intent = new Intent(getTargetContext(), MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             activity = startActivitySync(intent);
             waitForIdleSync();
@@ -48,6 +57,7 @@ public final class CatalogSmokeInstrumentation extends Instrumentation {
                 check(status.getText().toString().contains("no approved catalog connection"));
                 check(list.getAdapter() == null || list.getAdapter().getCount() == 0);
                 check(screen.findViewById(R.id.catalog_retry).getVisibility() == android.view.View.GONE);
+                check(screen.findViewById(R.id.catalog_more).getVisibility() == android.view.View.GONE);
             });
             results.putString("stream","\nANDROID_CATALOG_SMOKE_PASS\n");
             finish(Activity.RESULT_OK, results);

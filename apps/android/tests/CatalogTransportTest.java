@@ -45,6 +45,9 @@ public final class CatalogTransportTest {
         equal(transport.coursesUri().toString(), "https://catalog.example.invalid/api/courses");
         equal(transport.lessonsUri("12345678-1234-4234-8234-123456789abc").toString(),
             "https://catalog.example.invalid/api/lessons?courseId=12345678-1234-4234-8234-123456789abc&limit=20");
+        equal(transport.lessonsUri("12345678-1234-4234-8234-123456789abc", 20).toString(),
+            "https://catalog.example.invalid/api/lessons?courseId=12345678-1234-4234-8234-123456789abc&limit=20&offset=20");
+        for (int offset : new int[]{-20,1,1020}) rejects(() -> transport.lessonsUri("12345678-1234-4234-8234-123456789abc", offset));
         for (String origin : new String[]{"", "http://catalog.example.invalid", "https://user@catalog.example.invalid",
                 "https://catalog.example.invalid:444", "https://catalog.example.invalid/path",
                 "https://catalog.example.invalid?token=x", "https://catalog.example.invalid#fragment", "https://localhost"})

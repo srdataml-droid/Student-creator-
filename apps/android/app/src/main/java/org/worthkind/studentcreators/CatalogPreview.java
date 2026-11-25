@@ -25,7 +25,14 @@ final class CatalogPreview {
         String text = ((String)value).trim();
         return text.length() > limit ? text.substring(0, limit) : text;
     }
-    static ArrayList<Row> parse(String body, String course) throws JSONException {
+    static final class Page {
+        final ArrayList<Row> rows;
+        final Integer nextOffset;
+        Page(ArrayList<Row> rows, Integer nextOffset) { this.rows = rows; this.nextOffset = nextOffset; }
+    }
+    static ArrayList<Row> parse(String body, String course) throws JSONException { return parsePage(body, course, 0).rows; }
+    static Page parsePage(String body, String course, int offset) throws JSONException {
+        if (offset < 0 || offset > 1000 || offset % 20 != 0 || (course == null && offset != 0)) throw new JSONException("Invalid offset");
         JSONObject response = new JSONObject(body);
         if (course == null && !"ready".equals(response.optString("state"))) throw new JSONException("Catalog unavailable");
         if (course != null && !ID.matcher(course).matches()) throw new JSONException("Invalid course");
@@ -36,11 +43,17 @@ final class CatalogPreview {
             JSONObject item = input.optJSONObject(i);
             if (item == null) continue;
             String id = text(item, "id", 37), title = text(item, "title", 160);
-            if (!ID.matcher(id).matches() || title.isEmpty() || !seen.add(id)) continue;
+            if (!ID.matcher(id).matches() || title.isEmpty()) continue;
             if (course != null && !course.equals(text(item, "courseId", 37))) continue;
+            if (!seen.add(id)) continue;
             rows.add(new Row(id, title, course == null ? text(item, "code", 32) : "",
                 course == null ? "" : text(item, "previewText", 800)));
         }
-        return rows;
+        Integer next = null;
+        if (course != null && input.length() == 20 && offset < 1000) {
+            Object raw = response.opt("nextOffset");
+            if ((raw instanceof Integer || raw instanceof Long) && ((Number) raw).longValue() == offset + 20L) next = offset + 20;
+        }
+        return new Page(rows, next);
     }
 }

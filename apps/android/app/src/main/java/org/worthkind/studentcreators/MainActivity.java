@@ -4,7 +4,6 @@ import android.app.Activity;
 import android.os.Bundle;
 import android.os.Build;
 import android.view.View;
-import android.view.WindowInsets;
 import android.widget.ArrayAdapter;
 import android.widget.Button;
 import android.widget.LinearLayout;
@@ -21,7 +20,9 @@ public final class MainActivity extends Activity {
     private Future<?> pending;
     private int generation;
     private TextView heading, status;
-    private Button retry, back;
+    private Button retry, back, more;
+    private Integer nextOffset;
+    private final ArrayList<CatalogPreview.Row> displayed = new ArrayList<>();
     private ListView list;
     private String selectedCourse;
     private String selectedTitle;
@@ -50,12 +51,18 @@ public final class MainActivity extends Activity {
         retry = new Button(this);
         retry.setId(R.id.catalog_retry);
         retry.setText("Retry");
-        retry.setOnClickListener(v -> load());
+        retry.setOnClickListener(v -> loadPage(displayed.isEmpty() ? 0 : (nextOffset == null ? 0 : nextOffset), !displayed.isEmpty() && nextOffset != null));
         layout.addView(retry);
         back = new Button(this);
         back.setText("All courses");
         back.setOnClickListener(v -> { selectedCourse = null; selectedTitle = null; load(); });
         layout.addView(back);
+        more = new Button(this);
+        more.setId(R.id.catalog_more);
+        more.setText("Load more previews");
+        more.setVisibility(View.GONE);
+        more.setOnClickListener(v -> { if (nextOffset != null) loadPage(nextOffset, true); });
+        layout.addView(more);
         list = new ListView(this);
         list.setId(R.id.catalog_list);
         layout.addView(list, new LinearLayout.LayoutParams(-1, 0, 1));
@@ -79,11 +86,13 @@ public final class MainActivity extends Activity {
         out.putString("course", selectedCourse);
         out.putString("title", selectedTitle);
     }
-    private void load() {
+    private void load() { displayed.clear(); nextOffset = null; loadPage(0, false); }
+    private void loadPage(int offset, boolean append) {
         int attempt = ++generation;
         if (pending != null) pending.cancel(true);
-        list.setAdapter(null);
+        if (!append) list.setAdapter(null);
         retry.setVisibility(View.GONE);
+        more.setVisibility(View.GONE);
         back.setVisibility(selectedCourse == null ? View.GONE : View.VISIBLE);
         heading.setText(selectedCourse == null ? "Explore student courses" : selectedTitle);
         if (transport == null) {
@@ -94,23 +103,31 @@ public final class MainActivity extends Activity {
         String course = selectedCourse;
         pending = executor.submit(() -> {
             try {
-                ArrayList<CatalogPreview.Row> rows = CatalogPreview.parse(
-                    course == null ? transport.courses() : transport.lessons(course), course);
-                ArrayList<String> labels = new ArrayList<>();
-                for (CatalogPreview.Row row : rows) labels.add(row.label());
+                CatalogPreview.Page page = CatalogPreview.parsePage(
+                    course == null ? transport.courses() : transport.lessons(course, offset), course, offset);
                 runOnUiThread(() -> {
                     if (generation != attempt || isFinishing()) return;
+                    int previousSize = displayed.size();
+                    if (!append) displayed.clear();
+                    java.util.HashSet<String> seen = new java.util.HashSet<>();
+                    for (CatalogPreview.Row row : displayed) seen.add(row.id);
+                    for (CatalogPreview.Row row : page.rows) if (seen.add(row.id)) displayed.add(row);
+                    nextOffset = page.nextOffset;
+                    ArrayList<String> labels = new ArrayList<>();
+                    for (CatalogPreview.Row row : displayed) labels.add(row.label());
+                    more.setVisibility(nextOffset == null ? View.GONE : View.VISIBLE);
                     status.setText(labels.isEmpty() ? "No public previews available." :
                         (course == null ? "Select a course to explore original student work." : "Public previews only."));
                     list.setAdapter(new ArrayAdapter<>(this, android.R.layout.simple_list_item_1, labels));
+                    if (append && labels.size() > previousSize) list.setSelection(previousSize);
                     list.setOnItemClickListener((parent, view, position, id) -> {
-                        if (course == null) { selectedCourse = rows.get(position).id; selectedTitle = rows.get(position).title; load(); }
+                        if (course == null) { selectedCourse = displayed.get(position).id; selectedTitle = displayed.get(position).title; load(); }
                     });
                 });
             } catch (Exception e) {
                 runOnUiThread(() -> {
                     if (generation != attempt || isFinishing()) return;
-                    status.setText("Unable to load the catalog. Check your connection and retry.");
+                    status.setText(append ? "Unable to load more previews. Existing results remain available; retry when connected." : "Unable to load the catalog. Check your connection and retry.");
                     retry.setVisibility(View.VISIBLE);
                 });
             }

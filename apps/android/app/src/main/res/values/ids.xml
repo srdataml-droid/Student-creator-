@@ -4,4 +4,5 @@
   <item name="catalog_status" type="id"/>
   <item name="catalog_list" type="id"/>
   <item name="catalog_retry" type="id"/>
+  <item name="catalog_more" type="id"/>
 </resources>
