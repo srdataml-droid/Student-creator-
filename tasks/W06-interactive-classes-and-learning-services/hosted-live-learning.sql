@@ -208,7 +208,7 @@ GRANT SELECT(id,institution_id,course_id,host_id,title,description,starts_at,end
 REVOKE SELECT ON public.personal_learning_requests FROM authenticated;
 GRANT SELECT(id,institution_id,student_id,creator_id,kind,description,budget_kobo,quote_kobo,state,created_at,updated_at) ON public.personal_learning_requests TO authenticated;
 ALTER TABLE public.interactive_classes ADD COLUMN provider_ready boolean NOT NULL DEFAULT false;
-ALTER TABLE public.learning_room_closures ADD COLUMN lease_id uuid, ADD COLUMN lease_until timestamptz, ADD COLUMN next_attempt_at timestamptz NOT NULL DEFAULT now();
+ALTER TABLE public.learning_room_closures ADD COLUMN first_deleted_at timestamptz, ADD COLUMN lease_id uuid, ADD COLUMN lease_until timestamptz, ADD COLUMN next_attempt_at timestamptz NOT NULL DEFAULT now();
 ALTER TABLE public.learning_participant_removals ADD COLUMN lease_id uuid, ADD COLUMN lease_until timestamptz, ADD COLUMN next_attempt_at timestamptz NOT NULL DEFAULT now();
 -- Class scheduling and private learning services. Free lifecycle only until a
 -- separate real-payment entitlement contract is approved; never accept test money.
@@ -217,7 +217,7 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE actor uuid:=auth.uid(); campus uuid; cid uuid; peer uuid; c public.interactive_classes%ROWTYPE; s public.personal_learning_requests%ROWTYPE; enrolled integer; st timestamptz; en timestamptz; cap integer; title_text text; description_text text; key_text text; reason_text text; price bigint; state_text text; target uuid; out jsonb;
 BEGIN
  IF NOT student_creators_private.current_session_active() OR NOT public.current_student_eligible() THEN RAISE EXCEPTION 'STUDENT_REQUIRED' USING ERRCODE='42501'; END IF;
- IF jsonb_typeof(_input)<>'object' OR length(_input::text)>8192 THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='22023'; END IF;
+ IF jsonb_typeof(_input) IS DISTINCT FROM 'object' OR length(_input::text)>8192 THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='22023'; END IF;
  SELECT institution_id INTO campus FROM public.student_profiles WHERE user_id=actor;
  IF campus IS NULL OR NOT EXISTS(SELECT 1 FROM public.institutions WHERE id=campus AND active) THEN RAISE EXCEPTION 'STUDENT_REQUIRED' USING ERRCODE='42501'; END IF;
  IF _action='create_class' THEN
@@ -337,7 +337,7 @@ REVOKE ALL ON FUNCTION public.mark_hosted_class_ready(uuid,uuid) FROM PUBLIC,ano
 GRANT EXECUTE ON FUNCTION public.mark_hosted_class_ready(uuid,uuid) TO service_role;
 CREATE FUNCTION public.record_hosted_class_presence(_event text,_class uuid,_actor uuid,_kind text) RETURNS boolean LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 BEGIN
- IF _event IS NULL OR length(_event) NOT BETWEEN 8 AND 128 OR _kind NOT IN ('joined','left') OR public.authorized_hosted_class_room(_actor,_class) IS NULL THEN RETURN false; END IF;
+ IF _event IS NULL OR length(_event) NOT BETWEEN 8 AND 128 OR _kind IS NULL OR _kind NOT IN ('joined','left') OR public.authorized_hosted_class_room(_actor,_class) IS NULL THEN RETURN false; END IF;
  INSERT INTO public.interactive_class_presence(provider_event_id,class_id,user_id,kind) VALUES(_event,_class,_actor,_kind) ON CONFLICT(provider_event_id) DO NOTHING; RETURN FOUND;
 END $$;
 REVOKE ALL ON FUNCTION public.record_hosted_class_presence(text,uuid,uuid,text) FROM PUBLIC,anon,authenticated;
@@ -367,7 +367,7 @@ CREATE FUNCTION public.finish_hosted_learning_cleanup(_class uuid,_student uuid,
 BEGIN
  IF _student IS NULL THEN
   -- Two successful deletes, separated by the join-token TTL, close a race with old join tokens.
-  UPDATE public.learning_room_closures SET state=CASE WHEN _success AND attempts>=2 AND updated_at<=now()-interval '120 seconds' THEN 'done' ELSE 'pending' END,next_attempt_at=now()+CASE WHEN _success THEN interval '125 seconds' ELSE interval '30 seconds' END,lease_id=NULL,lease_until=NULL WHERE class_id=_class AND state='pending' AND lease_id=_lease AND lease_until>now();
+  UPDATE public.learning_room_closures SET state=CASE WHEN _success AND first_deleted_at<=now()-interval '120 seconds' THEN 'done' ELSE 'pending' END,first_deleted_at=CASE WHEN _success THEN coalesce(first_deleted_at,now()) ELSE first_deleted_at END,next_attempt_at=now()+CASE WHEN _success THEN interval '125 seconds' ELSE interval '30 seconds' END,lease_id=NULL,lease_until=NULL WHERE class_id=_class AND state='pending' AND lease_id=_lease AND lease_until>now();
  ELSE
   UPDATE public.learning_participant_removals SET state=CASE WHEN _success THEN 'done' ELSE 'pending' END,next_attempt_at=now()+interval '30 seconds',lease_id=NULL,lease_until=NULL WHERE class_id=_class AND student_id=_student AND state='pending' AND lease_id=_lease AND lease_until>now();
  END IF;

@@ -91,6 +91,39 @@ function operation(name,input,actor){
  case 'like':case 'unlike':{
   const b=shape(input,['contentId']);return rpc('social_like_action',{_content:id(b.contentId),_enabled:name==='like'});
  }
+ case 'classes':{
+  const b=shape(input,['courseId','limit']);return select('interactive_classes','id,institution_id,course_id,host_id,title,description,starts_at,ends_at,capacity,price_kobo,currency,status',{...(b.courseId?{course_id:'eq.'+id(b.courseId)}:{}),order:'starts_at.asc,id.asc',limit:String(integer(b.limit,100,50))});
+ }
+ case 'createClass':{
+  const b=shape(input,['courseId','startsAt','endsAt','capacity','title','description','creationKey','priceKobo']);
+  if(b.priceKobo!==undefined&&b.priceKobo!==0)throw fault('INVALID_INPUT',422);
+  return rpc('hosted_learning_action',{_action:'create_class',_input:{courseId:id(b.courseId),startsAt:string(b.startsAt,20,35),endsAt:string(b.endsAt,20,35),capacity:integer(b.capacity,50,12),title:string(b.title,5,120),description:string(b.description??'',0,1200),creationKey:key(b.creationKey),priceKobo:0}});
+ }
+ case 'enrollClass':case 'withdrawClass':case 'openClass':case 'completeClass':{
+  const b=shape(input,['classId']);return rpc('hosted_learning_action',{_action:{enrollClass:'enroll',withdrawClass:'withdraw',openClass:'open',completeClass:'complete'}[name],_input:{classId:id(b.classId)}});
+ }
+ case 'cancelClass':case 'removeClassParticipant':{
+  const b=shape(input,name==='cancelClass'?['classId','reason']:['classId','studentId','reason']);
+  return rpc('hosted_learning_action',{_action:name==='cancelClass'?'cancel':'remove_participant',_input:{classId:id(b.classId),reason:string(b.reason,8,500),...(name==='removeClassParticipant'?{studentId:id(b.studentId)}:{})}});
+ }
+ case 'classEnrollments':case 'classAttendance':{
+  const b=shape(input,['classId','limit']);return select(name==='classEnrollments'?'interactive_class_enrollments':'interactive_class_presence',name==='classEnrollments'?'class_id,student_id,state,created_at,updated_at':'class_id,user_id,kind,created_at',{class_id:'eq.'+id(b.classId),order:'created_at.desc',limit:String(integer(b.limit,100,50))});
+ }
+ case 'learningRequests':{
+  const b=shape(input,['limit']);return select('personal_learning_requests','id,institution_id,student_id,creator_id,kind,description,budget_kobo,quote_kobo,state,created_at,updated_at',{order:'created_at.desc,id.desc',limit:String(integer(b.limit,100,50))});
+ }
+ case 'requestHelp':{
+  const b=shape(input,['creatorId','kind','description','budgetKobo','creationKey']);if(b.budgetKobo!==undefined&&(!Number.isSafeInteger(b.budgetKobo)||b.budgetKobo<0||b.budgetKobo>1000000000))throw fault('INVALID_INPUT',422);
+  return rpc('hosted_learning_action',{_action:'request_help',_input:{creatorId:id(b.creatorId),kind:choice(b.kind,['tutoring','assignment_explanation','project_guidance']),description:string(b.description,20,2000),budgetKobo:b.budgetKobo??0,creationKey:key(b.creationKey)}});
+ }
+ case 'quoteHelp':case 'acceptHelp':{
+  const b=shape(input,['requestId','quoteKobo']);if(!Number.isSafeInteger(b.quoteKobo)||b.quoteKobo<0||b.quoteKobo>1000000000)throw fault('INVALID_INPUT',422);
+  return rpc('hosted_learning_action',{_action:name==='quoteHelp'?'quote_help':'accept_help',_input:{requestId:id(b.requestId),quoteKobo:b.quoteKobo}});
+ }
+ case 'startHelp':case 'submitHelp':case 'completeHelp':case 'cancelHelp':case 'disputeHelp':{
+  const b=shape(input,name==='disputeHelp'?['requestId','reason']:['requestId']);return rpc('hosted_learning_action',{_action:{startHelp:'start_help',submitHelp:'submit_help',completeHelp:'complete_help',cancelHelp:'cancel_help',disputeHelp:'dispute_help'}[name],_input:{requestId:id(b.requestId),...(name==='disputeHelp'?{reason:string(b.reason,10,1000)}:{})}});
+ }
+ case 'learningNotifications':{const b=shape(input,['limit']);return select('learning_notifications','id,kind,resource_id,body,created_at,seen_at',{order:'created_at.desc,id.desc',limit:String(integer(b.limit,100,50))});}
  case 'notifications':{
   const b=shape(input,['limit']);return select('social_notifications','id,kind,target_id,created_at,read_at',{order:'created_at.desc,id.desc',limit:String(integer(b.limit,100,100))});
  }
