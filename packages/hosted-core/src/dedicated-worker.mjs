@@ -3,6 +3,7 @@ import {buildHostedOperationsJobs,runHostedOperations} from './hosted-operations
 import {readDedicatedSupabaseRuntimeConfig} from '../../content-core/src/supabase-runtime-config.mjs';
 import {createPrivateIdentityProvider} from './private-identity-api.mjs';
 import {createClamdIdentityScanner,processNextIdentityScan} from './private-identity-scanner.mjs';
+import {buildMediaSourceWorker} from './live-media-source.mjs';
 const unavailable=()=>new Error('DEDICATED_WORKER_CONFIGURATION_UNAVAILABLE');
 export function buildDedicatedWorkerJobs(env=process.env,fetcher=fetch,{operationsFactory=buildHostedOperationsJobs,providerFactory=createPrivateIdentityProvider,scannerFactory=createClamdIdentityScanner,scan=processNextIdentityScan}={}){
  if(env.STUDENT_CREATORS_BACKGROUND_WORKER_ENABLED!=='true'||env.STUDENT_CREATORS_DEDICATED_WORKER_ENABLED!=='true')throw unavailable();
@@ -22,6 +23,7 @@ export function buildDedicatedWorkerJobs(env=process.env,fetcher=fetch,{operatio
    throw unavailable();
   }});
  }
+ if(env.STUDENT_CREATORS_MEDIA_SOURCE_WORKER_ENABLED==='true'){const run=buildMediaSourceWorker({env,fetcher});jobs.push({name:'mediaSource',run});}
  if(!jobs.length)throw unavailable();
  return jobs;
 }

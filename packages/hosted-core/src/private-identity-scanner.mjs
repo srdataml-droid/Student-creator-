@@ -27,16 +27,16 @@ function clamdExchange(socketPath,payload,timeoutMs){
   socket.once('close',()=>finish(invalid()));
  });
 }
-export function createClamdIdentityScanner({socketPath,timeoutMs=20000}={}){
+export function createClamdIdentityScanner({socketPath,timeoutMs=20000,maxBytes=IDENTITY_MAX_BYTES}={}){
  if(typeof socketPath!=='string'||!isAbsolute(socketPath)||socketPath.includes('\0')||
- !Number.isSafeInteger(timeoutMs)||timeoutMs<100||timeoutMs>20000)throw invalid();
+ !Number.isSafeInteger(maxBytes)||maxBytes<8||maxBytes>104857600||!Number.isSafeInteger(timeoutMs)||timeoutMs<100||timeoutMs>(maxBytes>IDENTITY_MAX_BYTES?90000:20000))throw invalid();
  return {
   async version(){
    const v=await clamdExchange(socketPath,Buffer.from('zVERSION\0'),timeoutMs);
    if(!/^ClamAV [\x20-\x7e]{1,112}$/.test(v)||v.length>120)throw invalid();return v;
   },
   async scan(bytes){
-   if(!Buffer.isBuffer(bytes)||bytes.length<8||bytes.length>IDENTITY_MAX_BYTES)throw invalid();
+   if(!Buffer.isBuffer(bytes)||bytes.length<8||bytes.length>maxBytes)throw invalid();
    const chunks=[Buffer.from('zINSTREAM\0')];
    for(let i=0;i<bytes.length;i+=65536){const part=bytes.subarray(i,i+65536),length=Buffer.alloc(4);length.writeUInt32BE(part.length);chunks.push(length,part);}
    chunks.push(Buffer.alloc(4));

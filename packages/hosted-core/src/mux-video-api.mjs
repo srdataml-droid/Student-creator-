@@ -137,6 +137,8 @@ export function buildMuxVideoRoute({getEnv=()=>process.env,fetcher=fetch,playbac
    const env=getEnv();
    const testAsset=env.STUDENT_CREATORS_ENVIRONMENT!=='production';
    if((testAsset&&env.STUDENT_CREATORS_MUX_TEST_VIDEO_ENABLED!=='true')||(!testAsset&&(env.STUDENT_CREATORS_MUX_LIVE_VIDEO_ENABLED!=='true'||env.STUDENT_CREATORS_MUX_TEST_VIDEO_ENABLED==='true')))throw unavailable();
+   // Live video uploads must enter private quarantine; never expose Mux PUT URLs.
+   if(!testAsset&&!playback)return json(409,{error:'MEDIA_SOURCE_UPLOAD_REQUIRED'});
    const cfg=readDedicatedSupabaseRuntimeConfig(env,{server:true});
    if(!cfg||cfg.url!=='https://'+REF+'.supabase.co')throw unavailable();
    const origin=env.STUDENT_CREATORS_MUX_UPLOAD_ORIGIN;
