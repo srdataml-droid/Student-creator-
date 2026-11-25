@@ -190,6 +190,34 @@ jobs:
           psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-learning-review.sql
           psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-learning-refund-reopen.sql
           psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-learning-review.test.sql
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-finance-report.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-finance-report.test.sql
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-copyright-review.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-copyright-review.test.sql
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-paid-access-review.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-paid-access-review.test.sql
+
+      - name: Verify hosted institutional appeals
+        run: |
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-institution-appeals.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-institution-appeals.test.sql
+
+      - name: Verify scoped identity evidence and revalidation queues
+        run: |
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-identity-review.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-identity-review.test.sql
+
+      - name: Verify privacy request isolation and review-only decisions
+        run: |
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-privacy-requests.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-privacy-requests.test.sql
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-privacy-fulfilment.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-privacy-fulfilment.test.sql
+
+      - name: Verify manual identity decision and expiry controls
+        run: |
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-manual-identity.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-manual-identity.test.sql
 
       - name: Restore disposable PostgreSQL backup into isolated database
         env:

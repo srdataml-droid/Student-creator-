@@ -53,6 +53,11 @@ export function createIdentityEvidenceHandler({auth,store,storage}={}){
     const key=validateObject(object,object.ownerId,requestId,object.mime);
     const bytes=await storage.read(key);
     if(!Buffer.isBuffer(bytes)||bytes.length!==object.bytes||sha256(bytes)!==object.digest)throw unavailable();
+    // Recheck both the session and persisted reviewer grant after the storage read.
+    const current=await auth.getUser(token);
+    if(current?.id!==user.id)return json(401,{error:'AUTH_REQUIRED'});
+    const fresh=await store.review({actor:user.id,requestId});
+    if(!fresh||fresh.id!==object.id||fresh.objectKey!==key||fresh.digest!==object.digest||fresh.bytes!==object.bytes||fresh.mime!==object.mime||fresh.ownerId!==object.ownerId)return json(404,{error:'EVIDENCE_NOT_FOUND'});
     return new Response(bytes,{status:200,headers:{'content-type':'application/octet-stream',
      'content-disposition':'attachment; filename="student-identity.'+ext[object.mime]+'"',
      'cache-control':'private, no-store','x-content-type-options':'nosniff',

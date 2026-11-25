@@ -1,0 +1,52 @@
+BEGIN;
+INSERT INTO auth.users(id,email,email_confirmed_at) VALUES('ac000000-0000-4000-8000-000000000001','privacy-user@example.invalid',now()),('ac000000-0000-4000-8000-000000000002','privacy-reviewer@example.invalid',now()),('ac000000-0000-4000-8000-000000000003','privacy-finance@example.invalid',now());
+INSERT INTO auth.sessions(id,user_id) SELECT id,id FROM auth.users WHERE id::text LIKE 'ac000000-%';
+INSERT INTO public.platform_staff(user_id,role,active) VALUES('ac000000-0000-4000-8000-000000000002','moderator',true),('ac000000-0000-4000-8000-000000000003','admin',true);
+INSERT INTO public.governance_staff_role_grants(user_id,role) VALUES('ac000000-0000-4000-8000-000000000002','privacy_reviewer'),('ac000000-0000-4000-8000-000000000003','finance_reviewer');
+SET LOCAL ROLE authenticated;
+SELECT set_config('request.jwt.claim.sub','ac000000-0000-4000-8000-000000000001',true),set_config('request.jwt.claims','{"sub":"ac000000-0000-4000-8000-000000000001","role":"authenticated","session_id":"ac000000-0000-4000-8000-000000000001"}',true);
+DO $$ BEGIN
+ IF public.submit_privacy_request('erasure','Synthetic request for deletion review')->>'status'<>'open' THEN RAISE EXCEPTION 'Privacy request failed'; END IF;
+ IF public.submit_privacy_request('erasure','Synthetic request for deletion review')->>'replayed'<>'true' THEN RAISE EXCEPTION 'Privacy replay failed'; END IF;
+ IF jsonb_array_length(public.my_privacy_requests())<>1 THEN RAISE EXCEPTION 'Own request missing'; END IF;
+ IF has_table_privilege(current_user,'public.student_privacy_requests','SELECT,INSERT,UPDATE,DELETE') OR has_function_privilege(current_user,'public.week7_review_privacy_request(uuid,uuid,text,text)','EXECUTE') THEN RAISE EXCEPTION 'Privacy direct access'; END IF;
+END $$;
+SELECT set_config('request.jwt.claim.sub','ac000000-0000-4000-8000-000000000003',true),set_config('request.jwt.claims','{"sub":"ac000000-0000-4000-8000-000000000003","role":"authenticated","session_id":"ac000000-0000-4000-8000-000000000003"}',true);
+DO $$ BEGIN IF jsonb_array_length(public.my_privacy_requests())<>0 THEN RAISE EXCEPTION 'Foreign request leaked'; END IF; END $$;
+RESET ROLE;
+DO $$ DECLARE u uuid:='ac000000-0000-4000-8000-000000000001'; p uuid:='ac000000-0000-4000-8000-000000000002'; f uuid:='ac000000-0000-4000-8000-000000000003'; req uuid; r jsonb;
+BEGIN
+ SELECT id INTO req FROM public.student_privacy_requests WHERE user_id=u;
+ IF jsonb_array_length(public.week7_privacy_queue(p,10)->'items')<>1 THEN RAISE EXCEPTION 'Privacy queue failed'; END IF;
+ BEGIN PERFORM public.week7_privacy_queue(f,10); RAISE EXCEPTION 'Finance read privacy requests'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+ PERFORM public.week7_review_privacy_request(p,req,'under_review','Synthetic independent review');
+ r:=public.week7_review_privacy_request(p,req,'approved_for_manual_fulfilment','Synthetic decision not execution');
+ IF r->>'dataDeleted'<>'false' OR r->>'fulfilled'<>'false' OR NOT EXISTS(SELECT 1 FROM auth.users WHERE id=u) THEN RAISE EXCEPTION 'Destructive privacy action'; END IF;
+ BEGIN PERFORM public.week7_review_privacy_request(p,req,'declined','Attempt to overwrite decision'); RAISE EXCEPTION 'Decision overwritten'; EXCEPTION WHEN unique_violation THEN NULL; END;
+END $$;
+INSERT INTO auth.users(id,email,email_confirmed_at) VALUES('ac000000-0000-4000-8000-000000000004','privacy-independent@example.invalid',now());
+INSERT INTO public.platform_staff(user_id,role,active) VALUES('ac000000-0000-4000-8000-000000000004','moderator',true);
+INSERT INTO public.governance_staff_role_grants(user_id,role) VALUES('ac000000-0000-4000-8000-000000000004','privacy_reviewer');
+DO $$ DECLARE r uuid; a uuid:='ac000000-0000-4000-8000-000000000002'; b uuid:='ac000000-0000-4000-8000-000000000004'; q jsonb;
+BEGIN
+ SELECT id INTO r FROM public.student_privacy_requests WHERE user_id='ac000000-0000-4000-8000-000000000001';
+ q:=public.week7_record_privacy_fulfilment(a,r,'fixture-evidence-reference','Synthetic external outcome for testing only');
+ IF q->>'automaticExecution'<>'false' THEN RAISE EXCEPTION 'False execution claim'; END IF;
+ BEGIN PERFORM public.week7_confirm_privacy_fulfilment(a,r,'Synthetic self confirmation attempt'); RAISE EXCEPTION 'Self-verified fulfilment'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+ IF jsonb_array_length(public.week7_privacy_fulfilment_queue(b,10)->'items')<>1 THEN RAISE EXCEPTION 'Verification queue missing'; END IF;
+ PERFORM public.week7_confirm_privacy_fulfilment(b,r,'Synthetic independent evidence confirmation');
+ IF NOT EXISTS(SELECT 1 FROM auth.users WHERE id='ac000000-0000-4000-8000-000000000001') THEN RAISE EXCEPTION 'User unexpectedly deleted'; END IF;
+ IF has_function_privilege('authenticated','public.week7_confirm_privacy_fulfilment(uuid,uuid,text)','EXECUTE') THEN RAISE EXCEPTION 'Client verification bypass'; END IF;
+END $$;
+INSERT INTO auth.users(id,email,email_confirmed_at) VALUES('ac000000-0000-4000-8000-000000000005','retention-owner@example.invalid',now());
+INSERT INTO public.platform_staff(user_id,role,active) VALUES('ac000000-0000-4000-8000-000000000005','admin',true);
+INSERT INTO public.governance_staff_role_grants(user_id,role) VALUES('ac000000-0000-4000-8000-000000000005','governance_owner');
+DO $$ DECLARE a uuid:='ac000000-0000-4000-8000-000000000002'; b uuid:='ac000000-0000-4000-8000-000000000005'; p uuid; q jsonb;
+BEGIN
+ PERFORM public.week7_propose_retention(a,'verification_evidence',90,'Synthetic proposal for review only');
+ SELECT id INTO p FROM public.governance_retention_proposals WHERE proposed_by=a;
+ q:=public.week7_recommend_retention(b,p,'Synthetic independent policy recommendation');
+ IF q->>'policyApproved'<>'false' OR q->>'automaticDeletion'<>'false' OR (SELECT state FROM public.governance_retention_proposals WHERE id=p)<>'proposed' THEN RAISE EXCEPTION 'Retention recommendation activated policy'; END IF;
+ BEGIN PERFORM public.week7_recommend_retention(b,p,'Duplicate synthetic recommendation'); RAISE EXCEPTION 'Duplicate recommendation'; EXCEPTION WHEN unique_violation THEN NULL; END;
+END $$;
+ROLLBACK;

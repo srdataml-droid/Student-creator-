@@ -57,3 +57,5 @@ test('staging/identity privacy gate prevents accidental upload activation',async
  let calls=0;const route=buildIdentityEvidenceRoute({getEnv:()=>({}),fetcher:async()=>{calls++;}});
  assert.equal((await route(req(),{requestId})).status,503);assert.equal(calls,0);
 });
+
+test('evidence is withheld if reviewer scope or current session is revoked during storage read',async()=>{const metadata={id:upload,ownerId:owner,objectKey:key,mime:'application/pdf',bytes:file.length,digest:sha256(file)};for(const revoked of ['session','grant']){let authChecks=0,grantChecks=0;const h=createIdentityEvidenceHandler({auth:{getUser:async()=>++authChecks===2&&revoked==='session'?null:{id:owner}},store:{review:async()=>++grantChecks===2&&revoked==='grant'?null:metadata},storage:{read:async()=>file}});const r=await h(req({method:'GET'}),{requestId});assert.equal(r.status,revoked==='session'?401:404);assert.equal((await r.text()).includes(file.toString()),false);}});

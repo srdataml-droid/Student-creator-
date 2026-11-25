@@ -46,6 +46,22 @@ async function readCommandBody(request){
  return body&&typeof body==='object'&&!Array.isArray(body)?body:null;
 }
 function commandFor(path){
+ if(path==='privacy/fulfilment')return {name:'week7_privacy_fulfilment_queue',scope:'privacy.review',allowed:['limit']};
+ if(/^privacy\/fulfilment\/[0-9a-f-]{36}\/record$/i.test(path))return {name:'week7_record_privacy_fulfilment',scope:'privacy.review',allowed:['reference','summary']};
+ if(/^privacy\/fulfilment\/[0-9a-f-]{36}\/confirm$/i.test(path))return {name:'week7_confirm_privacy_fulfilment',scope:'privacy.review',allowed:['note']};
+ if(/^retention\/[0-9a-f-]{36}\/recommend$/i.test(path))return {name:'week7_recommend_retention',scope:'retention.review',allowed:['reason']};
+ if(path==='finance/access-reviews')return {name:'week7_paid_access_queue',scope:'finance.review',allowed:['limit']};
+ if(/^finance\/access-reviews\/[0-9a-f-]{36}\/resolve$/i.test(path))return {name:'week7_resolve_paid_access',scope:'finance.review',allowed:['resolution','note']};
+ if(path==='identity/manual-revalidation')return {name:'week7_manual_revalidation_queue',scope:'verification.review',allowed:['limit']};
+ if(/^identity\/requests\/[0-9a-f-]{36}\/review$/i.test(path))return {name:'week7_review_manual_identity',scope:'verification.review',allowed:['decision','note','days']};
+ if(path==='copyright/claims')return {name:'week7_copyright_queue',scope:'copyright.review',allowed:['limit']};
+ if(/^copyright\/claims\/[0-9a-f-]{36}\/review$/i.test(path))return {name:'week7_review_copyright',scope:'copyright.review',allowed:['decision','note']};
+ if(path==='finance/report')return {name:'week7_finance_report',scope:'finance.review',allowed:['from','to']};
+ if(path==='privacy/requests')return {name:'week7_privacy_queue',scope:'privacy.review',allowed:['limit']};
+ if(/^privacy\/requests\/[0-9a-f-]{36}\/review$/i.test(path))return {name:'week7_review_privacy_request',scope:'privacy.review',allowed:['decision','note']};
+ if(path==='identity/queue'||path==='identity/revalidation')return {name:path==='identity/queue'?'week7_identity_queue':'week7_identity_revalidation_queue',scope:'verification.review',allowed:['limit']};
+ if(path==='identity/appeals')return {name:'week7_institution_appeal_queue',scope:'verification.review',allowed:['limit']};
+ if(/^identity\/appeals\/[0-9a-f-]{36}\/review$/i.test(path))return {name:'week7_review_institution_appeal',scope:'verification.review',allowed:['decision','note']};
  if(path==='learning/disputes'||path==='learning/refunds')return {name:'week7_learning_review_queue',scope:path.endsWith('disputes')?'content.moderate':'finance.review',allowed:['limit']};
  if(/^learning\/disputes\/[0-9a-f-]{36}\/resolve$/i.test(path))return {name:'week7_resolve_learning_dispute',scope:'content.moderate',allowed:['outcome','note']};
  if(/^learning\/refunds\/[0-9a-f-]{36}\/record$/i.test(path))return {name:'week7_record_learning_refund_review',scope:'finance.review',allowed:['note']};
@@ -63,6 +79,35 @@ function validateCommand(cmd,body,path,actorId){
  if(Object.keys(body).some(key=>!cmd.allowed.includes(key)))return null;
  const id=path.split('/')[1];
  switch(cmd.name){
+  case 'week7_finance_report':{
+   if(typeof body.from!=='string'||typeof body.to!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(body.from)||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(body.to))return null;
+   const f=Date.parse(body.from),t=Date.parse(body.to);return Number.isFinite(f)&&Number.isFinite(t)&&t>f&&t-f<=366*86400000&&t<=Date.now()+86400000?{_actor:actorId,_from:new Date(f).toISOString(),_to:new Date(t).toISOString()}:null;
+  }
+  case 'week7_review_copyright':
+   return UUID.test(path.split('/')[2])&&['dismiss','uphold','release','retain'].includes(body.decision)&&hasText(body.note,10,500)?{_actor:actorId,_id:path.split('/')[2],_decision:body.decision,_note:body.note.trim()}:null;
+  case 'week7_review_privacy_request':
+   return UUID.test(path.split('/')[2])&&['under_review','approved_for_manual_fulfilment','declined'].includes(body.decision)&&hasText(body.note,10,500)?{_actor:actorId,_id:path.split('/')[2],_decision:body.decision,_note:body.note.trim()}:null;
+  case 'week7_resolve_paid_access':
+   return UUID.test(path.split('/')[2])&&['access_available','verified_reversal'].includes(body.resolution)&&hasText(body.note,10,500)?{_actor:actorId,_id:path.split('/')[2],_resolution:body.resolution,_note:body.note.trim()}:null;
+  case 'week7_record_privacy_fulfilment':
+   return UUID.test(path.split('/')[2])&&typeof body.reference==='string'&&/^[A-Za-z0-9_.:-]{8,128}$/.test(body.reference)&&hasText(body.summary,20,500)?{_actor:actorId,_id:path.split('/')[2],_reference:body.reference,_summary:body.summary.trim()}:null;
+  case 'week7_confirm_privacy_fulfilment':
+   return UUID.test(path.split('/')[2])&&hasText(body.note,10,500)?{_actor:actorId,_id:path.split('/')[2],_note:body.note.trim()}:null;
+  case 'week7_recommend_retention':
+   return UUID.test(id)&&hasText(body.reason,20,500)?{_actor:actorId,_id:id,_reason:body.reason.trim()}:null;
+  case 'week7_review_manual_identity':
+   return UUID.test(path.split('/')[2])&&['approve','reject','revoke'].includes(body.decision)&&hasText(body.note,10,500)&&(body.decision==='approve'?Number.isInteger(body.days)&&body.days>=1&&body.days<=730:body.days===undefined)?{_actor:actorId,_id:path.split('/')[2],_decision:body.decision,_note:body.note.trim(),_days:body.days??null}:null;
+  case 'week7_privacy_fulfilment_queue':
+  case 'week7_paid_access_queue':
+  case 'week7_copyright_queue':
+  case 'week7_privacy_queue':
+  case 'week7_manual_revalidation_queue':
+  case 'week7_identity_queue':
+  case 'week7_identity_revalidation_queue':
+  case 'week7_institution_appeal_queue':
+   return (body.limit===undefined||Number.isInteger(body.limit)&&body.limit>=1&&body.limit<=100)?{_actor:actorId,_limit:body.limit??50}:null;
+  case 'week7_review_institution_appeal':
+   return UUID.test(path.split('/')[2])&&['review_requested','rejected'].includes(body.decision)&&hasText(body.note,10,500)?{_actor:actorId,_id:path.split('/')[2],_decision:body.decision,_note:body.note.trim()}:null;
   case 'week7_learning_review_queue':
    return (body.limit===undefined||Number.isInteger(body.limit)&&body.limit>=1&&body.limit<=100)?{_actor:actorId,_kind:path.endsWith('disputes')?'disputes':'refunds',_limit:body.limit??50}:null;
   case 'week7_resolve_learning_dispute':
@@ -147,6 +192,13 @@ export function createHostedGovernanceHandler({getEnv=()=>process.env,fetcher=fe
      if(!res.ok){
        const detail=await res.json().catch(()=>({}));
        const safeCodes={
+         ACCESS_REVIEW_CONFLICT:[409,'ACCESS_REVIEW_CONFLICT'],
+         COPYRIGHT_REVIEW_CONFLICT:[409,'COPYRIGHT_REVIEW_CONFLICT'],
+         PRIVACY_FULFILMENT_CONFLICT:[409,'PRIVACY_FULFILMENT_CONFLICT'],
+         PRIVACY_REVIEW_CONFLICT:[409,'PRIVACY_REVIEW_CONFLICT'],
+         IDENTITY_REVIEW_CONFLICT:[409,'IDENTITY_REVIEW_CONFLICT'],
+         IDENTITY_POLICY_REQUIRED:[403,'IDENTITY_POLICY_REQUIRED'],
+         APPEAL_ALREADY_REVIEWED:[409,'APPEAL_ALREADY_REVIEWED'],
          LEARNING_REVIEW_CONFLICT:[409,'LEARNING_REVIEW_CONFLICT'],
          GOVERNANCE_RATE_LIMIT:[429,'GOVERNANCE_RATE_LIMIT'],
          INCIDENT_STATE_CONFLICT:[409,'INVALID_STATE'],
