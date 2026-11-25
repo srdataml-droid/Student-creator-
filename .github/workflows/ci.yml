@@ -103,8 +103,10 @@ jobs:
         working-directory: apps/web
         run: |
           npm ci --no-audit --no-fund
-          npm install --no-save --no-package-lock --no-audit --no-fund @playwright/test@1.56.1
+          npm install --no-save --no-package-lock --no-audit --no-fund --ignore-scripts @playwright/test@1.56.1 livekit-client@2.25.0
           npx playwright install chromium
+      - name: Run real isolated LiveKit server and two browser peers
+        run: bash scripts/test-livekit-engine.sh
       - name: Run synthetic student creator / moderator / viewer browser journey
         env:
           APP_DATA_MODE: local
