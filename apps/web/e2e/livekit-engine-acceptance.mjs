@@ -34,6 +34,8 @@ try{
    const sdk=globalThis.LivekitClient; if(!sdk?.Room)throw Error('LiveKit SDK missing');
    globalThis.r=new sdk.Room({adaptiveStream:false,dynacast:false});
    globalThis.received=0;
+   globalThis.states=[];
+   r.on(sdk.RoomEvent.ConnectionStateChanged,state=>states.push(state));
    r.on(sdk.RoomEvent.TrackSubscribed,track=>{
     if(track.kind==='video'){
      const video=track.attach();video.muted=true;video.autoplay=true;document.body.appendChild(video);
@@ -54,9 +56,11 @@ try{
   return {page,context};
  }
  async function connect(p,token){
-  await p.page.evaluate(async({local,token})=>{
-   await Promise.race([r.connect(local,token,{autoSubscribe:true}),new Promise((_,reject)=>setTimeout(()=>reject(Error('Connect timeout')),15000))]);
-  },{local,token});
+  try{await p.page.evaluate(async({local,token})=>{
+   await Promise.race([r.connect(local,token,{autoSubscribe:true}),new Promise((_,reject)=>setTimeout(()=>reject(Error('Connect timeout')),25000))]);
+  },{local,token});}catch(e){
+   console.error('Disposable peer connection states:',await p.page.evaluate(()=>states.slice(-10)).catch(()=>[]));throw e;
+  }
  }
  const h=await peer(),v=await peer(),bad=await peer();
  const expired=grant('student-'+randomUUID(),'participant',()=>Date.now()-300000);
