@@ -167,3 +167,9 @@ test('payout liability report is read only, rejects injected inputs and requires
  const f=simulate({roles:['finance_reviewer']});assert.equal((await send(f,{})).status,200);assert.ok(f.calls.some(c=>c.url.endsWith('/rpc/week7_payout_liability_report')));
  assert.equal((await send(f,{_actor:otherId})).status,422);assert.equal((await send(simulate({roles:['privacy_reviewer']}),{})).status,403);
 });
+
+test('payout transfer authorization and bank review are finance scoped and reject direct provider fields',async()=>{
+ const send=(x,body)=>x.handler(new Request('https://app.example.test/api/governance/finance/payouts/'+otherId+'/transfer',{method:'POST',headers:{authorization:'Bearer '+goodToken,'content-type':'application/json',origin:'https://app.example.test'},body:JSON.stringify(body)}),{segments:['finance','payouts',otherId,'transfer']});
+ const f=simulate({roles:['finance_reviewer']});assert.equal((await send(f,{action:'authorize'})).status,200);assert.ok(f.calls.some(c=>c.url.endsWith('/rpc/week7_manage_payout_transfer')));
+ assert.equal((await send(f,{action:'confirm_paid'})).status,422);assert.equal((await send(f,{action:'authorize',amount:2000})).status,422);assert.equal((await send(simulate({roles:['privacy_reviewer']}),{action:'authorize'})).status,403);
+});

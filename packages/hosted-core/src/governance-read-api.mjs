@@ -46,6 +46,7 @@ async function readCommandBody(request){
  return body&&typeof body==='object'&&!Array.isArray(body)?body:null;
 }
 function commandFor(path){
+ if(/^finance\/payouts\/[0-9a-f-]{36}\/transfer$/i.test(path))return {name:'week7_manage_payout_transfer',scope:'finance.review',allowed:['action','evidence']};
  if(path==='finance/payout-liabilities')return {name:'week7_payout_liability_report',scope:'finance.review',allowed:[]};
  if(path==='finance/payouts')return {name:'week7_payout_queue',scope:'finance.review',allowed:['limit']};
  if(/^finance\/payouts\/[0-9a-f-]{36}\/review$/i.test(path))return {name:'week7_review_payout',scope:'finance.review',allowed:['decision','note']};
@@ -83,6 +84,8 @@ function validateCommand(cmd,body,path,actorId){
  if(Object.keys(body).some(key=>!cmd.allowed.includes(key)))return null;
  const id=path.split('/')[1];
  switch(cmd.name){
+  case 'week7_manage_payout_transfer':
+   return UUID.test(path.split('/')[2])&&['authorize','recheck','confirm_paid','confirm_returned'].includes(body.action)&&(['authorize','recheck'].includes(body.action)?body.evidence===undefined:typeof body.evidence==='string'&&/^[A-Za-z0-9_.:-]{8,128}$/.test(body.evidence))?{_actor:actorId,_id:path.split('/')[2],_action:body.action,_evidence:body.evidence??null}:null;
   case 'week7_payout_liability_report':return {_actor:actorId};
   case 'week7_finance_report':{
    if(typeof body.from!=='string'||typeof body.to!=='string'||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(body.from)||!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/.test(body.to))return null;
