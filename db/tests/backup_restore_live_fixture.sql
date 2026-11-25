@@ -1,5 +1,5 @@
 BEGIN;
-DO $ BEGIN IF current_database()<>'campus_ci_live' THEN RAISE EXCEPTION 'Not disposable live CI source'; END IF; END $;
+DO $$ BEGIN IF current_database()<>'campus_ci_live' THEN RAISE EXCEPTION 'Not disposable live CI source'; END IF; END $$;
 INSERT INTO auth.users(id,email,email_confirmed_at) VALUES('f3010000-0000-4000-8000-000000000001','restore-creator@example.invalid',now()),('f3010000-0000-4000-8000-000000000002','restore-buyer@example.invalid',now()),('f3010000-0000-4000-8000-000000000003','restore-reviewer@example.invalid',now());
 INSERT INTO public.institutions(id,slug,name) VALUES('f3020000-0000-4000-8000-000000000001','fixture-restore-live-30','Synthetic');
 INSERT INTO public.departments(id,institution_id,slug,name) VALUES('f3030000-0000-4000-8000-000000000001','f3020000-0000-4000-8000-000000000001','fixture','Synthetic');
