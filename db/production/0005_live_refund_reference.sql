@@ -4,15 +4,7 @@ ALTER TABLE live_finance.reversal_inbox ADD CONSTRAINT reversal_inbox_provider_i
 CREATE OR REPLACE FUNCTION public.enqueue_live_reversal_event(_event text,_id text,_digest text)
 RETURNS text LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 BEGIN
- IF _event IS NULL OR _event NOT IN ('refund.processed','charge.dispute.create','charge.dispute.remind','charge.dispute.resolve') OR _id IS NULL OR (_id !~ '^[1-9][0-9]{0,19} OR _digest IS NULL OR _digest !~ '^[0-9a-f]{64}$' THEN RETURN 'invalid'; END IF;
- INSERT INTO live_finance.reversal_inbox(event_type,provider_id,payload_sha256) VALUES(_event,_id,_digest) ON CONFLICT DO NOTHING;
- RETURN CASE WHEN FOUND THEN 'accepted' ELSE 'duplicate' END;
-END $$;
- AND NOT (_event='refund.processed' AND _id ~ '^lc_[0-9a-f]{32}:[0-9a-f]{64} OR _digest IS NULL OR _digest !~ '^[0-9a-f]{64}$' THEN RETURN 'invalid'; END IF;
- INSERT INTO live_finance.reversal_inbox(event_type,provider_id,payload_sha256) VALUES(_event,_id,_digest) ON CONFLICT DO NOTHING;
- RETURN CASE WHEN FOUND THEN 'accepted' ELSE 'duplicate' END;
-END $$;
- AND split_part(_id,':',2)=_digest)) OR _digest IS NULL OR _digest !~ '^[0-9a-f]{64}$' THEN RETURN 'invalid'; END IF;
+ IF _event IS NULL OR _event NOT IN ('refund.processed','charge.dispute.create','charge.dispute.remind','charge.dispute.resolve') OR _id IS NULL OR _digest IS NULL OR _digest !~ '^[0-9a-f]{64}$' OR (_id !~ '^[1-9][0-9]{0,19}$' AND NOT (_event='refund.processed' AND _id ~ '^lc_[0-9a-f]{32}:[0-9a-f]{64}$' AND split_part(_id,':',2)=_digest)) THEN RETURN 'invalid'; END IF;
  INSERT INTO live_finance.reversal_inbox(event_type,provider_id,payload_sha256) VALUES(_event,_id,_digest) ON CONFLICT DO NOTHING;
  RETURN CASE WHEN FOUND THEN 'accepted' ELSE 'duplicate' END;
 END $$;
