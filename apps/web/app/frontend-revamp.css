@@ -121,3 +121,12 @@
  .modern-frame .watch-page{padding-bottom:25px}
 }
 @media(max-width:340px){.modern-header .nav-join{display:none}.home-heading>div{min-width:0}}
+
+/* Keep the named feed region accessible while hiding its redundant title visually. */
+.modern-home .feed-heading{display:block;position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;margin:0;padding:0}
+.modern-home .feed-heading .post-create{display:none}
+.creator-body .admin-console .form-stack label,.creator-body .admin-console .review-list label{color:#d0e5d7}
+.creator-body .admin-console .form-stack :where(input:not([type=checkbox]),select,textarea){border-color:#416252}
+.creator-body .admin-console .hero .intro{color:#b1c4b8}
+.creator-body .admin-console .panel,.creator-body .admin-console .status{color:#e9f6ee}
+@media(max-width:760px){.creator-body .creator-post .post-author-info{min-width:0}.creator-body .post-course{max-width:36%;overflow-wrap:anywhere}.creator-body .modern-home .feed-tabs{width:100%}}
