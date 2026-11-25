@@ -9,7 +9,7 @@ export const dynamic='force-dynamic';
 export const metadata={title:'Home | Student Creators'};
 export default async function Home({searchParams}){
  const local=isLocalMode();const params=await searchParams||{};const campus=typeof params.campus==='string'?params.campus.slice(0,80):'';const q=typeof params.q==='string'?params.q.slice(0,80):'';
- let courses=[],institutions=[],posts=[],ready=true,page=1,hasNext=false;
+ let courses=[],institutions=[],posts=[],ready=true,page=1,hasNext=false,feedError='';
  try{
   if(local){
    courses=getLocalPublicCourses().slice(0,80);
@@ -17,11 +17,11 @@ export default async function Home({searchParams}){
    const bySchool=new Map(institutions.map(item=>[item.id,item.name]));
    posts=courses.flatMap(course=>getLocalCourseLessons(course.id).map(item=>toFeedPreview(item,course,bySchool.get(course.institutionId)||'Campus creator'))).sort((a,b)=>String(b.publishedAt||b.createdAt).localeCompare(String(a.publishedAt||a.createdAt))).slice(0,60);
   }else{const [data,feed]=await Promise.all([getHostedDiscovery({directoryOnly:true}),getPagedHostedDiscovery({filters:{q:params.q??'',institutionId:params.campus??'',page:params.page??'1'}})]);courses=data.courses;institutions=data.schools;posts=feed.items;page=feed.page;hasNext=feed.hasNext;}
- }catch{ready=false;}
+ }catch(e){ready=false;if(e.message==='INVALID_DISCOVERY_FILTER')feedError='Enter 2–80 letters or numbers and valid filters.';}
  return <main id="main" className="creator-main modern-home">
   <div className="feed-column">
    <h1 className="visually-hidden">Discover student creators</h1>
-   {local?<FeedExperience posts={posts} courses={courses} ready={ready}/>:<><form className="feed-toolbar form-stack" action="/" method="GET"><label htmlFor="hosted-feed-q">Search published previews</label><input id="hosted-feed-q" name="q" type="search" maxLength={80} defaultValue={q} placeholder="Search student work"/><label htmlFor="hosted-feed-campus">Campus</label><select id="hosted-feed-campus" name="campus" defaultValue={campus}><option value="">All campuses</option>{institutions.map(i=><option key={i.id} value={i.id}>{i.name}</option>)}</select><button className="primary-link" type="submit">Apply filters</button></form><HostedDiscovery posts={posts} available={ready} heading="Discover student work" page={page} hasNext={hasNext} filters={{q,campus}}/></>}
+   {local?<FeedExperience posts={posts} courses={courses} ready={ready}/>:<><form className="feed-toolbar form-stack" action="/" method="GET"><label htmlFor="hosted-feed-q">Search published previews</label><input id="hosted-feed-q" name="q" type="search" maxLength={80} defaultValue={q} placeholder="Search student work"/><label htmlFor="hosted-feed-campus">Campus</label><select id="hosted-feed-campus" name="campus" defaultValue={campus}><option value="">All campuses</option>{institutions.map(i=><option key={i.id} value={i.id}>{i.name}</option>)}</select><button className="primary-link" type="submit">Apply filters</button></form>{feedError&&<p role="alert" className="hint">{feedError}</p>}<HostedDiscovery posts={posts} available={ready} heading="Discover student work" page={page} hasNext={hasNext} filters={{q,campus}}/></>}
   </div>
   <aside className="creator-aside" aria-label="Discover more">
    <section className="aside-panel"><h2>Get started</h2><p>Join your campus community to follow creators, save posts and share your own work.</p><div className="home-rail-actions"><Link href="/join" className="creator-btn filled">Create account</Link><Link href="/sign-in" className="creator-btn outlined">Log in</Link></div></section>
