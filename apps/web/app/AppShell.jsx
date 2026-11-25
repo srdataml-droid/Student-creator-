@@ -34,19 +34,22 @@ const account=[
 function isCurrent(path,href){return href==='/'?path==='/':path===href||path.startsWith(href+'/');}
 function NavItem({item,path,mobile=false}){const current=isCurrent(path,item.href);return <Link href={item.href} prefetch={false} className={(current?'current ':'')+(mobile&&item.icon==='create'?'mobile-create-tab':'')} aria-current={current?'page':undefined}><Icon name={item.icon}/><span>{mobile?item.mobile:item.label}</span></Link>;}
 
-export default function AppShell({children}){
+export default function AppShell({children,hosted=false}){
  const path=usePathname()||'/';
+ const visiblePrimary=hosted?primary.filter(i=>['/','/search','/communities'].includes(i.href)):primary;
+ const visibleAccount=hosted?[{href:'/hosted-account',label:'Your account',icon:'user'}]:account;
  const menu=useRef(null);
  const [open,setOpen]=useState(false);
  const [session,setSession]=useState({state:'checking',role:null});
  useEffect(()=>{
+  if(hosted){setSession({state:'guest',role:null});return;}
   let active=true;let generation=0;
   async function check(){const request=++generation;try{const {user}=await api('me');if(active&&request===generation)setSession(user?.id?{state:'signed-in',role:user.role}:{state:'guest',role:null});}catch(error){if(active&&request===generation)setSession({state:error.status===401?'guest':'unavailable',role:null});}}
   void check();
   function onVisible(){if(document.visibilityState==='visible')void check();}
   document.addEventListener('visibilitychange',onVisible);
   return()=>{active=false;document.removeEventListener('visibilitychange',onVisible);};
- },[]);
+ },[hosted]);
  const signedIn=session.state==='signed-in';
  useEffect(()=>{setOpen(false)},[path]);
  useEffect(()=>{
@@ -59,11 +62,11 @@ export default function AppShell({children}){
   <header className="creator-nav modern-header"><div className="nav-inner">
    <Link href="/" className="creator-logo" aria-label="Student Creators home"><span className="reference-wordmark">Worthkind<small>Student Creators</small></span></Link>
    <form className="shell-search" action="/search" method="GET"><Icon name="search"/><label className="visually-hidden" htmlFor="shell-search">Search Student Creators</label><input id="shell-search" type="search" name="q" placeholder="Search posts and courses" required minLength={2} maxLength={80}/><button type="submit" aria-label="Submit search"><Icon name="arrow"/></button></form>
-   <Link href="/search" className="reference-mobile-search" aria-label="Search Student Creators"><Icon name="search"/> <span>Search</span></Link><div className="nav-auth">{signedIn?<Link className="nav-join" href={session.role==='admin'?'/manage':'/studio'} prefetch={false}>{session.role==='admin'?'Staff console':'My studio'}</Link>:session.state==='checking'?<span className="shell-session-check" role="status">Checking account…</span>:<><Link className="nav-signin" href="/sign-in">Log in</Link><Link className="nav-join" href="/join">Join</Link></>}
+   <Link href="/search" className="reference-mobile-search" aria-label="Search Student Creators"><Icon name="search"/> <span>Search</span></Link><div className="nav-auth">{signedIn?<Link className="nav-join" href={session.role==='admin'?'/manage':'/studio'} prefetch={false}>{session.role==='admin'?'Staff console':'My studio'}</Link>:session.state==='checking'?<span className="shell-session-check" role="status">Checking account…</span>:<><Link className="nav-signin" href="/sign-in">Log in</Link><Link className="nav-join" href={hosted?'/hosted-account':'/join'}>{hosted?'Account':'Join'}</Link></>}
     <div className="shell-menu" ref={menu}>
      <button type="button" className="shell-menu-toggle" aria-label="Account and navigation menu" aria-expanded={open} aria-controls="shell-account-menu" onClick={()=>setOpen(v=>!v)}><Icon name="menu"/></button>
      {open&&<nav id="shell-account-menu" className="shell-menu-panel" aria-label="Account menu">
-       {[...(!signedIn?[{href:'/sign-in',label:'Log in',icon:'user'},{href:'/join',label:'Join Student Creators',icon:'user'}]:[]),...primary,...account,...(session.role==='admin'?[{href:'/manage',label:'Staff console',icon:'shield'}]:[])].map(item=><Link key={item.href} href={item.href} prefetch={false} onClick={()=>setOpen(false)} aria-current={isCurrent(path,item.href)?'page':undefined}><Icon name={item.icon}/>{item.label}</Link>)}
+       {[...(!signedIn?[{href:'/sign-in',label:'Log in',icon:'user'},{href:'/join',label:'Join Student Creators',icon:'user'}]:[]),...visiblePrimary,...visibleAccount,...(session.role==='admin'?[{href:'/manage',label:'Staff console',icon:'shield'}]:[])].map(item=><Link key={item.href} href={item.href} prefetch={false} onClick={()=>setOpen(false)} aria-current={isCurrent(path,item.href)?'page':undefined}><Icon name={item.icon}/>{item.label}</Link>)}
      </nav>}
     </div>
    </div>
@@ -71,15 +74,15 @@ export default function AppShell({children}){
   <div className="app-frame modern-frame">
    <aside className="creator-sidebar" aria-label="Community navigation">
     <div className="side-section-label">Discover</div>
-    <nav className="side-nav" aria-label="Primary navigation">{primary.slice(0,2).map(item=><NavItem key={item.href} item={item} path={path}/>)}</nav>
+    <nav className="side-nav" aria-label="Primary navigation">{visiblePrimary.slice(0,2).map(item=><NavItem key={item.href} item={item} path={path}/>)}</nav>
     <div className="side-section-label">Your space</div>
-    <nav className="side-nav" aria-label="Your workspace">{primary.slice(2).map(item=><NavItem key={item.href} item={item} path={path}/>)}</nav>
+    <nav className="side-nav" aria-label="Your workspace">{visiblePrimary.slice(2).map(item=><NavItem key={item.href} item={item} path={path}/>)}</nav>
     <div className="sidebar-divider"/>
     <div className="side-section-label">Account</div>
-    <nav className="side-nav" aria-label="Account navigation">{account.map(item=><NavItem key={item.href} item={item} path={path}/>)}</nav>
+    <nav className="side-nav" aria-label="Account navigation">{visibleAccount.map(item=><NavItem key={item.href} item={item} path={path}/>)}</nav>
     <div className="side-foot">Student Creators by Worthkind<br/>Original work. Real community.</div>
    </aside>
-   <div className="app-content">{children}<nav className="mobile-creator-tabs" aria-label="Mobile navigation">{primary.filter(item=>item.mobile).map(item=><NavItem key={item.href} item={item} path={path} mobile/>)}</nav><footer className="creator-footer"><span>© Student Creators by Worthkind</span><Link href="/verification">Student membership</Link></footer></div>
+   <div className="app-content">{children}<nav className="mobile-creator-tabs" aria-label="Mobile navigation">{visiblePrimary.filter(item=>item.mobile).map(item=><NavItem key={item.href} item={item} path={path} mobile/>)}</nav><footer className="creator-footer"><span>© Student Creators by Worthkind</span><Link href={hosted?"/hosted-account":"/verification"}>{hosted?"Account":"Student membership"}</Link></footer></div>
   </div>
  </>;
 }
