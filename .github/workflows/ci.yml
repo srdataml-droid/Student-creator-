@@ -23,6 +23,10 @@ jobs:
       - name: Run Android instrumentation if an isolated emulator is available
         timeout-minutes: 6
         run: bash scripts/test-android-emulator.sh
+      - name: Rehearse Week 8 rollback against a previous green revision (synthetic only)
+        if: github.head_ref == 'work/week-08'
+        timeout-minutes: 3
+        run: bash scripts/rehearse-week8-rollback.sh
       - name: Verify source artefacts do not contain development secrets
         run: |
           if git ls-files | grep -E '(^|/)(\.env(\..*)?|.*\.pem|.*\.key)$' | grep -vE '\.env\.example$'; then
