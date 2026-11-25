@@ -18,7 +18,7 @@ const key=v=>{if(typeof v!=='string'||!/^[A-Za-z0-9_-]{16,128}$/.test(v))throw f
 const rpc=(name,args)=>({path:'rpc/'+name,method:'POST',body:args});
 const select=(name,fields,filters={})=>({path:name+'?'+new URLSearchParams({select:fields,...filters}),method:'GET'});
 const readIds=v=>{if(!Array.isArray(v)||v.length<1||v.length>100||new Set(v).size!==v.length)throw fault('INVALID_INPUT',422);return v.map(id);};
-const accountOperations=new Set(['myPayouts','cancelPayout','myCopyrightCases','copyrightClaim','copyrightAppeal','myCreatorFinance']);
+const accountOperations=new Set(['myPayouts','cancelPayout','myCopyrightCases','copyrightClaim','copyrightAppeal','myCreatorFinance','institutionAppeals','submitInstitutionAppeal','privacyRequests','submitPrivacyRequest']);
 const adminOperations=new Set(['setCommunityModerator','reportQueue','reviewReport']);
 const rateMessages=new Set(['MESSAGE_RATE_LIMIT','POST_RATE_LIMIT','COMMENT_RATE_LIMIT','FOLLOW_RATE_LIMIT','REPORT_RATE_LIMIT','RESTRICTION_RATE_LIMIT','LIKE_RATE_LIMIT']);
 function mapError(status,data){
@@ -32,6 +32,12 @@ function mapError(status,data){
 }
 function operation(name,input,actor){
  switch(name){
+ case 'saveCreatorProfile':{const b=shape(input,['handle','displayName','bio']);return rpc('save_creator_profile',{_handle:string(b.handle,3,24),_name:string(b.displayName,3,60),_bio:string(b.bio??'',0,280)});}
+ case 'editDraft':{const b=shape(input,['contentId','title','description','previewText','rightsAttested']);if(b.rightsAttested!==true)throw fault('INVALID_INPUT',422);return rpc('edit_creator_draft',{_content:id(b.contentId),_title:string(b.title,3,160),_description:string(b.description,0,2500),_preview:string(b.previewText,0,800),_rights:true});}
+ case 'institutionAppeals':shape(input,[]);return rpc('my_institution_appeals',{});
+ case 'submitInstitutionAppeal':{const b=shape(input,['reason']);return rpc('submit_institution_appeal',{_reason:string(b.reason,20,800)});}
+ case 'privacyRequests':shape(input,[]);return rpc('my_privacy_requests',{});
+ case 'submitPrivacyRequest':{const b=shape(input,['kind','reason']);return rpc('submit_privacy_request',{_kind:choice(b.kind,['access','correction','erasure','restriction','portability']),_reason:string(b.reason,20,1000)});}
  case 'draftPrice':{const b=shape(input,['contentId']);return rpc('get_draft_price',{_content:id(b.contentId)});}
  case 'setDraftPrice':{const b=shape(input,['contentId','amountKobo']);if(!Number.isSafeInteger(b.amountKobo)||b.amountKobo<0||b.amountKobo>1000000000||(b.amountKobo>0&&b.amountKobo<20000))throw fault('INVALID_INPUT',422);return rpc('set_draft_price',{_content:id(b.contentId),_amount:b.amountKobo});}
  case 'myPayouts':shape(input,[]);return rpc('creator_payout_request',{_action:'list'});
