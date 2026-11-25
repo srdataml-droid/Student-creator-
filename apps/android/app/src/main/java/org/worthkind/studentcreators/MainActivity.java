@@ -2,6 +2,7 @@ package org.worthkind.studentcreators;
 
 import android.app.Activity;
 import android.os.Bundle;
+import android.os.Build;
 import android.view.View;
 import android.view.WindowInsets;
 import android.widget.ArrayAdapter;
@@ -41,7 +42,7 @@ public final class MainActivity extends Activity {
         });
         heading = new TextView(this);
         heading.setTextSize(24);
-        heading.setAccessibilityHeading(true);
+        if (Build.VERSION.SDK_INT >= 28) heading.setAccessibilityHeading(true);
         layout.addView(heading);
         status = new TextView(this);
         status.setAccessibilityLiveRegion(View.ACCESSIBILITY_LIVE_REGION_POLITE);
