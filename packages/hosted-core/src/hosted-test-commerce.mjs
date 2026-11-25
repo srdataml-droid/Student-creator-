@@ -51,7 +51,7 @@ export function createHostedTestCommerce({rpc,gateway,authenticate,signingSecret
  async function actor(token){
   if(typeof authenticate!=='function')throw fault('HOSTED_AUTH_POLICIES_UNAVAILABLE');
   const a=await authenticate(token);
-  if(!uuid.test(a?.userId||'')||typeof a.email!=='string'||!a.emailConfirmed||!a.currentSession||!a.eligible)throw fault('AUTH_REQUIRED',401);
+  if(!uuid.test(a?.userId||'')||typeof a.email!=='string'||a.emailConfirmed!==true||a.currentSession!==true||a.eligible!==true)throw fault('AUTH_REQUIRED',401);
   return a;
  }
  async function snapshot(token,reference){
