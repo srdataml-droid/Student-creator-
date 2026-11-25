@@ -59,6 +59,7 @@ export function hostedCreatorRequest(operation,input={}){
  case 'communityReport':return json('/api/social/communityReport',{courseId:id(input.courseId),postId:id(input.postId),reason:bounded(input.reason,10,1000)});
  case 'classGrant':return {path:'/api/classes/'+id(input.classId)+'/hosted-room-token',method:'POST',headers:{}};
  case 'checkout':return {path:'/api/lessons/'+id(input.lessonId)+'/hosted-checkout',method:'POST',headers:{'idempotency-key':key(input.creationKey)}};
+ case 'purchaseHistory':return {path:'/api/account/purchases',method:'GET',headers:{}};
  default:throw Error('UNKNOWN_CREATOR_OPERATION');
  }
 }
