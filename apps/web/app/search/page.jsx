@@ -1,10 +1,12 @@
 
 import Link from 'next/link';
+import HostedDiscovery from '../HostedDiscovery.jsx';
 import {isLocalMode,getLocalPublicCourses,getLocalPublicInstitutions,getLocalTopics,searchLocalPublishedLessons} from '../../lib/local-public.mjs';
 export const dynamic='force-dynamic';
-export const metadata={title:'Find lessons | Campus Learning'};
+export const metadata={title:'Search | Student Creators'};
 export default async function SearchPage({searchParams}){
  const params=(await searchParams)||{};
+ if(!isLocalMode())return <main id="main" className="creator-main modern-home hosted-home"><div className="feed-column"><h1 className="visually-hidden">Search Student Creators</h1><HostedDiscovery params={params} search/></div></main>;
  const q=typeof params.q==='string'?params.q.trim():'';
  const institutionId=typeof params.institutionId==='string'?params.institutionId:'';
  const courseId=typeof params.courseId==='string'?params.courseId:'';
