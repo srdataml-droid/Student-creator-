@@ -48,7 +48,7 @@ BEGIN
  IF public.record_live_learning_charge(ref,'9600012348',repeat('e',64))<>'accepted' THEN RAISE EXCEPTION 'Service charge enqueue failed'; END IF;
  e:=public.claim_live_learning_charge();
  IF NOT public.settle_live_learning_charge('9600012348',(e->>'leaseId')::uuid,30000,200) THEN RAISE EXCEPTION 'Verified tutoring settlement failed'; END IF;
- IF (SELECT state FROM public.personal_learning_requests WHERE id=s) IS DISTINCT FROM 'accepted' THEN RAISE EXCEPTION 'Tutoring not accepted'; END IF;
+ IF (SELECT req.state FROM public.personal_learning_requests req WHERE req.id=s) IS DISTINCT FROM 'accepted' THEN RAISE EXCEPTION 'Tutoring not accepted'; END IF;
 END $$;
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','9b000000-0000-4000-8000-000000000001',true),set_config('request.jwt.claims','{"sub":"9b000000-0000-4000-8000-000000000001","role":"authenticated","session_id":"9b000000-0000-4000-8000-000000000001"}',true);
