@@ -106,6 +106,67 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     await expect(creatorPage.getByRole('heading',{name:'Learn directly from creators.'})).toBeVisible();
     await expect(creatorPage.getByRole('button',{name:'Send request'})).toBeVisible();
 
+    // Week 6: real local auth/enrollment plus mocked media transport in Chromium.
+    // This is NOT a real LiveKit streaming acceptance test.
+    const when=new Date(Date.now()+8*60000).toISOString();
+    const until=new Date(Date.now()+65*60000).toISOString();
+    const classCreated=await readJson(await creator.request.post('/api/local/courses/'+courseId+'/classes',{
+      data:{title:'Synthetic browser classroom '+suffix,description:'An original guided classroom exercise',
+        startsAt:when,endsAt:until,capacity:5,priceKobo:0,
+        creationKey:'wk06-browser-class-'+suffix+'-2026'}}));
+    const roomId=classCreated.class.id;
+    const enrollment=await viewer.request.post('/api/local/classes/'+roomId+'/enroll',{data:{}});
+    expect(enrollment.status()).toBe(200);
+    expect((await creator.request.post('/api/local/classes/'+roomId+'/open',{data:{}})).status()).toBe(200);
+    // Test the UI independently of the missing provider credentials. Room-token HTTP
+    // responses are mocked here; server permissions are tested in Node separately.
+    const livekitMock=()=>{
+      class Room {
+        constructor(){this.handlers={};this.localParticipant={
+          setCameraEnabled:async()=>{},setMicrophoneEnabled:async()=>{},setScreenShareEnabled:async()=>{}
+        };}
+        on(event,handler){this.handlers[event]=handler;return this;}
+        async connect(url,token){
+          if(!url.startsWith('wss://')||!token)throw Error('invalid mock grant');
+          window.__wk06MediaConnected=true;
+        }
+        async disconnect(){this.handlers.disconnected?.();window.__wk06MediaConnected=false;}
+        async startAudio(){window.__wk06AudioStarted=true;}
+      }
+      window.LivekitClient={Room,RoomEvent:{TrackSubscribed:'trackSubscribed',TrackUnsubscribed:'trackUnsubscribed',
+        Reconnecting:'reconnecting',Reconnected:'reconnected',Disconnected:'disconnected'},
+        Track:{Kind:{Video:'video',Audio:'audio'}}};
+    };
+    await creatorPage.addInitScript(livekitMock);
+    await viewerPage.addInitScript(livekitMock);
+    await creatorPage.route('**/api/local/classes/'+roomId+'/room-token',route=>route.fulfill({
+      status:200,contentType:'application/json',body:JSON.stringify({room:{role:'host',url:'wss://example.invalid',token:'synthetic-host-token'}})
+    }));
+    await viewerPage.route('**/api/local/classes/'+roomId+'/room-token',route=>route.fulfill({
+      status:200,contentType:'application/json',body:JSON.stringify({room:{role:'participant',url:'wss://example.invalid',token:'synthetic-participant-token'}})
+    }));
+    await creatorPage.goto('/classes/'+roomId+'/room');
+    await expect(creatorPage.getByRole('button',{name:'Join live class'})).toBeVisible();
+    await creatorPage.getByRole('button',{name:'Join live class'}).click();
+    await expect(creatorPage.getByRole('button',{name:'Turn on microphone'})).toBeVisible();
+    await expect(creatorPage.getByRole('button',{name:'Turn on camera'})).toBeVisible();
+    await creatorPage.getByRole('button',{name:'Turn on microphone'}).click();
+    await expect(creatorPage.getByRole('button',{name:'Mute microphone'})).toBeVisible();
+    await viewerPage.goto('/classes/'+roomId+'/room');
+    await viewerPage.getByRole('button',{name:'Join live class'}).click();
+    await expect(viewerPage.getByText('Connected as a participant.',{exact:false})).toBeVisible();
+    await expect(viewerPage.getByRole('button',{name:'Turn on microphone'})).toHaveCount(0);
+    await expect(viewerPage.getByRole('button',{name:'Share screen'})).toHaveCount(0);
+    await viewerPage.getByRole('button',{name:'Leave class'}).click();
+    await expect(viewerPage.getByRole('button',{name:'Join live class'})).toBeVisible();
+    await creatorPage.getByRole('button',{name:'Leave class'}).click();
+    expect((await creator.request.post('/api/local/classes/'+roomId+'/cancel',
+      {data:{reason:'Synthetic media UI acceptance is finished'}})).status()).toBe(200);
+    expect((await viewer.request.post('/api/local/classes/'+roomId+'/room-token',{data:{}})).status()).toBe(409);
+    await viewerPage.reload();
+    await expect(viewerPage.getByRole('button',{name:'Join live class'})).toBeDisabled();
+    console.log('browser-alpha: isolated Week 6 media UI state/permissions passed (transport mocked)');
+
     await creatorPage.goto('/studio');
     await expect(creatorPage.locator('#course')).toBeVisible();
     await creatorPage.locator('#course').selectOption(courseId);
