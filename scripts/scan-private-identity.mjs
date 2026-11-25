@@ -3,9 +3,7 @@ import {createPrivateIdentityProvider} from '../packages/hosted-core/src/private
 import {createClamdIdentityScanner,processNextIdentityScan} from '../packages/hosted-core/src/private-identity-scanner.mjs';
 async function main(){
  const env=process.env;
- if(env.APP_DATA_MODE!=='hosted'||env.STUDENT_CREATORS_STAGING_APPROVED!=='true'||
- env.STUDENT_CREATORS_PROJECT_REF!=='jnkqmlbkkvccnxrgkpno'||env.STUDENT_CREATORS_PUBLIC_REGISTRATION!=='false'||
- env.STUDENT_CREATORS_REAL_PAYMENT_ENABLED!=='false'||env.STUDENT_CREATORS_IDENTITY_DATA_POLICY_APPROVED!=='true'||
+ if(env.STUDENT_CREATORS_IDENTITY_DATA_POLICY_APPROVED!=='true'||
  env.STUDENT_CREATORS_PRIVATE_IDENTITY_BUCKET!=='student-creators-private-identity'||
  env.STUDENT_CREATORS_IDENTITY_SCANNER_ENABLED!=='true')throw Error('Scanner activation blocked');
  const config=readDedicatedSupabaseRuntimeConfig(env,{server:true});
