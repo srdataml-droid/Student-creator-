@@ -73,3 +73,6 @@ Exact previous head d5071dac190c11bbc96f000d65fde15f1e35a976 passed all five CI 
 
 ## Twenty-first increment: concrete hosted HTTP route
 Added POST /api/social/[operation], explicitly gated by hosted staging approval, separate social enable flag, pinned project, disabled enrollment and live payments. Authenticates against actual Supabase Auth user endpoint, then calls current-subject social_session_state RPC for active session and student/admin role. Existing student adapter now also supports separately authorized admin role assignment/report queue/review; no service key or arbitrary provider route. Strict bearer-only auth, body cap, origin restriction and safe errors. No cookie/token-storage changes or browser integration without shared hosted sign-in. HTTP tests use injected transport; real route is wired but disabled and not deployed. Exact-head CI pending.
+
+## Twenty-second increment: hosted like parity
+Previous exact head 95758a53 passed all five jobs in run 45534377067. Found remaining direct like write grant could bypass hourly local quota. Replace it with current-session, current-student, view-aware and audited RPC; 60 new likes per hour including unlike/re-like, own unlike remains available. Adapter uses the RPC and adds own likes/follow status reads. Disposable SQL negative tests added. No live environment changes.

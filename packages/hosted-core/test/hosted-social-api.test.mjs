@@ -36,7 +36,7 @@ test('reads use bounded allowlisted columns and likes derive actor from verified
  assert.equal(url.pathname,'/rest/v1/social_notifications');assert.equal(url.searchParams.get('select'),'id,kind,target_id,created_at,read_at');
  await x.run('comments',{contentId:peer});url=new URL(x.calls[3].url);
  assert.equal(url.searchParams.get('content_id'),'eq.'+peer);assert.equal(url.searchParams.get('select').includes('creation_hash'),false);
- await x.run('like',{contentId:peer});assert.deepEqual(JSON.parse(x.calls[5].options.body),{user_id:actor,content_id:peer});
+ await x.run('like',{contentId:peer});assert.deepEqual(JSON.parse(x.calls[5].options.body),{_content:peer,_enabled:true});assert.ok(x.calls[5].url.endsWith('/rpc/social_like_action'));
 });
 test('database errors map to safe client outcomes without exposing provider detail',async()=>{
  for(const [code,status,expected] of [['42501',403,403],['P0002',404,404],['23505',409,409],['22023',400,422],['P0001',400,429]]){

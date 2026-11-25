@@ -19,7 +19,7 @@ const rpc=(name,args)=>({path:'rpc/'+name,method:'POST',body:args});
 const select=(name,fields,filters={})=>({path:name+'?'+new URLSearchParams({select:fields,...filters}),method:'GET'});
 const readIds=v=>{if(!Array.isArray(v)||v.length<1||v.length>100||new Set(v).size!==v.length)throw fault('INVALID_INPUT',422);return v.map(id);};
 const adminOperations=new Set(['setCommunityModerator','reportQueue','reviewReport']);
-const rateMessages=new Set(['MESSAGE_RATE_LIMIT','POST_RATE_LIMIT','COMMENT_RATE_LIMIT','FOLLOW_RATE_LIMIT','REPORT_RATE_LIMIT','RESTRICTION_RATE_LIMIT']);
+const rateMessages=new Set(['MESSAGE_RATE_LIMIT','POST_RATE_LIMIT','COMMENT_RATE_LIMIT','FOLLOW_RATE_LIMIT','REPORT_RATE_LIMIT','RESTRICTION_RATE_LIMIT','LIKE_RATE_LIMIT']);
 function mapError(status,data){
  if(status===401)return fault('AUTH_REQUIRED',401);
  if(status===403||data?.code==='42501')return fault('SOCIAL_ACCESS_DENIED',403);
@@ -83,10 +83,13 @@ function operation(name,input,actor){
   const b=shape(input,name==='removeComment'?['contentId','commentId']:['contentId','commentId','reason']);
   return rpc('social_comment_action',{_action:name==='removeComment'?'remove':'report',_content:id(b.contentId),_input:{commentId:id(b.commentId),...(name==='reportComment'?{reason:string(b.reason,10,1000)}:{})}});
  }
+ case 'myLikes':shape(input,[]);return select('content_likes','content_id,created_at',{user_id:'eq.'+actor,order:'created_at.desc',limit:'250'});
+ case 'isFollowing':{
+  const b=shape(input,['creatorId']);return select('social_creator_follows','creator_id',{follower_id:'eq.'+actor,creator_id:'eq.'+id(b.creatorId),limit:'1'});
+ }
+ case 'following':shape(input,[]);return select('social_creator_follows','creator_id',{follower_id:'eq.'+actor,order:'created_at.desc',limit:'250'});
  case 'like':case 'unlike':{
-  const b=shape(input,['contentId']),contentId=id(b.contentId);
-  // RLS is still evaluated for the user's own signed token.
-  return name==='like'?{path:'content_likes?on_conflict=user_id,content_id',method:'POST',body:{user_id:actor,content_id:contentId},prefer:'resolution=ignore-duplicates,return=minimal'}:{path:'content_likes?'+new URLSearchParams({user_id:'eq.'+actor,content_id:'eq.'+contentId}),method:'DELETE',prefer:'return=minimal'};
+  const b=shape(input,['contentId']);return rpc('social_like_action',{_content:id(b.contentId),_enabled:name==='like'});
  }
  case 'notifications':{
   const b=shape(input,['limit']);return select('social_notifications','id,kind,target_id,created_at,read_at',{order:'created_at.desc,id.desc',limit:String(integer(b.limit,100,100))});
