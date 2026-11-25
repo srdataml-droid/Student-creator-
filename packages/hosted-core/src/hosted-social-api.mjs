@@ -98,8 +98,8 @@ function operation(name,input,actor){
  }
  case 'createClass':{
   const b=shape(input,['courseId','startsAt','endsAt','capacity','title','description','creationKey','priceKobo']);
-  if(b.priceKobo!==undefined&&b.priceKobo!==0)throw fault('INVALID_INPUT',422);
-  return rpc('hosted_learning_action',{_action:'create_class',_input:{courseId:id(b.courseId),startsAt:string(b.startsAt,20,35),endsAt:string(b.endsAt,20,35),capacity:integer(b.capacity,50,12),title:string(b.title,5,120),description:string(b.description??'',0,1200),creationKey:key(b.creationKey),priceKobo:0}});
+  if(b.priceKobo!==undefined&&(!Number.isSafeInteger(b.priceKobo)||b.priceKobo<0||b.priceKobo>1000000000||(b.priceKobo>0&&b.priceKobo<20000)))throw fault('INVALID_INPUT',422);
+  return rpc('hosted_learning_action',{_action:'create_class',_input:{courseId:id(b.courseId),startsAt:string(b.startsAt,20,35),endsAt:string(b.endsAt,20,35),capacity:integer(b.capacity,50,12),title:string(b.title,5,120),description:string(b.description??'',0,1200),creationKey:key(b.creationKey),priceKobo:b.priceKobo??0}});
  }
  case 'enrollClass':case 'withdrawClass':case 'openClass':case 'completeClass':{
   const b=shape(input,['classId']);return rpc('hosted_learning_action',{_action:{enrollClass:'enroll',withdrawClass:'withdraw',openClass:'open',completeClass:'complete'}[name],_input:{classId:id(b.classId)}});
