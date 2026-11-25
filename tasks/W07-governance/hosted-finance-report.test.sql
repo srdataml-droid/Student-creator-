@@ -44,6 +44,11 @@ BEGIN
  IF has_function_privilege('authenticated','public.week7_finance_report(uuid,timestamptz,timestamptz)','EXECUTE') THEN RAISE EXCEPTION 'Direct finance RPC exposed'; END IF;
  PERFORM public.enqueue_live_reversal_event('refund.processed','9700011114',repeat('c',64));e:=public.claim_live_reversal_event();
  IF NOT public.apply_live_refund_event('9700011114',(e->>'lease')::uuid,'9700011112',20000) THEN RAISE EXCEPTION 'Fixture refund failed'; END IF;
+ SELECT public.audit_live_settlement_receipts(jsonb_agg(jsonb_build_object('transactionId',transaction_id,'reference',reference,'amountKobo',amount_kobo::text,'feeKobo',fee_kobo::text))) INTO q FROM (SELECT transaction_id,reference,amount_kobo,fee_kobo FROM live_finance.receipts WHERE transaction_id='9700011111' UNION ALL SELECT transaction_id,reference,amount_kobo,fee_kobo FROM live_finance.learning_receipts WHERE transaction_id IN ('9700011112','9700011113')) x;
+ IF q->>'matched'<>'2' OR q->>'reversed'<>'1' OR q->>'withdrawalEnabled'<>'false' THEN RAISE EXCEPTION 'Settlement audit mismatch %',q; END IF;
+ q:=public.audit_live_settlement_receipts('[{"transactionId":"9700011199","reference":"unknown","amountKobo":"20000","feeKobo":"100"}]'::jsonb);
+ IF q->>'unrecorded'<>'1' OR has_function_privilege('authenticated','public.audit_live_settlement_receipts(jsonb)','EXECUTE') OR has_function_privilege('anon','public.audit_live_settlement_receipts(jsonb)','EXECUTE') THEN RAISE EXCEPTION 'Settlement audit access mismatch'; END IF;
+ BEGIN PERFORM public.audit_live_settlement_receipts('[{"transactionId":"1","reference":"x","amountKobo":"0","feeKobo":"0"}]'::jsonb); RAISE EXCEPTION 'Invalid settlement item accepted'; EXCEPTION WHEN invalid_parameter_value THEN NULL; END;
 END $$;
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','9b000000-0000-4000-8000-000000000001',true),set_config('request.jwt.claims','{"sub":"9b000000-0000-4000-8000-000000000001","role":"authenticated","session_id":"9b000000-0000-4000-8000-000000000001"}',true);

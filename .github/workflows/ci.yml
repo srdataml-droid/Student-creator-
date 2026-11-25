@@ -191,6 +191,7 @@ jobs:
           psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-learning-refund-reopen.sql
           psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-learning-review.test.sql
           psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-finance-report.sql
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-settlement-audit.sql
           psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-finance-report.test.sql
           psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-copyright-review.sql
           psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-copyright-review.test.sql
