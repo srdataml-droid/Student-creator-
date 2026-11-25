@@ -117,4 +117,4 @@ function HostedStudioEntry(){
  useEffect(()=>{let active=true;fetch('/api/courses',{credentials:'same-origin',cache:'no-store',redirect:'error'}).then(async r=>{if(!r.ok)throw Error('unavailable');const result=await r.json();if(result.state!=='ready'||!Array.isArray(result.courses))throw Error('unavailable');if(active){setCourses(result.courses);setStatus('ready');}}).catch(()=>{if(active)setStatus('error');});return()=>{active=false;};},[]);
  return status==='loading'?<main id="main" className="main"><h1>Creator studio</h1><p role="status">Loading courses…</p></main>:<HostedCreatorStudio courses={courses} catalogAvailable={status==='ready'}/>;
 }
-export default function Studio(){const hosted=useHostedAccount();return hosted?<HostedStudioEntry/>:<LocalStudio/>;}
+export default function Studio(){const hosted=useHostedAccount();return hosted?<HostedStudioEntry key={hosted.session.userId||hosted.session.state}/>:<LocalStudio/>;}
