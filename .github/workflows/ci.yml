@@ -160,6 +160,18 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-likes.sql
           psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-likes.test.sql
 
+      - name: Verify hosted interactive classes and free learning contracts
+        run: |
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W06-interactive-classes-and-learning-services/hosted-live-learning.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W06-interactive-classes-and-learning-services/hosted-live-learning.test.sql
+
+      - name: Verify hosted governance and bookmarks
+        run: |
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-governance.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-governance.test.sql
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-bookmarks.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-bookmarks.test.sql
+
       - name: Restore disposable PostgreSQL backup into isolated database
         env:
           PG_CONTAINER: ${{ job.services.postgres.id }}
