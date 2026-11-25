@@ -10,6 +10,11 @@ for candidate in "$sdk"/build-tools/*; do
   if [[ -x "$candidate/apksigner" && -x "$candidate/aapt2" ]]; then tools="$candidate"; fi
 done
 [[ -n "$tools" ]] || { echo "apksigner and aapt2 unavailable" >&2; exit 1; }
+# Prefer the structured SDK manifest commands instead of version-dependent badging text.
+analyzer="$sdk/cmdline-tools/latest/bin/apkanalyzer"
+if [[ ! -x "$analyzer" ]]; then analyzer="$(command -v apkanalyzer || true)"; fi
+badging_tool="$tools/aapt2"
+if [[ -x "$sdk/build-tools/35.0.0/aapt2" ]]; then badging_tool="$sdk/build-tools/35.0.0/aapt2"; fi
 main=apps/android/app/build/outputs/apk/debug/app-debug.apk
 instrument=apps/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 verify() {
@@ -27,10 +32,22 @@ verify() {
   count="$(printf '%s\n' "$certs" | sort -u | wc -l)"
   [[ "$count" == 1 ]] || { echo "Expected one unique APK signing certificate across schemes" >&2; return 1; }
   digest="$(printf '%s\n' "$certs" | sort -u)"
-  badging="$("$tools/aapt2" dump badging "$apk")" || { echo "APK manifest unavailable" >&2; return 1; }
-  grep -Fq "package: name='$expected'" <<< "$badging" || { echo "Unexpected APK package" >&2; return 1; }
-  grep -Fxq "sdkVersion:'26'" <<< "$badging" || { echo "Unexpected APK minimum API" >&2; return 1; }
-  grep -Fxq "targetSdkVersion:'36'" <<< "$badging" || { echo "Unexpected APK target API" >&2; return 1; }
+  local package min target
+  if [[ -x "$analyzer" ]]; then
+    package="$("$analyzer" manifest application-id "$apk")" || return 1
+    min="$("$analyzer" manifest min-sdk "$apk")" || return 1
+    target="$("$analyzer" manifest target-sdk "$apk")" || return 1
+  else
+    badging="$("$badging_tool" dump badging "$apk")" || { echo "APK manifest unavailable" >&2; return 1; }
+    package="$(printf '%s\n' "$badging" | sed -nE "s/^[[:space:]]*package: name='([^']+)'.*$/\1/p")"
+    min="$(printf '%s\n' "$badging" | sed -nE "s/^[[:space:]]*(minSdkVersion|sdkVersion):[[:space:]]*'?([0-9]+)'?[[:space:]]*$/\2/p")"
+    target="$(printf '%s\n' "$badging" | sed -nE "s/^[[:space:]]*targetSdkVersion:[[:space:]]*'?([0-9]+)'?[[:space:]]*$/\1/p")"
+  fi
+  [[ "$package" == "$expected" ]] || { echo "Unexpected APK package for $expected" >&2; return 1; }
+  [[ "$min" == 26 && "$target" == 36 ]] || {
+    printf 'Unexpected SDK bounds for %s: min=%q target=%q\n' "$expected" "$min" "$target" >&2
+    return 1
+  }
   printf '%s\n' "$digest"
 }
 main_signer="$(verify "$main" org.worthkind.studentcreators.internal)"
