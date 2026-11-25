@@ -4,44 +4,52 @@ import {createPaystackClient} from '../../payment-core/src/paystack-client.mjs';
 import {decodeVerifiedPaystackWebhookV1} from '../../payment-core/src/webhooks.mjs';
 import {readDedicatedSupabaseRuntimeConfig,supabaseServerHeaders} from '../../content-core/src/supabase-runtime-config.mjs';
 const REF='jnkqmlbkkvccnxrgkpno',UUID=/^[0-9a-f-]{36}$/i,REFERENCE=/^sc_[0-9a-f]{32}$/,TX=/^[A-Za-z0-9_-]{1,128}$/;
-const unavailable=()=>new Error('Hosted test payment unavailable');
+const unavailable=()=>new Error('Hosted payment unavailable');
+const refPattern=domain=>domain==='live'?/^lc_[0-9a-f]{32}$/:REFERENCE;
 const json=(status,data)=>Response.json(data,{status,headers:{'cache-control':'no-store','referrer-policy':'no-referrer'}});
-function checkoutUrl(value){const u=new URL(value);if(u.protocol!=='https:'||!['checkout.paystack.com','paystack.com'].includes(u.hostname)||u.username||u.password||u.port||u.hash||u.href.length>2048)throw unavailable();return u.href;}
+function checkoutUrl(value){if(typeof value!=='string'||/[\\\s]/.test(value))throw unavailable();const u=new URL(value);if(u.protocol!=='https:'||!['checkout.paystack.com','paystack.com'].includes(u.hostname)||u.username||u.password||u.port||u.hash||u.href.length>2048)throw unavailable();return u.href;}
 async function readRaw(request,cap){
  const reader=request.body?.getReader();if(!reader)throw unavailable();
  let size=0;const chunks=[];
  try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>cap){await reader.cancel();throw unavailable();}chunks.push(Buffer.from(value));}}finally{reader.releaseLock();}
  return Buffer.concat(chunks,size);
 }
-export function createHostedCheckoutHandler({auth,store,gateway,origin}){
+export function createHostedCheckoutHandler({auth,store,gateway,origin,domain='test',checkoutEnabled=domain==='test'}){
  return async(request,{lessonId}={})=>{
   if(request.method!=='POST')return json(405,{error:'METHOD_NOT_ALLOWED'});
+  if(!['test','live'].includes(domain)||!checkoutEnabled)return json(503,{error:'CHECKOUT_DISABLED'});
   if(request.headers.get('origin')!==origin)return json(403,{error:'ORIGIN_FORBIDDEN'});
   if(!UUID.test(lessonId??'')||request.body)return json(400,{error:'BAD_REQUEST'});
   const key=request.headers.get('idempotency-key'),token=/^Bearer ([^\s]+)$/i.exec(request.headers.get('authorization')??'')?.[1];
   if(!token)return json(401,{error:'AUTH_REQUIRED'});
   if(!/^[A-Za-z0-9_-]{16,128}$/.test(key??''))return json(400,{error:'IDEMPOTENCY_KEY_REQUIRED'});
+  const terms=request.headers.get('x-student-creators-terms-version');
+  if(domain==='live'&&!/^[A-Za-z0-9._-]{3,128}$/.test(terms??''))return json(400,{error:'TERMS_VERSION_REQUIRED'});
   try{
    const user=await auth.getUser(token);if(!user)return json(401,{error:'AUTH_REQUIRED'});
-   const o=await store.reserve(user.id,lessonId,key);if(!o||!UUID.test(o.orderId??''))return json(403,{error:'CHECKOUT_UNAVAILABLE'});
-   if(o.status==='ready')return json(200,{orderId:o.orderId,authorizationUrl:checkoutUrl(o.authorizationUrl)});
+   const o=domain==='live'?await store.reserve(user.id,lessonId,key,terms):await store.reserve(user.id,lessonId,key);if(!o||!UUID.test(o.orderId??''))return json(403,{error:'CHECKOUT_UNAVAILABLE'});
+   if(o.status==='ready'){
+    if(o.domain!==domain||!refPattern(domain).test(o.reference??'')||(domain==='live'&&(await auth.getUser(token))?.id!==user.id))throw unavailable();
+    return json(200,{orderId:o.orderId,authorizationUrl:checkoutUrl(o.authorizationUrl)});
+   }
    if(o.create!==true)return json(o.status==='paid'?200:202,{orderId:o.orderId,status:o.status});
-   if(o.domain!=='test'||!REFERENCE.test(o.reference??'')||!Number.isSafeInteger(o.amountKobo)||o.amountKobo<20000)throw unavailable();
+   if(o.domain!==domain||!refPattern(domain).test(o.reference??'')||!Number.isSafeInteger(o.amountKobo)||o.amountKobo<20000)throw unavailable();
    let result;
    try{result=await gateway.initialize(o);}catch{await store.finish(o.orderId,null);return json(503,{error:'CHECKOUT_RECONCILIATION_REQUIRED'});}
    if(result.reference!==o.reference||await store.finish(o.orderId,checkoutUrl(result.authorizationUrl))!==true)throw unavailable();
+   if(domain==='live'&&((await auth.getUser(token))?.id!==user.id||await store.canReturn(user.id,o.reference,terms)!==true))return json(409,{error:'CHECKOUT_REVIEW_REQUIRED'});
    return json(201,{orderId:o.orderId,authorizationUrl:checkoutUrl(result.authorizationUrl)});
   }catch{return json(503,{error:'CHECKOUT_UNAVAILABLE'});}
  };
 }
-export function createHostedPaystackWebhook({store,signingSecrets}){
+export function createHostedPaystackWebhook({store,signingSecrets,domain='test'}){
  return async request=>{
   if(request.method!=='POST')return json(405,{error:'METHOD_NOT_ALLOWED'});
   let raw,event;
   try{raw=await readRaw(request,1048576);event=decodeVerifiedPaystackWebhookV1(raw,request.headers.get('paystack-signature'),signingSecrets);}catch{return json(401,{error:'INVALID_SIGNATURE_OR_BODY'});}
   if(event.event!=='charge.success')return json(200,{received:true,ignored:true});
   const d=event.data;
-  if(d.domain!=='test'||!REFERENCE.test(d.reference??'')||!(typeof d.id==='string'&&TX.test(d.id)||typeof d.id==='number'&&Number.isSafeInteger(d.id)&&d.id>0))return json(400,{error:'INVALID_TEST_EVENT'});
+  if(d.domain!==domain||!refPattern(domain).test(d.reference??'')||!(typeof d.id==='string'&&TX.test(d.id)||typeof d.id==='number'&&Number.isSafeInteger(d.id)&&d.id>0))return json(400,{error:domain==='test'?'INVALID_TEST_EVENT':'INVALID_LIVE_EVENT'});
   try{const result=await store.record(d.reference,String(d.id),createHash('sha256').update(raw).digest('hex'));
    if(result==='unknown')return json(200,{received:true,ignored:true});
    if(result==='collision')return json(409,{error:'EVENT_COLLISION'});
@@ -49,13 +57,13 @@ export function createHostedPaystackWebhook({store,signingSecrets}){
   }catch{return json(503,{error:'INBOX_UNAVAILABLE'});}
  };
 }
-export async function processHostedPaystackCharge({store,gateway}){
+export async function processHostedPaystackCharge({store,gateway,domain='test'}){
  const event=await store.claim();if(!event)return {state:'empty'};
  try{
   const o=await store.snapshot(event.reference);
-  if(!o||o.domain!=='test'||o.reference!==event.reference)throw unavailable();
+  if(!o||o.domain!==domain||!refPattern(domain).test(event.reference??'')||o.reference!==event.reference)throw unavailable();
   const charge=await gateway.verify(o);
-  if(charge.providerTransactionId!==event.providerTx||charge.domain!=='test'||charge.currency!=='NGN'||charge.amountKobo!==o.amountKobo)throw unavailable();
+  if(charge.providerTransactionId!==event.providerTx||charge.domain!==domain||charge.currency!=='NGN'||charge.amountKobo!==o.amountKobo||(domain==='live'&&(charge.reference!==o.reference||!Number.isSafeInteger(charge.providerFeeKobo)||charge.providerFeeKobo<0||charge.providerFeeKobo>o.amountKobo)))throw unavailable();
   if(await store.settle(event.key,event.leaseId,charge)!==true)throw unavailable();
   return {state:'processed'};
  }catch{

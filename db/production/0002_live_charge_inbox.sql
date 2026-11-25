@@ -37,9 +37,9 @@ declare r jsonb;
 begin
  if p_buyer is null or not public.affiliation_eligible(p_buyer) then raise exception 'NOT_ELIGIBLE' using errcode='42501'; end if;
  select jsonb_build_object('orderId',o.id,'reference',a.reference,'amountKobo',o.amount_kobo,'buyerEmail',t.buyer_email,'domain',o.environment,'currency',o.currency,'status',o.status,
- 'checkoutAllowed',o.status in ('created','pending','verification_pending') and l.state='active' and c.status='published' and co.active and public.affiliation_eligible(o.creator_id) and not exists(select 1 from public.creator_restrictions r2 where r2.creator_id=o.creator_id and r2.viewer_id=o.buyer_id and r2.deny_view) and exists(select 1 from live_finance.runtime_gate where singleton and allow_checkout))
+ 'checkoutAllowed',o.status in ('created','pending','verification_pending') and l.state='active' and c.status='published' and co.active and i.active and public.affiliation_eligible(o.creator_id) and not exists(select 1 from public.creator_restrictions r2 where r2.creator_id=o.creator_id and r2.viewer_id=o.buyer_id and r2.deny_view) and exists(select 1 from live_finance.runtime_gate where singleton and allow_checkout))
  into r from public.orders o join live_finance.order_terms t on t.order_id=o.id join public.payment_attempts a on a.order_id=o.id
- join public.listings l on l.id=o.listing_id join public.content_items c on c.id=o.content_id join public.courses co on co.id=c.course_id
+ join public.listings l on l.id=o.listing_id join public.content_items c on c.id=o.content_id join public.courses co on co.id=c.course_id join public.institutions i on i.id=c.institution_id
  where o.buyer_id=p_buyer and o.environment='live' and a.provider='paystack' and a.reference=p_ref;
  if r is null then raise exception 'ORDER_NOT_FOUND' using errcode='P0002'; end if;
  return r;
