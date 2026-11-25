@@ -31,8 +31,7 @@ grant execute on function auth.uid() to anon,authenticated,service_role;
 grant select on public.institutions,public.departments,public.courses,public.course_topics,
  public.student_profiles,public.orders,public.entitlements to authenticated;
 grant select on public.institutions,public.departments,public.courses,public.course_topics to anon;
--- Service role receives explicit DB privileges and bypasses RLS in real Supabase.
-grant all on all tables in schema public to service_role;
+-- Service role receives only the reviewed runtime privileges from migration 0021.
 
 \echo 'Validate cross-institution FK cannot be bypassed even by the database owner'
 do $$
