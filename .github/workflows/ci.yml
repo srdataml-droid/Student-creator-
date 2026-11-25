@@ -17,6 +17,9 @@ jobs:
         run: npm test
       - name: Verify native catalog transport on JVM
         run: bash scripts/test-android-catalog.sh
+      - name: Compile and lint internal Android debug app (SDK 36)
+        timeout-minutes: 8
+        run: bash scripts/build-android-internal.sh
       - name: Verify source artefacts do not contain development secrets
         run: |
           if git ls-files | grep -E '(^|/)(\.env(\..*)?|.*\.pem|.*\.key)$' | grep -vE '\.env\.example$'; then
