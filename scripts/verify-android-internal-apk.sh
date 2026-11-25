@@ -16,9 +16,17 @@ verify() {
   local apk="$1" expected="$2" badging signer digest
   [[ -s "$apk" ]] || { echo "APK missing" >&2; return 1; }
   signer="$("$tools/apksigner" verify --min-sdk-version 26 --verbose --print-certs "$apk")" || { echo "APK signature rejected" >&2; return 1; }
-  digest="$(printf '%s\n' "$signer" | sed -nE 's/^[[:space:]]*Signer #1 certificate SHA-256 digest:[[:space:]]*([[:xdigit:]]{64})[[:space:]]*$/\1/p')"
-  [[ "$digest" =~ ^[a-fA-F0-9]{64}$ ]] || { echo "Missing or invalid APK signer fingerprint" >&2; return 1; }
-  [[ "$(printf '%s\n' "$signer" | grep -c 'certificate SHA-256 digest:' || true)" == 1 ]] || { echo "Expected one APK signer" >&2; return 1; }
+  # Build Tools 37 labels each signature scheme instead of "Signer #1".
+  # Verify all recognized signing certificates, excluding source stamps.
+  local certs count
+  certs="$(printf '%s\n' "$signer" | sed -nE 's/^[[:space:]]*(Signer #[0-9]+|V[0-9]+(\.[0-9]+)? Signer:)[[:space:]]+certificate SHA-256 digest:[[:space:]]*([[:xdigit:]:]+)[[:space:]]*$/\3/p' | tr -d ':' | tr 'A-F' 'a-f')"
+  [[ -n "$certs" ]] || { echo "Missing APK signer fingerprint (build tools $(basename "$tools"))" >&2; return 1; }
+  while IFS= read -r digest; do
+    [[ "$digest" =~ ^[a-f0-9]{64}$ ]] || { echo "Invalid APK signer fingerprint" >&2; return 1; }
+  done <<< "$certs"
+  count="$(printf '%s\n' "$certs" | sort -u | wc -l)"
+  [[ "$count" == 1 ]] || { echo "Expected one unique APK signing certificate across schemes" >&2; return 1; }
+  digest="$(printf '%s\n' "$certs" | sort -u)"
   badging="$("$tools/aapt2" dump badging "$apk")" || { echo "APK manifest unavailable" >&2; return 1; }
   grep -Fq "package: name='$expected'" <<< "$badging" || { echo "Unexpected APK package" >&2; return 1; }
   grep -Fxq "sdkVersion:'26'" <<< "$badging" || { echo "Unexpected APK minimum API" >&2; return 1; }
