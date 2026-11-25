@@ -4,7 +4,7 @@ const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]
 const fail=(status,code)=>Object.assign(Error(code),{status});
 const response=(status,body)=>Response.json(body,{status,headers:{'cache-control':'private, no-store','referrer-policy':'no-referrer','x-content-type-options':'nosniff'}});
 export function financeReadConfig(env){
- if(env.APP_DATA_MODE!=='hosted'||env.STUDENT_CREATORS_STAGING_APPROVED!=='true'||env.STUDENT_CREATORS_PROJECT_REF!==REF||env.STUDENT_CREATORS_PUBLIC_REGISTRATION!=='false')throw fail(503,'FINANCE_UNAVAILABLE');
+ if(env.APP_DATA_MODE!=='hosted'||(env.STUDENT_CREATORS_STAGING_APPROVED!=='true'&&env.STUDENT_CREATORS_ENVIRONMENT!=='production')||env.STUDENT_CREATORS_PROJECT_REF!==REF||env.STUDENT_CREATORS_PUBLIC_REGISTRATION!=='false')throw fail(503,'FINANCE_UNAVAILABLE');
  const c=readSupabaseRuntimeConfig(env);
  if(!c||c.url!=='https://'+REF+'.supabase.co')throw fail(503,'FINANCE_UNAVAILABLE');
  const key=c.publishableKey;
