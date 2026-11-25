@@ -15,7 +15,8 @@ const ref=/^sc_[a-f0-9]{32}$/;
 const errorCode=e=>typeof e?.code==='string'&&/^[A-Z_]{1,60}$/.test(e.code)?e.code:'VERIFICATION_FAILED';
 const endpoints=Object.freeze({
  create:'week05_create_test_order',lookup:'week05_get_test_order',apply:'week05_apply_test_charge',
- enqueue:'week05_enqueue_test_charge',claim:'week05_claim_test_charge',finish:'week05_finish_test_charge'
+ enqueue:'week05_enqueue_test_charge',claim:'week05_claim_test_charge',finish:'week05_finish_test_charge',
+ beginCheckout:'week05_begin_test_checkout',finishCheckout:'week05_finish_test_checkout'
 });
 export function createHostedPaymentRpc({url,projectRef,serverKey,fetchImpl=fetch}={}){
  if(typeof projectRef!=='string'||!/^[a-z0-9]{20}$/.test(projectRef)||
@@ -46,7 +47,13 @@ function validateSnapshot(o){
  return {reference:o.reference,amountKobo:o.amountKobo,buyerEmail:o.buyerEmail,domain:'test'};
 }
 function publicOrder(o){return {orderId:o.orderId,reference:o.reference,amountKobo:o.amountKobo,currency:'NGN',status:o.status};}
-export function createHostedTestCommerce({rpc,gateway,authenticate,signingSecrets=[]}={}){
+function checkoutUrl(value){
+ if(typeof value!=='string'||value.length>2048)throw fault('INVALID_CHECKOUT_RESPONSE',502);
+ let u;try{u=new URL(value);}catch{throw fault('INVALID_CHECKOUT_RESPONSE',502);}
+ if(u.protocol!=='https:'||!['checkout.paystack.com','paystack.com'].includes(u.hostname)||u.username||u.password||u.port||u.hash||/[\\\s]/.test(value))throw fault('INVALID_CHECKOUT_RESPONSE',502);
+ return u.toString();
+}
+export function createHostedTestCommerce({rpc,gateway,authenticate,signingSecrets=[],distributionChannel=process.env.STUDENT_CREATORS_DISTRIBUTION_CHANNEL}={}){
  if(typeof rpc!=='function'||gateway?.environment!=='test'||typeof gateway.verify!=='function'||typeof gateway.initialize!=='function')throw fault('HOSTED_TEST_PAYMENT_CONFIGURATION');
  async function actor(token){
   if(typeof authenticate!=='function')throw fault('HOSTED_AUTH_POLICIES_UNAVAILABLE');
@@ -82,8 +89,33 @@ export function createHostedTestCommerce({rpc,gateway,authenticate,signingSecret
    return {orderId:o.order_id,reference:o.reference,amountKobo:o.amount_kobo,currency:'NGN',status:o.status,replayed:o.replayed===true};
   },
   async getOrder(token,reference){return publicOrder(await snapshot(token,reference));},
-  // Intentionally no hosted initialize method yet: a durable initialization lease
-  // and cached checkout URL validation are required before enabling checkout.
+  // Durable claim is committed before provider I/O. Uncertainty never retries
+  // initialization automatically. Cached URLs get the same strict validation.
+  async initializeOrder(token,reference){
+   if(distributionChannel!=='independent_web')throw fault('CHECKOUT_DISTRIBUTION_DISABLED',403);
+   const a=await actor(token);
+   if(!ref.test(reference||''))throw fault('ORDER_NOT_FOUND',404);
+   const c=await rpc('beginCheckout',{p_buyer:a.userId,p_ref:reference});
+   if(c?.reference!==reference)throw fault('INVALID_ORDER_SNAPSHOT');
+   if(c.state==='uncertain')throw fault('CHECKOUT_INITIALIZATION_UNCERTAIN',409);
+   if(c.state==='ready')return {reference,authorizationUrl:checkoutUrl(c.authorizationUrl)};
+   if(c.state!=='claimed'||!uuid.test(c.claim||'')||c.checkoutAllowed!==true)throw fault('INVALID_CHECKOUT_CLAIM');
+   let url;
+   try{
+    const checkout=await gateway.initialize(validateSnapshot(c));
+    if(checkout?.reference!==reference)throw fault('INVALID_CHECKOUT_RESPONSE',502);
+    url=checkoutUrl(checkout.authorizationUrl);
+   }catch(e){
+    // If the update itself fails, the started claim still blocks another attempt.
+    await rpc('finishCheckout',{p_ref:reference,p_claim:c.claim,p_url:null});
+    throw fault(errorCode(e),e?.status===403?403:503);
+   }
+   const done=await rpc('finishCheckout',{p_ref:reference,p_claim:c.claim,p_url:url});
+   if(done?.owned!==true||done.state!=='ready')throw fault('CHECKOUT_INITIALIZATION_UNCERTAIN',409);
+   const current=await snapshot(token,reference);
+   if(current.checkoutAllowed!==true)throw fault('CHECKOUT_UNAVAILABLE',409);
+   return {reference,authorizationUrl:url};
+  },
   async confirmOrder(token,reference){return verifyAndApply(await snapshot(token,reference));},
   async receiveWebhook(raw,signature){
    const event=decodeVerifiedPaystackWebhookV1(raw,signature,signingSecrets);

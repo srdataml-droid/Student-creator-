@@ -59,3 +59,27 @@ test('recovery opt-in and test-only gateway required',()=>{
  assert.throws(()=>createConfiguredHostedRecovery({}),{code:'HOSTED_RECOVERY_DISABLED'});
  assert.throws(()=>createHostedTestCommerce({rpc:async()=>{},gateway:{environment:'live'}}),{code:'HOSTED_TEST_PAYMENT_CONFIGURATION'});
 });
+
+test('checkout claims before network, persists ready URL then rechecks buyer and gate',async()=>{
+ const events=[];const f=fixture({distributionChannel:'independent_web',rpc:async(action,params)=>{events.push(action);if(action==='beginCheckout')return {...snapshot,state:'claimed',claim:lease,checkoutAllowed:true};if(action==='lookup')return {...snapshot,checkoutAllowed:true};if(action==='finishCheckout'){assert.equal(params.p_url,'https://checkout.paystack.com/test');return {owned:true,state:'ready'};}throw Error('unexpected');},gateway:{environment:'test',verify:async()=>verified,initialize:async(order)=>{events.push('provider');assert.equal(order.amountKobo,20000);return {reference,authorizationUrl:'https://checkout.paystack.com/test'};}}});
+ assert.deepEqual(await f.service.initializeOrder('token',reference),{reference,authorizationUrl:'https://checkout.paystack.com/test'});
+ assert.deepEqual(events,['beginCheckout','provider','finishCheckout','lookup']);
+});
+test('cached URL validation and distribution gate prevent bypass of provider checks',async()=>{
+ for(const authorizationUrl of ['https://checkout.paystack.com.evil.invalid/test','https://user@checkout.paystack.com/test','https://checkout.paystack.com/test#fragment','https://checkout.paystack.com:8443/test']){
+  const f=fixture({distributionChannel:'independent_web',rpc:async()=>({state:'ready',reference,authorizationUrl})});
+  await assert.rejects(f.service.initializeOrder('token',reference),{code:'INVALID_CHECKOUT_RESPONSE'});
+ }
+ const f=fixture({distributionChannel:'google_play'});
+ await assert.rejects(f.service.initializeOrder('token',reference),{code:'CHECKOUT_DISTRIBUTION_DISABLED'});
+ assert.equal(f.calls.length,0);
+});
+test('uncertain initialization never calls the provider or creates a new reference',async()=>{
+ const f=fixture({distributionChannel:'independent_web',rpc:async()=>({state:'uncertain',reference})});
+ await assert.rejects(f.service.initializeOrder('token',reference),{code:'CHECKOUT_INITIALIZATION_UNCERTAIN'});
+});
+test('failed provider call persists uncertainty instead of retrying',async()=>{
+ const events=[];const f=fixture({distributionChannel:'independent_web',rpc:async(action,params)=>{events.push(action);if(action==='beginCheckout')return {...snapshot,state:'claimed',claim:lease,checkoutAllowed:true};assert.equal(params.p_url,null);return {owned:true,state:'uncertain'};},gateway:{environment:'test',verify:async()=>verified,initialize:async()=>{events.push('provider');throw Object.assign(Error('secret response omitted'),{code:'GATEWAY_TIMEOUT'});}}});
+ await assert.rejects(f.service.initializeOrder('token',reference),{code:'GATEWAY_TIMEOUT'});
+ assert.deepEqual(events,['beginCheckout','provider','finishCheckout']);
+});
