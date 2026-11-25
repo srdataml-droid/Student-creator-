@@ -11,6 +11,7 @@ function fixture(calls,{active=true,foreign=false}={}){
  if(path==='social_session_state')return Response.json({userId:actor,active,student:true,admin:false});
  if(path==='student_profiles')return Response.json([{user_id:actor,display_name:'Own profile',institution_id:source,verified_at:'2026-11-25',suspended:false,secret:'private'}]);
  if(path==='verification_requests')return Response.json([{id:source,user_id:foreign?lesson:actor,method:'manual_id',status:'pending',expires_at:'2026-12-01',private_evidence_path:'private/path'}]);
+ if(path==='creator_public_profiles')return Response.json([{user_id:actor,handle:'creator_alias',display_name:'Creator alias',bio:'Original content'}]);
  if(path==='content_items')return Response.json([{id:lesson,creator_id:actor,title:'My draft',status:'draft',course_id:source,creation_key:'private'}]);
  throw Error('unexpected');
  };
