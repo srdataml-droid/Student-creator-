@@ -12,7 +12,7 @@ export default async function Communities({searchParams}){
  let courses=[],schools=[],state='ready';
  try{
   if(local){courses=getLocalPublicCourses();schools=getLocalPublicInstitutions();}
-  else{const catalog=await getHostedDiscovery();courses=catalog.courses;schools=catalog.schools;}
+  else{const catalog=await getHostedDiscovery({directoryOnly:true});courses=catalog.courses;schools=catalog.schools;}
  }catch{state='unavailable';}
  const names=new Map(schools.map(s=>[s.id,s.name]));
  const filtered=courses.filter(c=>(!campus||c.institutionId===campus)&&[c.code,c.title,names.get(c.institutionId)||''].join(' ').toLowerCase().includes(q.toLowerCase()));

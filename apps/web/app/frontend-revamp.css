@@ -405,3 +405,6 @@
  .modern-frame .mobile-creator-tabs a{border-radius:0}
 }
 @media(max-width:340px){.reference-mobile-search span{display:none}}
+
+.hosted-pagination{display:flex;align-items:center;justify-content:center;gap:16px;margin:24px 0;color:var(--muted)}
+.hosted-pagination a{display:inline-flex;align-items:center;min-height:44px;padding:0 12px;color:var(--brand-strong)}

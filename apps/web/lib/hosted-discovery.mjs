@@ -19,12 +19,12 @@ function preview(row,course,school){
  if(row.status!=='published'||!UUID.test(row.id||'')||!UUID.test(row.creator_id||'')||row.course_id!==course.id||row.institution_id!==course.institution_id||row.institution_id!==school.id)return null;
  return {id:row.id,creatorId:row.creator_id,courseId:row.course_id,institutionId:row.institution_id,title:clean(row.title,160),description:clean(row.description,1000),previewText:clean(row.preview_text,1000),publishedAt:clean(row.published_at,40),courseCode:clean(course.code,32),courseTitle:clean(course.title,160),institutionName:clean(school.name,160)};
 }
-export async function getHostedDiscovery({env=process.env,fetcher=fetch,lessonId=null}={}){
+export async function getHostedDiscovery({env=process.env,fetcher=fetch,lessonId=null,directoryOnly=false}={}){
  if(lessonId!==null&&!UUID.test(lessonId))return {posts:[],courses:[],schools:[]};
  const read=reader(env,fetcher);
  const params={select:fields,status:'eq.published',order:'published_at.desc.nullslast,id.asc',limit:lessonId?1:60,...(lessonId?{id:'eq.'+lessonId}:{})};
  const [rows,courseRows,schoolRows]=await Promise.all([
-  read('content_items',params),
+  directoryOnly?Promise.resolve([]):read('content_items',params),
   read('courses',{select:'id,institution_id,code,title,active',active:'eq.true',order:'code.asc',limit:100}),
   read('institutions',{select:'id,name,active',active:'eq.true',order:'name.asc',limit:100})
  ]);

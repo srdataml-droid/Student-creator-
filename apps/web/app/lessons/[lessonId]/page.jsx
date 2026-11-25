@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import {notFound} from 'next/navigation';
-import {getHostedDiscovery} from '../../../lib/hosted-discovery.mjs';
+import {getPagedHostedDiscovery} from '../../../lib/paged-hosted-discovery.mjs';
 import {getLocalViewablePublishedLesson,getLocalPublicCreator,getLocalPublishedPricePreview,isLocalMode} from '../../../lib/local-public.mjs';
 import BookmarkButton from './BookmarkButton.jsx';
 import LikeButton from './LikeButton.jsx';
@@ -11,7 +11,7 @@ export const dynamic='force-dynamic';
 export default async function LessonPage({params}){
  const {lessonId}=await params;
  if(!isLocalMode()){
-  let preview;try{preview=(await getHostedDiscovery({lessonId})).posts[0];}catch{return <main id="main" className="main"><p role="status">This preview is temporarily unavailable.</p><Link href="/">Back to feed</Link></main>;}
+  let preview;try{preview=(await getPagedHostedDiscovery({lessonId})).items[0];}catch{return <main id="main" className="main"><p role="status">This preview is temporarily unavailable.</p><Link href="/">Back to feed</Link></main>;}
   if(!preview)return notFound();
   return <main id="main" className="main"><Link className="back" href="/">Back to feed</Link><article className="lesson-article"><p className="eyebrow">{preview.institutionName} · {preview.courseCode}</p><h1>{preview.title}</h1><p className="intro">{preview.description}</p><p>{preview.previewText}</p><p className="hint">This is a public preview. Full viewing, purchase and creator interactions are unavailable on the hosted platform until their authorized services are connected.</p><Link className="secondary-link" href={'/courses/'+preview.courseId}>Explore course</Link></article></main>;
  }
