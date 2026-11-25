@@ -306,8 +306,15 @@ export function createLearningServices({db,transaction,audit,error,requireVerifi
       if(typeof room!=='string'||!/^wk-class-[0-9a-f-]{36}$/i.test(room)||
          typeof identity!=='string'||!/^student-[0-9a-f-]{36}$/i.test(identity))
         return {accepted:true,ignored:true};
+      const classId=room.slice('wk-class-'.length);
+      // Authenticated provider deliveries may arrive after cancellation or completion.
+      // Acknowledge terminal-class events so LiveKit does not retry them forever;
+      // never count them as attendance or reopen access.
+      const classStatus=db.prepare('SELECT status FROM interactive_classes WHERE id=?').get(classId)?.status;
+      if(classStatus==='cancelled'||classStatus==='completed')
+        return {accepted:true,ignored:true,reason:'CLASS_CLOSED'};
       const result=this.persistProviderPresence({
-        eventId:event.id,classId:room.slice('wk-class-'.length),
+        eventId:event.id,classId,
         userId:identity.slice('student-'.length),kind:event.event==='participant_joined'?'joined':'left'
       });
       return {accepted:true,...result};
