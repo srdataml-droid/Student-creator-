@@ -26,7 +26,7 @@ function Post({post,onSave,saved,pending,busy,canPlay}){
  </article>;
 }
 export default function FeedExperience({posts=[],courses=[],ready=true}){
- const [tab,setTab]=useState('all'),[query,setQuery]=useState(''),[saved,setSaved]=useState([]),[pending,setPending]=useState(null),[error,setError]=useState(''),[following,setFollowing]=useState([]),[canPlay,setCanPlay]=useState(false),[visibleCount,setVisibleCount]=useState(12),[followingLoading,setFollowingLoading]=useState(false);
+ const [tab,setTab]=useState('all'),[campus,setCampus]=useState(''),[query,setQuery]=useState(''),[saved,setSaved]=useState([]),[pending,setPending]=useState(null),[error,setError]=useState(''),[following,setFollowing]=useState([]),[canPlay,setCanPlay]=useState(false),[visibleCount,setVisibleCount]=useState(12),[followingLoading,setFollowingLoading]=useState(false);
  const followingRequest=useRef(0),saveInProgress=useRef(false);
  useEffect(()=>{
    let active=true;
@@ -36,14 +36,16 @@ export default function FeedExperience({posts=[],courses=[],ready=true}){
    api('me').then(({user})=>{if(active)setCanPlay(Boolean(user?.role==='student'&&user?.verifiedAt&&!user?.suspended));}).catch(()=>{});
    return ()=>{active=false;};
  },[]);
+ const campuses=useMemo(()=>[...new Set(posts.map(post=>post.institutionName).filter(Boolean))].sort((a,b)=>a.localeCompare(b)),[posts]);
  const shown=useMemo(()=>posts.filter(post=>{
+   if(campus&&post.institutionName!==campus)return false;
    if(tab==='following'&&!following.includes(post.creatorId))return false;
    if(tab==='video'&&!post.hasVideo)return false;
    if(tab==='free'&&(post.priceKobo??0)>0)return false;
    if(tab==='text'&&post.hasVideo)return false;
    if(tab==='assignment'&&!/assignment|project|exercise|practical|lab/i.test([post.title,post.description,post.previewText].join(' ')))return false;
    return [post.title,post.description,post.courseCode,post.courseTitle,post.previewText,post.institutionName].join(' ').toLowerCase().includes(query.trim().toLowerCase());
- }),[tab,query,posts,following]);
+ }),[tab,query,posts,following,campus]);
  async function selectTab(key){
    const request=++followingRequest.current;
    setTab(key);setError('');setVisibleCount(12);setFollowingLoading(key==='following');
@@ -66,9 +68,10 @@ export default function FeedExperience({posts=[],courses=[],ready=true}){
  }
  return <section aria-labelledby="feed-title" className="feed-area">
    <div className="feed-heading"><div><div className="feed-kicker">EXPLORE THE COMMUNITY</div><h2 id="feed-title">The student feed<span className="heading-spark">✳</span></h2></div><Link href="/studio" className="post-create">＋ Create post</Link></div>
-   <div className="feed-toolbar"><div role="group" aria-label="Filter posts" className="feed-tabs">{[['all','For you'],['following','Following'],['video','Videos'],['free','Free'],['text','Notes'],['assignment','Assignments']].map(([key,label])=><button type="button" key={key} onClick={()=>selectTab(key)} className={tab===key?'active':''} aria-pressed={tab===key}>{label}</button>)}</div><label className="feed-search"><span aria-hidden="true">⌕</span><span className="visually-hidden">Search posts</span><input value={query} onChange={e=>{setQuery(e.target.value);setVisibleCount(12);}} placeholder="Find posts, courses..." maxLength={80}/></label></div>
+   <div className="feed-toolbar"><div role="group" aria-label="Filter posts" className="feed-tabs">{[['all','For you'],['following','Following'],['video','Videos'],['free','Free'],['text','Notes'],['assignment','Assignments']].map(([key,label])=><button type="button" key={key} onClick={()=>selectTab(key)} className={tab===key?'active':''} aria-pressed={tab===key}>{label}</button>)}{campuses.length>0&&<select className="feed-campus-select" aria-label="Filter by campus" value={campus} onChange={e=>{setCampus(e.target.value);setVisibleCount(12);}}><option value="">All campuses</option>{campuses.map(name=><option key={name} value={name}>{name}</option>)}</select>}</div><label className="feed-search"><span aria-hidden="true">⌕</span><span className="visually-hidden">Search posts</span><input value={query} onChange={e=>{setQuery(e.target.value);setVisibleCount(12);}} placeholder="Find posts, courses..." maxLength={80}/></label></div>
+   <div className="reference-feed-heading"><h2>{tab==='following'?'Following':tab==='all'?'Discover':'Explore student work'}</h2></div>
    {error&&<p className="feed-notice" role="alert">{error} <Link href="/sign-in">Sign in</Link></p>}
-   {!ready?<div className="feed-empty"><div className="empty-symbol">⚙</div><h3>Feed temporarily unavailable</h3><p>Please try again later.</p></div>:followingLoading?<p className="status" role="status">Loading followed creators…</p>:shown.length? <><div className="post-stack">{shown.slice(0,visibleCount).map(post=><Post post={post} key={post.id} onSave={save} pending={pending===post.id} busy={pending!==null} saved={saved.includes(post.id)} canPlay={canPlay}/>)}</div>{shown.length>visibleCount&&<div className="feed-more"><button className="secondary-link" type="button" onClick={()=>setVisibleCount(n=>n+12)}>Show more posts</button></div>}</>:<div className="feed-empty"><div className="empty-symbol">{posts.length?'⌕':'✦'}</div><h3>{posts.length?'No posts match yet':'This is where the first creators shine.'}</h3><p>{posts.length?'Try another filter or search.':'Your community starts with its first original post. Create work, submit it for review and it will appear in the feed.'}</p><div className="empty-buttons"><Link href="/studio" className="creator-btn filled">Share your work ↗</Link><Link href="/search" className="creator-btn outlined">Explore lessons</Link></div></div>}
+   {!ready?<div className="feed-empty"><h3>Feed temporarily unavailable</h3><p>Please try again later.</p></div>:followingLoading?<p className="status" role="status">Loading followed creators…</p>:shown.length? <><div className="post-stack">{shown.slice(0,visibleCount).map(post=><Post post={post} key={post.id} onSave={save} pending={pending===post.id} busy={pending!==null} saved={saved.includes(post.id)} canPlay={canPlay}/>)}</div>{shown.length>visibleCount&&<div className="feed-more"><button className="secondary-link" type="button" onClick={()=>setVisibleCount(n=>n+12)}>Show more posts</button></div>}</>:<div className="feed-empty"><h3>{posts.length?'No posts match yet':'No published posts yet'}</h3><p>{posts.length?'Try another filter or search.':'Original student work will appear here once it is published.'}</p><div className="empty-buttons"><Link href="/studio" className="creator-btn filled">Share your work ↗</Link><Link href="/search" className="creator-btn outlined">Explore lessons</Link></div></div>}
    <div className="feed-bottom">A better campus starts with what we share. <span>✺</span></div>
  </section>;
 }

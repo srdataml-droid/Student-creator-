@@ -1,6 +1,6 @@
 import Link from 'next/link';
 import {getLocalPublicCourses,getLocalPublicInstitutions,isLocalMode} from '../../lib/local-public.mjs';
-import {getPublicCourses} from '../../lib/public-courses.mjs';
+import {getHostedDiscovery} from '../../lib/hosted-discovery.mjs';
 
 export const dynamic='force-dynamic';
 export const metadata={title:'Communities | Student Creators'};
@@ -12,7 +12,7 @@ export default async function Communities({searchParams}){
  let courses=[],schools=[],state='ready';
  try{
   if(local){courses=getLocalPublicCourses();schools=getLocalPublicInstitutions();}
-  else{const catalog=await getPublicCourses();courses=catalog.courses;state=catalog.state==='ready'?'ready':'unavailable';}
+  else{const catalog=await getHostedDiscovery();courses=catalog.courses;schools=catalog.schools;}
  }catch{state='unavailable';}
  const names=new Map(schools.map(s=>[s.id,s.name]));
  const filtered=courses.filter(c=>(!campus||c.institutionId===campus)&&[c.code,c.title,names.get(c.institutionId)||''].join(' ').toLowerCase().includes(q.toLowerCase()));

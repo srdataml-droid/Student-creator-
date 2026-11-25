@@ -328,3 +328,80 @@
 .related-video-list small{font-size:.72rem;color:var(--muted);margin-top:4px}
 @media(max-width:1100px){.creator-body .watch-layout{grid-template-columns:minmax(0,1fr)}}
 @media(max-width:760px){.creator-body .watch-layout{gap:16px}.watch-details{padding:16px 0 20px}.creator-body .watch-primary .lesson-engagement{padding:14px}.creator-body .watch-details .watch-utility{gap:8px}.watch-profile-row>.secondary-link{padding:8px 12px;font-size:.8rem}}
+
+
+/* Neutral product surfaces: one action accent, no decorative gradients or
+   nested card chrome. Keep media, focus, and semantic feedback distinct. */
+.creator-body{--brand:#175cd3;--brand-strong:#1849a9;--brand-soft:#eff4ff;--ink:#17191e;--muted:#5e6673;--line:#e4e7ec;background:#fff}
+.creator-body .logo-glyph{background:#17191e;box-shadow:none}
+.creator-body .logo-accent,.creator-body .feed-kicker,.creator-body .aside-kicker,.creator-body .heading-spark,.creator-body .preview-arrow,.creator-body .empty-symbol{color:var(--brand-strong)}
+.modern-frame{grid-template-columns:216px minmax(0,1fr)}
+.modern-frame .side-nav a.current{background:#f1f3f6;color:var(--ink)}
+.modern-frame .side-nav a.current svg{color:var(--brand)}
+.modern-home{max-width:1440px;grid-template-columns:minmax(0,1fr) minmax(200px,248px);gap:32px;padding:28px 32px 48px}
+.modern-home .home-heading{margin-bottom:20px}
+.modern-home .home-heading h1{font-size:clamp(1.45rem,2.4vw,2rem);letter-spacing:-.035em}
+.modern-home .feed-tabs{border-bottom:1px solid var(--line);padding:0;gap:18px}
+.modern-home .feed-tabs button{background:none;border:0;border-bottom:2px solid transparent;border-radius:0;padding:10px 2px;color:var(--muted)}
+.modern-home .feed-tabs button.active{background:none;color:var(--ink);border-color:var(--brand);font-weight:700}
+.modern-home .creator-aside{border-left:1px solid var(--line);padding:0 0 0 24px;gap:0}
+.modern-home .aside-panel{border:0;border-radius:0;background:transparent;padding:0 0 24px;margin:0 0 24px;border-bottom:1px solid var(--line)}
+.modern-home .aside-panel:last-child{border-bottom:0}
+.creator-body .discovery-card{border:0;border-radius:0;overflow:visible;background:transparent;box-shadow:none}
+.creator-body .discovery-media{border-radius:10px;background:#22262d}
+.creator-body .discovery-media.note-preview{background:#f1f3f5;color:#596273}
+.creator-body .discovery-copy{padding:12px 0 5px}
+.creator-body .discovery-card .post-actions{padding:0;border-top:0;gap:8px 14px}
+.creator-body .discovery-copy .post-course,.creator-body .post-course,.creator-body .profile-post-price.free,.creator-body .profile-post-price.paid,.creator-body .discovery-price.is-paid{background:#f1f3f5;color:#4a515c;border-color:var(--line)}
+.creator-body .creator-avatar,.creator-body .course-color,.creator-body .inbox-avatar{background:#eceff3;color:#4a5568}
+.creator-body .feed-empty{background:#fff;border:1px dashed #d5dae2}
+.creator-body .public-creator-cover{background:#f0f2f5}
+.creator-body .public-creator-avatar{background:#e3e7ed;color:#394353}
+.creator-body .community-reply{background:#f6f7f9;border-color:var(--line);border-left-color:#a5afbd}
+.creator-body .onboarding-steps li::before{background:#eef1f5;color:#424b5a;border-color:#d9dfe7}
+.creator-body .onboarding-caveat{color:var(--muted)}
+.creator-body .watch-info{border:0;border-left:1px solid var(--line);border-radius:0;padding:0 0 0 20px}
+.creator-body .watch-creator-avatar{background:#e9edf2;color:#3e4b5e}
+.creator-body .watch-video-frame .hint{color:#e3e7ed}
+.creator-body .watch-video-frame button.creator-btn.outlined{background:var(--brand);border-color:var(--brand)}
+.creator-body .message-settings{background:#f7f8fa;border-color:var(--line)}
+.creator-body .message-bubble.own{background:#eef3fb}
+.creator-body .workspace-shortcuts{background:transparent;border:0;border-bottom:1px solid var(--line);border-radius:0;padding:0 0 10px}
+.creator-body .community-directory .directory-list li{border:0;border-bottom:1px solid var(--line);border-radius:0;padding:16px 0}
+.creator-body .community-directory .directory-filters{background:transparent;border:0;padding:0}
+@media(max-width:1160px){.modern-frame{grid-template-columns:200px minmax(0,1fr)}.modern-home{padding:24px;gap:24px}}
+@media(max-width:1050px){.modern-home{grid-template-columns:minmax(0,1fr)}}
+@media(max-width:1100px){.creator-body .watch-info{border-left:0;border-top:1px solid var(--line);padding:18px 0 0}}
+@media(max-width:760px){.modern-home{padding:18px 14px 28px}.modern-home .feed-tabs{gap:16px}.modern-home .post-stack{gap:24px}.creator-body .discovery-media{border-radius:8px}.creator-body .discovery-copy{padding:12px 0 4px}.modern-frame .mobile-creator-tabs a.current{color:var(--brand);background:none}}
+
+/* Screenshot handoff: wordmark, compact discovery controls, media-first feed. */
+.reference-mobile-search{display:none}
+.reference-wordmark{display:block;font-size:1.12rem;letter-spacing:-.045em;line-height:1.15;font-weight:760}
+.reference-wordmark small{display:block;font-size:.63rem;font-weight:500;color:var(--muted);letter-spacing:0}
+.reference-feed-heading{margin:22px 0 14px}
+.reference-feed-heading h2{font-size:1rem;letter-spacing:-.015em;margin:0;font-weight:700}
+.modern-home .feed-toolbar{margin-bottom:0}
+.modern-home .feed-tabs{gap:8px;border:0;padding:2px 0}
+.modern-home .feed-tabs button{border:1px solid var(--line);border-radius:5px;background:#f7f8fa;padding:8px 12px;font-size:.8rem;min-height:40px}
+.modern-home .feed-tabs button.active{background:var(--brand);border-color:var(--brand);color:#fff}
+.feed-campus-select{flex:none;max-width:160px;min-height:40px;border:1px solid var(--line);background:#f7f8fa;color:var(--ink);border-radius:5px;padding:0 8px;font:inherit;font-size:.8rem}
+.creator-body .discovery-copy h3 a{text-decoration:none}
+.creator-body .discovery-copy h3 a:hover{text-decoration:underline}
+.creator-body .discovery-byline{gap:3px;line-height:1.4}
+.creator-body .feed-empty{padding:28px 16px;text-align:left;border:0;border-top:1px solid var(--line);border-radius:0}
+.creator-body .feed-empty .empty-buttons{justify-content:flex-start}
+@media(max-width:760px){
+ .modern-header .nav-inner{gap:8px}
+ .reference-wordmark{font-size:1rem}
+ .reference-wordmark small{font-size:.56rem}
+ .reference-mobile-search{display:inline-flex;margin-left:auto;align-items:center;gap:5px;min-height:44px;padding:0 3px;color:var(--muted);text-decoration:none;font-size:.72rem}
+ .reference-mobile-search svg{width:17px;height:17px}
+ .modern-header .nav-auth{margin-left:0}
+ .modern-header .nav-join{padding:7px 10px}
+ .modern-home{padding:14px 16px 24px}
+ .modern-home .feed-toolbar{gap:8px}
+ .modern-home .feed-search{display:none}
+ .reference-feed-heading{margin:20px 0 12px}
+ .modern-frame .mobile-creator-tabs a{border-radius:0}
+}
+@media(max-width:340px){.reference-mobile-search span{display:none}}
