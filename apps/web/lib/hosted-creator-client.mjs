@@ -62,6 +62,18 @@ export function hostedCreatorRequest(operation,input={}){
  case 'liveCheckout':{if(!/^[A-Za-z0-9._-]{3,128}$/.test(input.termsVersion||''))throw Error('INVALID_TERMS_VERSION');return {path:'/api/lessons/'+id(input.lessonId)+'/live-checkout',method:'POST',headers:{'idempotency-key':key(input.creationKey),'x-student-creators-terms-version':input.termsVersion}};}
  case 'checkoutQuote':return {path:'/api/account/checkout-quote/'+id(input.lessonId),method:'GET',headers:{}};
  case 'purchaseHistory':return {path:'/api/account/purchases',method:'GET',headers:{}};
+ case 'bookmarks':return json('/api/social/bookmarks',{limit:100});
+ case 'bookmark':case 'unbookmark':return json('/api/social/'+operation,{contentId:id(input.contentId)});
+ case 'myPayouts':return json('/api/social/myPayouts',{});
+ case 'requestPayout':{if(!Number.isSafeInteger(input.amountKobo)||input.amountKobo<1)throw Error('INVALID_AMOUNT');return json('/api/social/requestPayout',{amountKobo:input.amountKobo,requestKey:key(input.requestKey)});}
+ case 'cancelPayout':return json('/api/social/cancelPayout',{requestId:id(input.requestId)});
+ case 'classes':return json('/api/social/classes',{limit:100});
+ case 'createClass':{const {startsAt,endsAt,capacity}=input;if(!Number.isFinite(Date.parse(startsAt))||Date.parse(endsAt)<=Date.parse(startsAt)||!Number.isInteger(capacity)||capacity<1||capacity>50)throw Error('INVALID_CLASS');return json('/api/social/createClass',{courseId:id(input.courseId),title:bounded(input.title,5,120),description:bounded(input.description??'',0,1200),startsAt,endsAt,capacity,creationKey:key(input.creationKey)});}
+ case 'enrollClass':case 'withdrawClass':case 'openClass':case 'completeClass':return json('/api/social/'+operation,{classId:id(input.classId)});
+ case 'cancelClass':return json('/api/social/cancelClass',{classId:id(input.classId),reason:bounded(input.reason,8,500)});
+ case 'mediaSourceStatus':return {path:'/api/lessons/'+id(input.lessonId)+'/media-source',method:'GET',headers:{}};
+ case 'mediaSourceReserve':{if(!['video/mp4','video/webm'].includes(input.mime)||!Number.isSafeInteger(input.bytes)||input.bytes<12||input.bytes>104857600||! /^[a-f0-9]{64}$/.test(input.digest))throw Error('INVALID_MEDIA');return json('/api/lessons/'+id(input.lessonId)+'/media-source',{action:'reserve',mime:input.mime,bytes:input.bytes,digest:input.digest});}
+ case 'mediaSourceComplete':return json('/api/lessons/'+id(input.lessonId)+'/media-source',{action:'complete',id:id(input.sourceId)});
  default:throw Error('UNKNOWN_CREATOR_OPERATION');
  }
 }
