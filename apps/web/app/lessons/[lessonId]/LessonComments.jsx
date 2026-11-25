@@ -7,7 +7,7 @@ const alias=id=>'Student · '+String(id||'').slice(0,6).toUpperCase();
 export default function LessonComments({lessonId}){
  const [comments,setComments]=useState([]),[user,setUser]=useState(null),[loading,setLoading]=useState(true);
  const [text,setText]=useState(''),[busy,setBusy]=useState(''),[notice,setNotice]=useState('');
- const [reportFor,setReportFor]=useState(null),[reportReason,setReportReason]=useState('');
+ const [reportFor,setReportFor]=useState(null),[reportReason,setReportReason]=useState(''),[replyTo,setReplyTo]=useState(null);
  const creationKey=useRef(null);
  async function refresh(){
   const [list,me]=await Promise.all([api(`lessons/${lessonId}/comments`),api('me').catch(()=>({user:null}))]);
@@ -31,8 +31,8 @@ export default function LessonComments({lessonId}){
   event.preventDefault();
   const draft=text.trim();if(draft.length<3)return;
   const key=creationKey.current||crypto.randomUUID();creationKey.current=key;
-  const ok=await run('comment',()=>api(`lessons/${lessonId}/comments`,{method:'POST',body:{text:draft,creationKey:key}}),'Your comment was published.');
-  if(ok){creationKey.current=null;setText('');}
+  const ok=await run('comment',()=>api(`lessons/${lessonId}/comments`,{method:'POST',body:{text:draft,creationKey:key,replyTo}}),'Your comment was published.');
+  if(ok){creationKey.current=null;setText('');setReplyTo(null);}
  }
  async function report(event){
   event.preventDefault();if(!reportFor||reportReason.trim().length<10)return;
@@ -45,7 +45,9 @@ export default function LessonComments({lessonId}){
   {loading?<p role="status">Loading comments…</p>:<ul className="small-list" aria-label="Recent lesson comments">
    {comments.map(comment=><li key={comment.id} className="lesson-comment">
     <div><strong>{alias(comment.authorId)}</strong> <span className="hint">· {new Date(comment.createdAt).toLocaleDateString('en-NG')}</span></div>
+    {comment.parentId&&<p className="hint">↳ Reply to {comments.find(c=>c.id===comment.parentId)?alias(comments.find(c=>c.id===comment.parentId).authorId):'earlier comment'}</p>}
     <p className="community-text">{comment.body}</p>
+    {!comment.parentId&&user?.verifiedAt&&!user?.suspended&&<button type="button" className="quiet-button" disabled={Boolean(busy)} onClick={()=>{setReplyTo(comment.id);creationKey.current=null;document.getElementById('lesson-comment-text')?.focus();}}>Reply</button>}
     {user?.id===comment.authorId?<button type="button" className="quiet-button" disabled={Boolean(busy)}
       onClick={()=>run('remove-'+comment.id,()=>api(`lesson-comments/${comment.id}/remove`,{method:'POST',body:{}}),'Your comment was removed.')}>Remove my comment</button>:
      <button type="button" className="quiet-button" disabled={Boolean(busy)}
@@ -60,7 +62,8 @@ export default function LessonComments({lessonId}){
    {!comments.length&&<li className="hint">No comments yet. Add a helpful question or explanation.</li>}
   </ul>}
   {user?.role==='student'&&user.verifiedAt&&!user.suspended?<form className="form-stack" onSubmit={publishComment}>
-    <label htmlFor="lesson-comment-text">Your comment</label>
+    <label htmlFor="lesson-comment-text">{replyTo?'Your reply':'Your comment'}</label>
+    {replyTo&&<button type="button" className="quiet-button" onClick={()=>{setReplyTo(null);creationKey.current=null;}}>Cancel reply</button>}
     <textarea id="lesson-comment-text" rows={3} required minLength={3} maxLength={800} value={text}
       onChange={event=>{setText(event.target.value);creationKey.current=null;}}
       placeholder="Ask a question or add a learning insight."/>

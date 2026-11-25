@@ -42,7 +42,7 @@ function setup(){
    assert.equal((await req('lessons/'+id+'/submit','POST',{},token)).status,200);
    assert.equal((await req('lessons/'+id+'/review','POST',{decision:'approve',reason:'Original lesson approved by moderator'},admin)).status,200);
   }
-  return {school,other,course,course2,topic,topic2,published,published2};
+  return {school,other,course,course2,topic,topic2,published,published2,creator,creator2,student,student2,admin};
  }
  return {seed,req,close(){store.close();rmSync(dir,{recursive:true,force:true});}};
 }
@@ -73,5 +73,49 @@ test('SQL metacharacters are literal and search limits/inputs fail closed',async
    assert.equal((await ctx.req(url)).status,422,url);
   }
   assert.equal((await ctx.req('search?q=calculus&limit=1')).body.results.length,1);
+ }finally{ctx.close();}
+});
+
+test('campus-ranked feeds, following, and preview restrictions are server scoped',async()=>{
+ const ctx=setup();try{
+  const s=await ctx.seed();
+  const own=await ctx.req('feed','GET',undefined,s.student);
+  assert.equal(own.status,200);assert.deepEqual(own.body.posts.map(p=>p.id),[s.published,s.published2]);
+  assert.ok(own.body.posts.every(p=>!Object.hasOwn(p,'lessonText')&&!Object.hasOwn(p,'reviewReason')));
+  const other=await ctx.req('feed','GET',undefined,s.student2);
+  assert.deepEqual(other.body.posts.map(p=>p.id),[s.published2,s.published]);
+  assert.equal((await ctx.req('feed?mode=following')).status,401);
+  assert.equal((await ctx.req('feed?mode=following','GET',undefined,s.student)).body.posts.length,0);
+  assert.equal((await ctx.req('creators/'+s.creator2+'/follow','POST',{},s.student)).status,200);
+  assert.deepEqual((await ctx.req('feed?mode=following','GET',undefined,s.student)).body.posts.map(p=>p.id),[s.published2]);
+  assert.equal((await ctx.req('lessons/'+s.published2+'/bookmark','POST',{},s.student)).status,201);
+  const change=await ctx.req('creators/'+s.creator2+'/restrictions/'+s.creator,'POST',{view:true,comment:false,message:false},s.student2);
+  assert.equal(change.status,200);
+  assert.deepEqual((await ctx.req('feed','GET',undefined,s.student)).body.posts.map(p=>p.id),[s.published]);
+  assert.equal((await ctx.req('feed?mode=following','GET',undefined,s.student)).body.posts.length,0);
+  assert.equal((await ctx.req('search?q=Engineering','GET',undefined,s.student)).body.results.length,0);
+  assert.equal((await ctx.req('courses/'+s.course2,'GET',undefined,s.student)).body.lessons.length,0);
+  assert.equal((await ctx.req('my/bookmarks','GET',undefined,s.student)).body.lessons.length,0);
+  assert.equal((await ctx.req('search?q=Engineering')).body.results.length,1,'anonymous preview remains public');
+  assert.equal((await ctx.req('feed','GET',undefined,s.student2)).body.posts[0].id,s.published2);
+  assert.equal((await ctx.req('feed?limit=101','GET',undefined,s.student)).status,422);
+  assert.equal((await ctx.req('feed?mode=wrong','GET',undefined,s.student)).status,422);
+ }finally{ctx.close();}
+});
+
+test('creator discovery ranks campus, matches public names and excludes restricted previews',async()=>{
+ const ctx=setup();try{
+  const s=await ctx.seed();
+  const ranked=(await ctx.req('creators','GET',undefined,s.student)).body.creators;
+  assert.deepEqual(ranked.map(c=>c.id),[s.creator,s.creator2]);
+  assert.ok(ranked.every(c=>!Object.hasOwn(c,'email')&&!Object.hasOwn(c,'lessonText')));
+  assert.equal((await ctx.req('creators?q=Engineering')).body.creators[0].id,s.creator2);
+  assert.deepEqual((await ctx.req('creators?institutionId='+s.school)).body.creators.map(c=>c.id),[s.creator]);
+  assert.equal((await ctx.req('creators?limit=51')).status,422);
+  assert.equal((await ctx.req('creators?courseId='+s.course+'&topicId='+s.topic2)).status,422);
+  await ctx.req('creators/'+s.creator2+'/restrictions/'+s.creator,'POST',{view:true,comment:false,message:false},s.student2);
+  assert.deepEqual((await ctx.req('creators','GET',undefined,s.student)).body.creators.map(c=>c.id),[s.creator]);
+  assert.equal((await ctx.req('lessons/'+s.published2+'/like','POST',{},s.student)).status,403);
+  assert.equal((await ctx.req('lessons/'+s.published2+'/bookmark','POST',{},s.student)).status,403);
  }finally{ctx.close();}
 });

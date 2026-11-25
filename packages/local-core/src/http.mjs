@@ -143,11 +143,23 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
           return responses({restrictions:store.creatorRestrictions(actor,segments[1])});
         }
         if(path==='institutions')return responses({institutions:store.listInstitutions()});
+        if(path==='feed'){
+          const q=new URL(request.url).searchParams;
+          if(q.getAll('mode').length>1||q.getAll('limit').length>1)return fail('INVALID_FEED',422);
+          const mode=q.get('mode')??'all';
+          if(mode==='following'&&!actor)return unauthorized();
+          return responses({posts:store.discoverFeed(actor,{mode,limit:q.has('limit')?Number(q.get('limit')):60})});
+        }
+        if(path==='creators'){
+          const q=new URL(request.url).searchParams;
+          const value=k=>q.get(k)||null;
+          return responses({creators:store.discoverCreators(actor,{q:q.get('q')??'',institutionId:value('institutionId'),courseId:value('courseId'),topicId:value('topicId'),limit:q.has('limit')?Number(q.get('limit')):20})});
+        }
         if(path==='search'){
           const query=new URL(request.url).searchParams;
           const limit=query.has('limit')?Number(query.get('limit')):25;
           const value=(key)=>query.get(key)||null;
-          return responses({results:store.searchLessons({q:query.get('q'),institutionId:value('institutionId'),courseId:value('courseId'),topicId:value('topicId'),limit})});
+          return responses({results:store.searchLessons({q:query.get('q'),institutionId:value('institutionId'),courseId:value('courseId'),topicId:value('topicId'),limit},actor)});
         }
         if(path==='courses')return responses({courses:store.listCourses()});
         if(segments.length===3&&segments[0]==='courses'&&segments[2]==='topics'){const parent=store.getCourse(segments[1]);return parent?responses({topics:store.listTopics(parent.id)}):fail('COURSE_NOT_FOUND',404);}
@@ -156,7 +168,7 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
           const topicId=new URL(request.url).searchParams.get('topicId');
           const topics=store.listTopics(item.id);
           if(topicId&&!topics.some(t=>t.id===topicId))return fail('INVALID_TOPIC',422);
-          return responses({course:item,topics,lessons:store.publicLessons(item.id,topicId).map(l=>({id:l.id,title:l.title,topicId:l.topicId,description:l.description,previewText:l.previewText,publishedAt:l.publishedAt,hasVideo:l.hasVideo}))});
+          return responses({course:item,topics,lessons:store.publicLessons(item.id,topicId,actor).map(l=>({id:l.id,title:l.title,topicId:l.topicId,description:l.description,previewText:l.previewText,publishedAt:l.publishedAt,hasVideo:l.hasVideo}))});
         }
         if(segments.length===3&&segments[0]==='lessons'&&segments[2]==='comments'){
           store.viewableLesson(actor,segments[1]);
@@ -186,6 +198,7 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
         if(path==='admin/students'){if(!actor)return unauthorized();return responses({students:store.listStudentAccounts(cookie)});}
         if(path==='admin/pending-users'){if(!actor)return unauthorized();return responses({users:store.listPendingUsers(actor)});}
         if(path==='admin/review-queue'){if(!actor)return unauthorized();return responses({lessons:store.reviewQueue(actor)});}
+        if(path==='admin/user-reports'){if(!actor)return unauthorized();return responses({reports:store.userReportQueue(actor)});}
         if(path==='admin/reports'){if(!actor)return unauthorized();return responses({reports:store.reportQueue(actor)});}
         if(segments.length===2&&segments[0]==='creators')return store.publicCreator(segments[1])?responses({creator:store.publicCreator(segments[1])}):fail('CREATOR_NOT_FOUND',404);
         if(segments.length===3&&segments[0]==='courses'&&segments[2]==='study-sessions'){
@@ -196,8 +209,21 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
         if(segments.length===3&&segments[0]==='courses'&&segments[2]==='community'){
           if(!actor)return unauthorized();const status=store.communityStatus(actor,segments[1]);return responses({status,posts:status.joined?store.communityPosts(actor,segments[1]):[]});
         }
-        if(path==='messages/inbox'){if(!actor)return unauthorized();return responses({inbox:store.inbox(actor)});}
-        if(segments.length===2&&segments[0]==='messages'&&segments[1]!=='inbox'){if(!actor)return unauthorized();return responses({messages:store.thread(actor,segments[1]),blocked:store.isContactBlocked(actor,segments[1])});}
+        if(path==='notifications'){if(!actor)return unauthorized();return responses({notifications:store.notifications(actor)});}
+        if(path==='notifications/preferences'){if(!actor)return unauthorized();return responses({preferences:store.notificationPreferences(actor)});}
+        if(path==='messages/inbox'){
+          if(!actor)return unauthorized();
+          const q=new URL(request.url).searchParams;
+          if(q.getAll('before').length>1||q.getAll('limit').length>1)return fail('INVALID_MESSAGE_PAGE',422);
+          return responses(store.inboxPage(actor,{before:q.get('before'),limit:q.has('limit')?Number(q.get('limit')):50}));
+        }
+        if(segments.length===2&&segments[0]==='messages'&&segments[1]!=='inbox'){
+          if(!actor)return unauthorized();
+          const q=new URL(request.url).searchParams;
+          if(q.getAll('before').length>1||q.getAll('limit').length>1)return fail('INVALID_MESSAGE_PAGE',422);
+          const page=store.threadPage(actor,segments[1],{before:q.get('before'),limit:q.has('limit')?Number(q.get('limit')):100});
+          return responses({...page,blocked:store.isContactBlocked(actor,segments[1])});
+        }
         return fail('NOT_FOUND',404);
       }
 
@@ -364,6 +390,10 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
         if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
         return responses({session:store.completeStudySession(actor,segments[1])});
       }
+      if(segments.length===4&&segments[0]==='admin'&&segments[1]==='community-moderators')
+        return responses({moderator:store.setCommunityModerator(actor,segments[2],segments[3],body)});
+      if(segments.length===5&&segments[0]==='courses'&&segments[2]==='posts'&&segments[4]==='hide')
+        return responses({post:store.hideCommunityPost(actor,segments[1],segments[3],body)});
       if(segments.length===3&&segments[0]==='courses'&&segments[2]==='join'){
         if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
         return responses({membership:store.joinCommunity(actor,segments[1])});
@@ -382,8 +412,24 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
       if(segments.length===3&&segments[0]==='admin'&&segments[1]==='community-reports'){
         return responses({result:store.resolveCommunityReport(actor,segments[2],body)});
       }
+      if(segments.length===3&&segments[0]==='messages'&&segments[2]==='read'){
+        if(Object.keys(body).length!==1||!Object.hasOwn(body,'messageIds'))return fail('UNEXPECTED_BODY',400);
+        return responses(store.markMessagesRead(actor,segments[1],body.messageIds));
+      }
+      if(path==='notifications/preferences')return responses({preferences:store.updateNotificationPreferences(actor,body)});
+      if(segments.length===3&&segments[0]==='notifications'&&segments[2]==='read'){
+        if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
+        return responses(store.markNotificationRead(actor,segments[1]));
+      }
+      if(segments.length===3&&segments[0]==='users'&&segments[2]==='report')
+        return responses({report:store.reportUser(actor,segments[1],body)},201);
+      if(segments.length===3&&segments[0]==='admin'&&segments[1]==='user-reports')
+        return responses({result:store.resolveUserReport(actor,segments[2],body)});
       if(path==='messages/preference')return responses({preference:store.setMessagePreference(actor,body.allowMessages)});
-      if(segments.length===2&&segments[0]==='messages'&&!['preference','report','inbox'].includes(segments[1]))return responses({message:store.sendMessage(actor,segments[1],body.text)},201);
+      if(segments.length===2&&segments[0]==='messages'&&!['preference','report','inbox'].includes(segments[1])){
+        if(Object.keys(body).length!==1||!Object.hasOwn(body,'text'))return fail('UNEXPECTED_BODY',400);
+        return responses({message:store.sendMessage(actor,segments[1],body.text)},201);
+      }
       if(segments.length===3&&segments[0]==='messages'&&segments[2]==='block')return responses({result:store.blockContact(actor,segments[1])});
       if(segments.length===3&&segments[0]==='messages'&&segments[2]==='unblock')return responses({result:store.unblockContact(actor,segments[1])});
       if(segments.length===3&&segments[0]==='admin'&&segments[1]==='reports')return responses({result:store.resolveReport(actor,segments[2],body.resolution)});
