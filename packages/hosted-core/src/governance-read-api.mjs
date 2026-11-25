@@ -85,11 +85,11 @@ function validateCommand(cmd,body,path,actorId){
    return UUID.test(path.split('/')[2])&&['under_review','approved_for_manual_fulfilment','declined'].includes(body.decision)&&hasText(body.note,10,500)?{_actor:actorId,_id:path.split('/')[2],_decision:body.decision,_note:body.note.trim()}:null;
   case 'week7_resolve_paid_access':
    return UUID.test(path.split('/')[2])&&['access_available','verified_reversal'].includes(body.resolution)&&hasText(body.note,10,500)?{_actor:actorId,_id:path.split('/')[2],_resolution:body.resolution,_note:body.note.trim()}:null;
+  case 'week7_review_manual_identity':
+   return UUID.test(path.split('/')[2])&&['approve','reject','revoke'].includes(body.decision)&&hasText(body.note,10,500)&&(body.decision==='approve'?Number.isInteger(body.days)&&body.days>=1&&body.days<=730:body.days===undefined)?{_actor:actorId,_id:path.split('/')[2],_decision:body.decision,_note:body.note.trim(),_days:body.days??null}:null;
   case 'week7_paid_access_queue':
   case 'week7_copyright_queue':
   case 'week7_privacy_queue':
-  case 'week7_review_manual_identity':
-   return UUID.test(path.split('/')[2])&&['approve','reject','revoke'].includes(body.decision)&&hasText(body.note,10,500)&&(body.decision==='approve'?Number.isInteger(body.days)&&body.days>=1&&body.days<=730:body.days===undefined)?{_actor:actorId,_id:path.split('/')[2],_decision:body.decision,_note:body.note.trim(),_days:body.days??null}:null;
   case 'week7_manual_revalidation_queue':
   case 'week7_identity_queue':
   case 'week7_identity_revalidation_queue':
