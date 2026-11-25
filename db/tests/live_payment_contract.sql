@@ -22,7 +22,8 @@ BEGIN
  IF (SELECT platform_fee_kobo FROM public.orders WHERE id=oid)<>2000 OR (SELECT creator_gross_share_kobo FROM public.orders WHERE id=oid)<>18000 THEN RAISE EXCEPTION 'Allocation mismatch'; END IF;
  IF public.reserve_live_paystack_checkout(b,c,'fixture-paystack-live-key','fixture-terms-v1')->>'create' IS DISTINCT FROM 'false' THEN RAISE EXCEPTION 'Duplicate initialization'; END IF;
  IF public.finish_live_paystack_checkout(oid,'https://checkout.paystack.com/fixture#fragment') THEN RAISE EXCEPTION 'Unsafe checkout URL'; END IF;
- IF NOT public.finish_live_paystack_checkout(oid,'https://checkout.paystack.com/fixture') OR NOT public.live_paystack_can_return(b,ref,'fixture-terms-v1') THEN RAISE EXCEPTION 'Checkout not recorded'; END IF;
+ IF NOT public.finish_live_paystack_checkout(oid,'https://checkout.paystack.com/fixture') THEN RAISE EXCEPTION 'Checkout not recorded'; END IF;
+ IF NOT public.live_paystack_can_return(b,ref,'fixture-terms-v1') THEN RAISE EXCEPTION 'Checkout recheck denied'; END IF;
  IF public.record_live_paystack_charge('sc_'||repeat('a',32),'tx_fixture',repeat('a',64))<>'invalid' THEN RAISE EXCEPTION 'Test reference accepted'; END IF;
  IF public.record_live_paystack_charge(ref,'tx_fixture',repeat('a',64))<>'accepted' OR public.record_live_paystack_charge(ref,'tx_fixture',repeat('a',64))<>'duplicate' THEN RAISE EXCEPTION 'Inbox replay'; END IF;
  e:=public.claim_live_paystack_charge();
