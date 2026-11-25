@@ -21,8 +21,10 @@ BEGIN
  IF public.reserve_live_learning_checkout(b,'class',c,'fixture-class-payment-key','fixture-v1')->>'create'<>'false' THEN RAISE EXCEPTION 'Checkout replay'; END IF;
  IF public.reserve_live_learning_checkout('9b000000-0000-4000-8000-000000000003','class',c,'fixture-class-other-key','fixture-v1') IS NOT NULL THEN RAISE EXCEPTION 'Reserved seat exceeded capacity'; END IF;
  IF public.authorized_hosted_class_room(b,c) IS NOT NULL THEN RAISE EXCEPTION 'Unpaid class entry'; END IF;
- IF NOT public.finish_live_learning_checkout(id,'https://checkout.paystack.com/fixture') OR NOT public.live_learning_can_return(b,ref,'fixture-v1') THEN RAISE EXCEPTION 'Checkout return failed'; END IF;
- IF public.record_live_learning_charge(ref,'9600012345',repeat('a',64))<>'accepted' OR public.record_live_learning_charge(ref,'9600012345',repeat('a',64))<>'duplicate' THEN RAISE EXCEPTION 'Inbox replay'; END IF;
+ IF NOT public.finish_live_learning_checkout(id,'https://checkout.paystack.com/fixture') THEN RAISE EXCEPTION 'Checkout finish failed'; END IF;
+ IF NOT public.live_learning_can_return(b,ref,'fixture-v1') THEN RAISE EXCEPTION 'Checkout return failed'; END IF;
+ IF public.record_live_learning_charge(ref,'9600012345',repeat('a',64))<>'accepted' THEN RAISE EXCEPTION 'Inbox insert'; END IF;
+ IF public.record_live_learning_charge(ref,'9600012345',repeat('a',64))<>'duplicate' THEN RAISE EXCEPTION 'Inbox replay'; END IF;
  e:=public.claim_live_learning_charge();
  IF public.claim_live_learning_charge() IS NOT NULL THEN RAISE EXCEPTION 'Concurrent lease'; END IF;
  IF public.settle_live_learning_charge('9600012345',gen_random_uuid(),20000,100) OR public.settle_live_learning_charge('9600012345',(e->>'leaseId')::uuid,20001,100) THEN RAISE EXCEPTION 'Incorrect payment settled'; END IF;
@@ -34,7 +36,8 @@ BEGIN
  IF NOT EXISTS(SELECT 1 FROM live_finance.learning_receipts WHERE transaction_id='9600012346' AND duplicate AND NOT delivered) THEN RAISE EXCEPTION 'Duplicate allocated twice'; END IF;
  IF public.enqueue_live_reversal_event('refund.processed','9600012347',repeat('c',64))<>'accepted' THEN RAISE EXCEPTION 'Refund event rejected'; END IF;
  e:=public.claim_live_reversal_event();
- IF NOT public.apply_live_refund_event('9600012347',(e->>'lease')::uuid,'9600012346',20000) OR public.authorized_hosted_class_room(b,c) IS NULL THEN RAISE EXCEPTION 'Duplicate refund revoked primary access'; END IF;
+ IF NOT public.apply_live_refund_event('9600012347',(e->>'lease')::uuid,'9600012346',20000) THEN RAISE EXCEPTION 'Duplicate refund failed'; END IF;
+ IF public.authorized_hosted_class_room(b,c) IS NULL THEN RAISE EXCEPTION 'Duplicate refund revoked primary access'; END IF;
  rv:=ref||':'||repeat('d',64);
  IF public.enqueue_live_reversal_event('refund.processed',rv,repeat('d',64))<>'accepted' THEN RAISE EXCEPTION 'Reference refund rejected'; END IF;
  e:=public.claim_live_reversal_event();
@@ -44,7 +47,8 @@ BEGIN
  IF ref IS NULL THEN RAISE EXCEPTION 'Service reservation failed'; END IF;
  IF public.record_live_learning_charge(ref,'9600012348',repeat('e',64))<>'accepted' THEN RAISE EXCEPTION 'Service charge enqueue failed'; END IF;
  e:=public.claim_live_learning_charge();
- IF NOT public.settle_live_learning_charge('9600012348',(e->>'leaseId')::uuid,30000,200) OR (SELECT state FROM public.personal_learning_requests WHERE id=s) IS DISTINCT FROM 'accepted' THEN RAISE EXCEPTION 'Verified tutoring settlement failed'; END IF;
+ IF NOT public.settle_live_learning_charge('9600012348',(e->>'leaseId')::uuid,30000,200) THEN RAISE EXCEPTION 'Verified tutoring settlement failed'; END IF;
+ IF (SELECT state FROM public.personal_learning_requests WHERE id=s) IS DISTINCT FROM 'accepted' THEN RAISE EXCEPTION 'Tutoring not accepted'; END IF;
 END $$;
 SET LOCAL ROLE authenticated;
 SELECT set_config('request.jwt.claim.sub','9b000000-0000-4000-8000-000000000001',true),set_config('request.jwt.claims','{"sub":"9b000000-0000-4000-8000-000000000001","role":"authenticated","session_id":"9b000000-0000-4000-8000-000000000001"}',true);
