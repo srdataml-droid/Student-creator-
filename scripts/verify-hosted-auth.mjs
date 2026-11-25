@@ -68,8 +68,9 @@ export async function verifyHostedAuth({env=process.env,fetcher=fetch}={}){
   }
  }catch(e){failure=safe(e);}
  // Cleanup only the newly created synthetic login session, never global
- // logout, account deletion or any other user's session.
- if(first&&!revoked){
+ // logout, account deletion or any other user's session. If the returned
+ // identity cannot be confirmed synthetic, never use its token for cleanup.
+ if(first&&p&&!revoked){
   try{
    const token=fresh?.accessToken??first.accessToken;
    await provider.logout(token);
@@ -77,7 +78,7 @@ export async function verifyHostedAuth({env=process.env,fetcher=fetch}={}){
    else revoked=false;
   }catch{revoked=false;}
  }
- if(first&&!revoked)throw fail('SESSION_CLEANUP_UNVERIFIED');
+ if(first&&p&&!revoked)throw fail('SESSION_CLEANUP_UNVERIFIED');
  if(failure)throw fail(failure);
  return {status:'passed',login:true,refreshRotated:true,logout:true,staleAccessDenied:true,sessionCleanupVerified:true};
 }
