@@ -65,9 +65,19 @@ test('frontend revamp supports active navigation, search and compact mobile acce
     const panel=page.getByRole('navigation',{name:'Account menu'});
     await expect(panel.getByRole('link',{name:'Saved posts',exact:true})).toBeVisible();
     await expect(panel.getByRole('link',{name:'Account security',exact:true})).toBeVisible();
+    await expect(panel.getByRole('link',{name:'Staff console',exact:true})).toHaveCount(0);
+    await expect(panel.getByRole('link',{name:'My access',exact:true})).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(menu).toHaveAttribute('aria-expanded','false');
     await expect(menu).toBeFocused();
+    await mobile.getByRole('link',{name:'Community',exact:true}).click();
+    await expect(page).toHaveURL(/\/communities$/);
+    await expect(page.getByRole('heading',{name:'Communities',exact:true})).toBeVisible();
+    await expect(mobile.getByRole('link',{name:'Community',exact:true})).toHaveAttribute('aria-current','page');
+    await page.locator('#community-query').fill('impossible-course-code-xyzz');
+    await page.getByRole('button',{name:'Find communities'}).click();
+    await expect(page.getByRole('heading',{name:'No matching courses'})).toBeVisible();
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width+1);
     await menu.click();
     await panel.getByRole('link',{name:'Log in',exact:true}).click();
     await expect(page).toHaveURL(/\/sign-in$/);
@@ -100,6 +110,7 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     const adminPage=await admin.newPage();
     await login(adminPage,adminEmail,adminPassword);
     await expect(adminPage.getByRole('heading',{name:'Protect the learning community.'})).toBeVisible();
+    await expect(adminPage.locator('.nav-auth').getByRole('link',{name:'Staff console',exact:true})).toBeVisible();
 
     await adminPage.locator('#schoolName').fill(schoolName);
     await adminPage.getByRole('button',{name:'Add campus'}).click();
@@ -116,12 +127,20 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     const {courses}=await readJson(await admin.request.get('/api/local/courses'));
     const courseId=courses.find(x=>x.institutionId===schoolId&&x.code==='ALP 101')?.id;
     expect(courseId).toBeTruthy();
+    await adminPage.goto('/communities?q=ALP+101');
+    const directoryCourse=adminPage.getByRole('listitem').filter({hasText:schoolName});
+    await expect(directoryCourse.getByRole('link',{name:'Discussion',exact:true})).toHaveAttribute('href','/communities/'+courseId);
+    await expect(directoryCourse.getByRole('link',{name:'Study rounds',exact:true})).toHaveAttribute('href','/study/'+courseId);
 
     const creatorPage=await creator.newPage();
     const viewerPage=await viewer.newPage();
     await join(creatorPage,schoolId,creatorEmail,password);
     await join(viewerPage,schoolId,viewerEmail,password);
     await login(creatorPage,creatorEmail,password);
+    await expect(creatorPage.locator('.nav-auth').getByRole('link',{name:'My studio',exact:true})).toBeVisible();
+    await creatorPage.getByRole('button',{name:'Account and navigation menu'}).click();
+    await expect(creatorPage.getByRole('navigation',{name:'Account menu'}).getByRole('link',{name:'Staff console',exact:true})).toHaveCount(0);
+    await creatorPage.keyboard.press('Escape');
     await expect(creatorPage.getByText('Your campus membership is waiting for an administrator', {exact:false})).toBeVisible();
     await login(viewerPage,viewerEmail,password);
     // An unverified account may sign in, but cannot create content, follow or review identities.
