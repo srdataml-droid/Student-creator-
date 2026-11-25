@@ -24,3 +24,15 @@ test('invitation, recovery, completion and remote logout failures stay distinct'
  await assert.rejects(c.logout(),{status:503,localSignedOut:true});
  assert.equal(c.hasFreshSession(),false);assert.deepEqual(JSON.parse(calls[0].opts.body),{inviteCode:'private-code'});
 });
+
+test('authorized creator calls use in-memory bearer, refresh once, and never replay a mutation',async()=>{
+ const calls=[];let now=1000;
+ const c=createHostedBrowserAuth({now:()=>now,fetcher:async(url,opts)=>{calls.push({url,opts});return url.endsWith('refresh')||url.endsWith('sign-in')?Response.json(session):Response.json({error:'AUTH_REQUIRED'},{status:401});}});
+ await c.signIn('x@example.com','private-password');now+=3600000;
+ await assert.rejects(c.authorized('setMessagePreference',{allowMessages:false}),{status:401});
+ assert.deepEqual(calls.map(x=>x.url),['/api/hosted-auth/sign-in','/api/hosted-auth/refresh','/api/social/messagePreference']);
+ assert.equal(calls.at(-1).opts.headers.authorization,'Bearer one.two.three');
+ assert.equal(c.hasFreshSession(),false);
+ await assert.rejects(c.authorized('https://evil.test'),/UNKNOWN_CREATOR_OPERATION/);
+ assert.equal(calls.length,3);
+});
