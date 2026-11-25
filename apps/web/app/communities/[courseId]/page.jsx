@@ -1,11 +1,13 @@
 'use client';
+import {useHostedAccount} from '../../HostedAccountProvider.jsx';
+import {HostedCommunity} from '../../HostedLearningWorkspace.jsx';
 import Link from 'next/link';
 import {useEffect,useState} from 'react';
 import {useParams} from 'next/navigation';
 import {api,friendlyError} from '../../../lib/local-client.js';
 
 /** Course discussions are local-first and visible only to verified joined students. */
-export default function CourseCommunity(){
+function LocalCourseCommunity(){
   const {courseId}=useParams();
   const [state,setState]=useState('loading'),[status,setStatus]=useState(null),[posts,setPosts]=useState([]),[topics,setTopics]=useState([]);
   const [message,setMessage]=useState(''),[error,setError]=useState(''),[busy,setBusy]=useState(false);
@@ -55,3 +57,5 @@ export default function CourseCommunity(){
     </>}
   </main>;
 }
+
+export default function CourseCommunity(){const a=useHostedAccount();return a?<HostedCommunity key={a.session.userId||a.session.state}/>:<LocalCourseCommunity/>;}
