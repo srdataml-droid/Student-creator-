@@ -79,4 +79,15 @@ BEGIN
  IF (SELECT state FROM public.learning_refund_reviews WHERE id=review)<>'recorded' THEN RAISE EXCEPTION 'Review not recorded'; END IF;
  IF has_function_privilege('authenticated','public.week7_record_learning_refund_review(uuid,uuid,text)','EXECUTE') THEN RAISE EXCEPTION 'Browser has refund review RPC'; END IF;
 END $$;
+-- A fresh duplicate after a previously recorded full refund must reopen review.
+DO $$ DECLARE o live_finance.learning_orders%ROWTYPE; e jsonb; review_id uuid; f uuid:='9b000000-0000-4000-8000-000000000005';
+BEGIN
+ SELECT * INTO o FROM live_finance.learning_orders WHERE kind='service' AND resource_id='9b000000-0000-4000-8000-000000000014';
+ SELECT id INTO review_id FROM public.learning_refund_reviews WHERE resource_id=o.resource_id;
+ IF public.record_live_learning_charge(o.reference,'9600012350',repeat('1',64))<>'accepted' THEN RAISE EXCEPTION 'Late duplicate enqueue'; END IF;
+ e:=public.claim_live_learning_charge();
+ IF NOT public.settle_live_learning_charge('9600012350',(e->>'leaseId')::uuid,o.amount_kobo,100) THEN RAISE EXCEPTION 'Late duplicate receipt'; END IF;
+ IF (SELECT state FROM public.learning_refund_reviews WHERE id=review_id)<>'pending_review' THEN RAISE EXCEPTION 'New liability did not reopen review'; END IF;
+ BEGIN PERFORM public.week7_record_learning_refund_review(f,review_id,'Attempt to close unrefunded duplicate'); RAISE EXCEPTION 'Unrefunded late duplicate closed'; EXCEPTION WHEN unique_violation THEN NULL; END;
+END $$;
 ROLLBACK;
