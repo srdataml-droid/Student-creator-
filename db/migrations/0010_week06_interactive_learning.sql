@@ -97,6 +97,13 @@ CREATE TABLE public.personal_learning_disputes (
   reviewed_by uuid REFERENCES auth.users(id),
   created_at timestamptz NOT NULL DEFAULT now()
 );
+CREATE TABLE public.learning_dispute_decisions (
+  request_id uuid PRIMARY KEY REFERENCES public.personal_learning_requests(id),
+  outcome text NOT NULL CHECK(outcome IN ('resume_guidance','return_to_review','cancel_service')),
+  reason text NOT NULL CHECK(length(trim(reason)) BETWEEN 10 AND 1000),
+  decided_by uuid NOT NULL REFERENCES auth.users(id),
+  decided_at timestamptz NOT NULL DEFAULT now()
+);
 CREATE TABLE public.learning_refund_reviews (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   resource_kind text NOT NULL CHECK(resource_kind IN ('class','service')),
@@ -127,6 +134,7 @@ ALTER TABLE public.learning_participant_removals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.creator_availability ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.personal_learning_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.personal_learning_disputes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.learning_dispute_decisions ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.learning_refund_reviews ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.learning_notifications ENABLE ROW LEVEL SECURITY;
 
@@ -173,14 +181,14 @@ FOR SELECT TO authenticated USING (
 -- verify an actual charge/refund against Week 5 ledger and policy.
 REVOKE ALL ON public.interactive_classes,public.interactive_class_enrollments,
  public.interactive_class_presence,public.learning_room_closures,public.learning_participant_removals,public.creator_availability,public.personal_learning_requests,
- public.personal_learning_disputes,public.learning_refund_reviews,public.learning_notifications
+ public.personal_learning_disputes,public.learning_dispute_decisions,public.learning_refund_reviews,public.learning_notifications
  FROM PUBLIC,anon,authenticated;
 GRANT SELECT ON public.interactive_classes,public.interactive_class_enrollments,
  public.interactive_class_presence,public.creator_availability,public.personal_learning_requests,
  public.personal_learning_disputes,public.learning_notifications TO authenticated;
 GRANT ALL ON public.interactive_classes,public.interactive_class_enrollments,
  public.interactive_class_presence,public.learning_room_closures,public.learning_participant_removals,public.creator_availability,public.personal_learning_requests,
- public.personal_learning_disputes,public.learning_refund_reviews,public.learning_notifications TO service_role;
+ public.personal_learning_disputes,public.learning_dispute_decisions,public.learning_refund_reviews,public.learning_notifications TO service_role;
 
 -- Class/service entitlements and money mutations are deliberately NOT created here:
 -- Week 5 must own the authoritative order, PSP verification, balanced journal,
