@@ -4,6 +4,7 @@ import {useEffect,useRef,useState} from 'react';
 import {useParams} from 'next/navigation';
 import {useHostedAccount} from './HostedAccountProvider.jsx';
 import HostedGate from './HostedGate.jsx';
+import {HostedCheckout} from './HostedLearningWorkspace.jsx';
 import {makeDraftKey} from '../lib/studio-workflow.mjs';
 import {validatePlaybackGrant,mergePrivateMessages} from '../lib/hosted-creator-client.mjs';
 function useJob(){
@@ -44,7 +45,7 @@ function Engagement({lessonId}){
  async function load(){const [comments,likes]=await Promise.all([account.creatorRequest('comments',{contentId:lessonId}),account.creatorRequest('myLikes',{})]);if(!Array.isArray(comments)||!Array.isArray(likes))throw Error('INVALID_RESPONSE');setRows(comments);setLiked(likes.some(x=>x.content_id===lessonId));}
  return <section className="panel"><h2>Discussion</h2><p className="hint">Saved posts are not yet connected to hosted storage.</p><button type="button" className="secondary-link" disabled={job.busy} onClick={()=>job.run(load)}>Load discussion and likes</button>{liked!==null&&<button type="button" className="secondary-link" disabled={job.busy} onClick={()=>job.run(async()=>{await account.creatorRequest(liked?'unlike':'like',{contentId:lessonId});await load();})}>{liked?'Unlike':'Like'}</button>}{rows!==null&&<><ul>{rows.map(r=><li key={r.id}><p>{r.body}</p><small>{r.created_at?new Date(r.created_at).toLocaleString():''}</small></li>)}</ul><form className="form-stack" onSubmit={e=>{e.preventDefault();job.run(async notice=>{keyRef.current||=makeDraftKey();await account.creatorRequest('comment',{contentId:lessonId,text,creationKey:keyRef.current});setText('');keyRef.current='';notice('Comment accepted.');await load();});}}><label htmlFor="hosted-comment">Your comment</label><textarea id="hosted-comment" value={text} onChange={e=>setText(e.target.value)} disabled={job.busy} required minLength={3} maxLength={800}/><button className="primary-link" disabled={job.busy}>Post comment</button></form></>}<Feedback job={job}/></section>;
 }
-export function HostedLesson({lessonId}){const account=useHostedAccount();return <HostedGate title="Watch student work"><Link href="/">Back to feed</Link><div key={(account?.session.userId||'guest')+lessonId}><Player lessonId={lessonId}/><Engagement lessonId={lessonId}/></div></HostedGate>;}
+export function HostedLesson({lessonId,checkoutMode,terms}){const account=useHostedAccount();return <HostedGate title="Watch student work"><Link href="/">Back to feed</Link><div key={(account?.session.userId||'guest')+lessonId}><Player lessonId={lessonId}/><Engagement lessonId={lessonId}/><HostedCheckout lessonId={lessonId} mode={checkoutMode} terms={terms}/></div></HostedGate>;}
 export function HostedInbox(){
  const account=useHostedAccount(),job=useJob();const [rows,setRows]=useState(null),[before,setBefore]=useState(null);
  function load(append=false){job.run(async()=>{const r=await account.creatorRequest('inbox',{before:append?before:null});if(!Array.isArray(r.inbox))throw Error('INVALID_INBOX');setRows(old=>append?[...new Map([...(old||[]),...r.inbox].map(x=>[x.peerId,x])).values()]:r.inbox);setBefore(r.nextBefore||null);});}
