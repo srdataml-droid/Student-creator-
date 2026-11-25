@@ -128,7 +128,7 @@ jobs:
           (
             export PGDATABASE=campus_ci_live
             sed '/^create role /d' db/tests/bootstrap.sql | psql -v ON_ERROR_STOP=1
-            for f in db/migrations/0001_proposed_core.sql db/migrations/0002_creator_comments.sql db/migrations/0003_creator_public_profiles.sql db/migrations/0004_creator_restrictions.sql db/migrations/0005_paid_access_security.sql db/migrations/0006_institution_identity_contract.sql db/migrations/0007_mux_webhook_idempotency.sql db/migrations/0008_hosted_rls_read_grants.sql db/migrations/0009_restrict_content_metadata_columns.sql db/migrations/0010_week01_current_session_guard.sql db/migrations/0018_week01_session_aware_rls.sql db/production/0001_live_commerce.sql db/production/0002_live_charge_inbox.sql db/production/0003_live_paystack_bridge.sql db/tests/live_payment_contract.sql; do
+            for f in db/migrations/0001_proposed_core.sql db/migrations/0002_creator_comments.sql db/migrations/0003_creator_public_profiles.sql db/migrations/0004_creator_restrictions.sql db/migrations/0005_paid_access_security.sql db/migrations/0006_institution_identity_contract.sql db/migrations/0007_mux_webhook_idempotency.sql db/migrations/0008_hosted_rls_read_grants.sql db/migrations/0009_restrict_content_metadata_columns.sql db/migrations/0010_week01_current_session_guard.sql db/migrations/0018_week01_session_aware_rls.sql db/migrations/0015_week05_hosted_test_commerce.sql db/migrations/0016_week05_charge_inbox.sql db/production/0001_live_commerce.sql db/production/0002_live_charge_inbox.sql db/production/0003_live_paystack_bridge.sql db/tests/live_payment_contract.sql; do
               psql -v ON_ERROR_STOP=1 -f "$f"
             done
           )
