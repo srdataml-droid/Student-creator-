@@ -3,7 +3,7 @@ import {createContext,useContext,useEffect,useMemo,useState} from 'react';
 import {createHostedBrowserAuth} from '../lib/hosted-browser-auth.mjs';
 const Context=createContext(null);
 export function useHostedAccount(){return useContext(Context);}
-export default function HostedAccountProvider({hosted,children}){
+export default function HostedAccountProvider({hosted,children,mediaMode='test'}){
  const client=useMemo(()=>hosted?createHostedBrowserAuth():null,[hosted]);
  const [session,setSession]=useState({state:'checking',role:null});
  const [notice,setNotice]=useState('');
@@ -24,7 +24,7 @@ export default function HostedAccountProvider({hosted,children}){
   return()=>{active=false;document.removeEventListener('visibilitychange',onVisible);};
  },[client]);
  const ownState=accountState?.userId===actor?accountState:null;
- const value=client?{session:{...session,role:ownState?.admin?'admin':ownState?.student?'student':null},notice,accountState:ownState,
+ const value=client?{mediaMode,session:{...session,role:ownState?.admin?'admin':ownState?.student?'student':null},notice,accountState:ownState,
   async reloadAccount(){const r=await client.authorized('accountState',{});if(r.userId!==actor)throw Error('ACCOUNT_CHANGED');setAccountState(r);return r;},
   async signIn(email,password){const result=await client.signIn(email,password);setNotice('');setSession({state:'signed-in',role:null,userId:result.userId});},
   invite:code=>client.invite(code),recover:email=>client.recover(email),
