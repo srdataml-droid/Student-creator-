@@ -45,12 +45,12 @@ export default function AppShell({children}){
  return <>
   <header className="creator-nav modern-header"><div className="nav-inner">
    <Link href="/" className="creator-logo" aria-label="Student Creators home"><span className="logo-glyph" aria-hidden="true">SC</span><span>Student Creators<small>by Worthkind</small></span></Link>
-   <form className="shell-search" action="/search" method="GET"><Icon name="search"/><label className="visually-hidden" htmlFor="shell-search">Search Student Creators</label><input id="shell-search" type="search" name="q" placeholder="Search creators, courses and posts" required minLength={2} maxLength={80}/><button type="submit" aria-label="Submit search"><Icon name="arrow"/></button></form>
+   <form className="shell-search" action="/search" method="GET"><Icon name="search"/><label className="visually-hidden" htmlFor="shell-search">Search Student Creators</label><input id="shell-search" type="search" name="q" placeholder="Search posts and courses" required minLength={2} maxLength={80}/><button type="submit" aria-label="Submit search"><Icon name="arrow"/></button></form>
    <div className="nav-auth"><Link className="nav-signin" href="/sign-in">Log in</Link><Link className="nav-join" href="/join">Join</Link>
     <div className="shell-menu" ref={menu}>
      <button type="button" className="shell-menu-toggle" aria-label="Account and navigation menu" aria-expanded={open} aria-controls="shell-account-menu" onClick={()=>setOpen(v=>!v)}><Icon name="menu"/></button>
      {open&&<nav id="shell-account-menu" className="shell-menu-panel" aria-label="Account menu">
-       {[{href:'/sign-in',label:'Log in',icon:'user'},...primary,...account,{href:'/manage',label:'Staff console',icon:'shield'}].map(item=><Link key={item.href} href={item.href} onClick={()=>setOpen(false)} aria-current={isCurrent(path,item.href)?'page':undefined}><Icon name={item.icon}/>{item.label}</Link>)}
+       {[{href:'/sign-in',label:'Log in',icon:'user'},{href:'/join',label:'Join Student Creators',icon:'user'},...primary,...account,{href:'/manage',label:'Staff console',icon:'shield'}].map(item=><Link key={item.href} href={item.href} onClick={()=>setOpen(false)} aria-current={isCurrent(path,item.href)?'page':undefined}><Icon name={item.icon}/>{item.label}</Link>)}
      </nav>}
     </div>
    </div>
