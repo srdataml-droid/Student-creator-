@@ -214,6 +214,35 @@ export function createLearningServices({db,transaction,audit,error,requireVerifi
       }
       return {completed,failed,remaining:db.prepare("SELECT count(*) AS n FROM learning_participant_removals WHERE state='pending'").get().n};
     },
+    expireDueClasses(actor,{limit=50}={}){
+      if(!actor||actor.role!=='admin'||actor.suspended)throw error('ADMIN_REQUIRED',403);
+      if(!Number.isInteger(limit)||limit<1||limit>100)throw error('INVALID_LIMIT',422);
+      return transaction(()=>{
+        const due=db.prepare("SELECT * FROM interactive_classes WHERE status IN ('scheduled','room_open') AND ends_at<? ORDER BY ends_at LIMIT ?")
+          .all(new Date(now()).toISOString(),limit);
+        let closed=0,cancelled=0,reviewQueued=0;
+        for(const cls of due){
+          const wasLive=cls.status==='room_open',state=wasLive?'completed':'cancelled';
+          db.prepare("UPDATE interactive_classes SET status=?,reason=?,updated_at=? WHERE id=? AND status=?")
+            .run(state,wasLive?cls.reason:'No host opened the scheduled class before its end.',timestamp(),cls.id,cls.status);
+          db.prepare("INSERT OR IGNORE INTO learning_room_closures(class_id,room_name,state,updated_at) VALUES(?,?,'pending',?)")
+            .run(cls.id,cls.room_name,timestamp());
+          const members=db.prepare("SELECT student_id FROM interactive_class_enrollments WHERE class_id=? AND status='enrolled'").all(cls.id);
+          for(const member of members){
+            notice(member.student_id,wasLive?'class_finished':'class_cancelled',cls.id,wasLive?
+              'The scheduled class has ended.':'The class ended without opening. Any paid charge requires review.');
+            if(!wasLive&&cls.price_kobo>0){
+              refund('class',cls.id,member.student_id,'Expired unopened paid class: verify charge and refund policy.');
+              reviewQueued++;
+            }
+          }
+          audit(actor.id,wasLive?'class.expired.finished':'class.expired.unopened_cancelled',cls.id,
+            {participants:members.length});
+          if(wasLive)closed++;else cancelled++;
+        }
+        return {completed:closed,cancelled,refundReviews:reviewQueued,roomDeletionsQueued:due.length};
+      });
+    },
     preflightOpenClass(actor,id){
       const row=classRow(actor,id);
       if(row.host_id!==actor.id)throw error('FORBIDDEN',403);
