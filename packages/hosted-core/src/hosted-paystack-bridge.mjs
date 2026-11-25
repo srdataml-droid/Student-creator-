@@ -50,7 +50,12 @@ export function createHostedPaystackWebhook({store,signingSecrets,domain='test',
   let raw,event;
   try{raw=await readRaw(request,1048576);const v1=request.headers.get('paystack-signature');event=v1?decodeVerifiedPaystackWebhookV1(raw,v1,signingSecrets):decodeVerifiedLegacyWebhook(raw,request.headers.get('x-paystack-signature'),legacySecrets);}catch{return json(401,{error:'INVALID_SIGNATURE_OR_BODY'});}
   if(domain==='live'&&reversalEvents.has(event.event)){
-   const id=providerId(event.data.id);if(!id||typeof store.recordReversal!=='function')return json(400,{error:'INVALID_REVERSAL_EVENT'});
+   const digest=createHash('sha256').update(raw).digest('hex');
+   const d=event.data;
+   if(d.domain&&d.domain!=='live')return json(400,{error:'INVALID_REVERSAL_EVENT'});
+   const reference=d.transaction_reference;
+   const id=providerId(d.id)||(event.event==='refund.processed'&&d.domain==='live'&&refPattern(domain).test(reference??'')?reference+':'+digest:null);
+   if(!id||typeof store.recordReversal!=='function')return json(400,{error:'INVALID_REVERSAL_EVENT'});
    try{const result=await store.recordReversal(event.event,id,createHash('sha256').update(raw).digest('hex'));if(!['accepted','duplicate'].includes(result))throw unavailable();return json(200,{received:true});}
    catch{return json(503,{error:'REVERSAL_INBOX_UNAVAILABLE'});}
   }
