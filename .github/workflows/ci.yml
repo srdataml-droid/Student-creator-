@@ -90,6 +90,12 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/tests/mux_video.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/0017_week01_mux_event_worker.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/mux_event_worker.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0013_week01_private_identity_api.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/private_identity_api.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0015_week01_auth_email_delivery.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/auth_email_delivery.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0016_week01_hosted_auth_lifecycle.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/hosted_auth_lifecycle.sql
 
   browser-alpha:
     runs-on: ubuntu-24.04
