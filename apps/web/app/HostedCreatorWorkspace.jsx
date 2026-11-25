@@ -1,15 +1,12 @@
 'use client';
-import Link from 'next/link';
+import HostedGate from './HostedGate.jsx';
 import {ReviewSubmission} from './HostedSocialWorkspace.jsx';
 import {useRef,useState} from 'react';
 import {makeDraftKey} from '../lib/studio-workflow.mjs';
 import {readMuxStatus,putMuxVideo} from '../lib/hosted-creator-client.mjs';
 import {useHostedAccount} from './HostedAccountProvider.jsx';
 const errorText=e=>e.status===401?'Sign in again to continue.':e.status===403?'Your account does not have permission for this action.':e.status===404?'The requested record or service is unavailable.':e.status===429?'Too many attempts. Try later.':e.status===409?'This request conflicts with a saved record. Do not repeat with different evidence.':e.message==='INVALID_IDENTITY_FILE'?'Choose a JPEG, PNG or PDF of 8 bytes to 4 MiB.':e.message==='INVALID_VIDEO_FILE'?'Choose a nonempty MP4 up to 100 MiB.':e.message==='INVALID_ID'?'Enter a valid record ID.':'The request could not be confirmed. Check the details and service availability.';
-export function HostedGate({title,children}){
- const account=useHostedAccount();
- return <main id="main" className="main hosted-workspace"><h1>{title}</h1>{account?.session.state==='signed-in'?children:account?.session.state==='checking'?<p role="status">Checking account…</p>:account?.session.state==='unavailable'?<p role="alert">Account service is unavailable.</p>:<Link className="primary-link" href="/sign-in">Sign in</Link>}</main>;
-}
+
 function useAction(){
  const lock=useRef(false);const [busy,setBusy]=useState(false),[error,setError]=useState(''),[notice,setNotice]=useState('');
  async function run(fn){if(lock.current)return;lock.current=true;setBusy(true);setError('');setNotice('');try{await fn(setNotice);}catch(e){setError(errorText(e));}finally{lock.current=false;setBusy(false);}}
