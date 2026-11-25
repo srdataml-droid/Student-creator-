@@ -1,8 +1,10 @@
 'use client';
+import HostedAccountForm from '../HostedAccountForm.jsx';
+import {useHostedAccount} from '../HostedAccountProvider.jsx';
 import Link from 'next/link';
 import {useState} from 'react';
 import {api,friendlyError} from '../../lib/local-client.js';
-export default function RecoverAccount(){
+function LocalRecoverAccount(){
  const [email,setEmail]=useState(''),[token,setToken]=useState(''),[password,setPassword]=useState(''),[confirmation,setConfirmation]=useState(''),[busy,setBusy]=useState(false),[message,setMessage]=useState(''),[error,setError]=useState(''),[done,setDone]=useState(false);
  async function requestCode(e){e.preventDefault();setBusy(true);setError('');setMessage('');try{await api('auth/password/recover',{method:'POST',body:{email}});setMessage('If a verified student account can receive a code, check its email.');}catch(e){setError(friendlyError(e));}finally{setBusy(false);}}
  async function reset(e){e.preventDefault();setError('');setMessage('');if(password!==confirmation){setError('The passwords do not match.');return;}setBusy(true);try{await api('auth/password/reset',{method:'POST',body:{token:token.trim(),password}});setToken('');setPassword('');setConfirmation('');setDone(true);}catch(e){setError(friendlyError(e));}finally{setBusy(false);}}
@@ -19,3 +21,5 @@ export default function RecoverAccount(){
  {message&&<p role="status" className="form-success">{message}</p>}{error&&<p role="alert" className="form-error">{error}</p>}
  </div></section></main>;
 }
+
+export default function RecoverAccount(){const hosted=useHostedAccount();return hosted?<HostedAccountForm mode="recover"/>:<LocalRecoverAccount/>;}
