@@ -85,6 +85,7 @@ export function hostedCreatorRequest(operation,input={}){
  case 'institutionAppeals':case 'privacyRequests':return json('/api/social/'+operation,{});
  case 'submitInstitutionAppeal':return json('/api/social/submitInstitutionAppeal',{reason:bounded(input.reason,20,800)});
  case 'submitPrivacyRequest':return json('/api/social/submitPrivacyRequest',{kind:choice(input.kind,['access','correction','erasure','restriction','portability']),reason:bounded(input.reason,20,1000)});
+ case 'isFollowing':return json('/api/social/isFollowing',{creatorId:id(input.creatorId)});
  default:throw Error('UNKNOWN_CREATOR_OPERATION');
  }
 }
