@@ -124,7 +124,7 @@ BEGIN
  IF _action IN ('hide','report') THEN
    IF _input - ARRAY['postId','reason'] <> '{}'::jsonb OR jsonb_typeof(_input->'reason') IS DISTINCT FROM 'string' THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='22023'; END IF;
    post:=(_input->>'postId')::uuid;reason:=btrim(_input->>'reason');
-   IF post IS NULL OR length(reason) NOT BETWEEN CASE WHEN _action='hide' THEN 5 ELSE 10 END AND 1000 THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='22023'; END IF;
+   IF post IS NULL OR length(reason)<(CASE WHEN _action='hide' THEN 5 ELSE 10 END) OR length(reason)>1000 THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='22023'; END IF;
    IF _action='hide' AND NOT EXISTS(SELECT 1 FROM public.social_community_moderators WHERE course_id=_course AND user_id=actor)
       THEN RAISE EXCEPTION 'MODERATOR_REQUIRED' USING ERRCODE='42501'; END IF;
    SELECT * INTO previous FROM public.social_community_posts WHERE id=post AND course_id=_course;
