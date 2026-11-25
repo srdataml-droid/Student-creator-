@@ -1,7 +1,10 @@
 \set ON_ERROR_STOP on
 BEGIN;
+-- CI-only session fixtures inside this rollback transaction.
+UPDATE auth.users SET email_confirmed_at=coalesce(email_confirmed_at,now()) WHERE email_confirmed_at IS NULL;
+INSERT INTO auth.sessions(id,user_id) SELECT id,id FROM auth.users ON CONFLICT(id) DO NOTHING;
 SET LOCAL ROLE authenticated;
-SELECT set_config('request.jwt.claim.sub','22222222-2222-4222-8222-222222222222',true);
+SELECT set_config('request.jwt.claim.sub','22222222-2222-4222-8222-222222222222',true), set_config('request.jwt.claims',jsonb_build_object('sub','22222222-2222-4222-8222-222222222222','role','authenticated','session_id','22222222-2222-4222-8222-222222222222')::text,true);
 DO $$ DECLARE root uuid; child uuid; BEGIN
  root:=(public.social_comment_action('post','aaaaaaaa-2222-4222-8222-aaaaaaaaaaaa','{"text":"Synthetic paid learner question","creationKey":"hosted_paid_comment_001"}')->>'id')::uuid;
  child:=(public.social_comment_action('post','aaaaaaaa-2222-4222-8222-aaaaaaaaaaaa',jsonb_build_object('text','Synthetic reply','creationKey','hosted_paid_comment_002','replyTo',root))->>'id')::uuid;

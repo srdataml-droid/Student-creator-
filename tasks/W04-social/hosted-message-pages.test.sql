@@ -2,19 +2,22 @@
 BEGIN;
 INSERT INTO auth.users(id) VALUES('42000000-0000-4000-8000-000000000001');
 INSERT INTO public.student_profiles(user_id,institution_id,display_name,verified_at) VALUES('42000000-0000-4000-8000-000000000001','aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa','Synthetic third reader',now());
+-- CI-only session fixtures inside this rollback transaction.
+UPDATE auth.users SET email_confirmed_at=coalesce(email_confirmed_at,now()) WHERE email_confirmed_at IS NULL;
+INSERT INTO auth.sessions(id,user_id) SELECT id,id FROM auth.users ON CONFLICT(id) DO NOTHING;
 SET LOCAL ROLE authenticated;
-SELECT set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111',true);
+SELECT set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111',true), set_config('request.jwt.claims',jsonb_build_object('sub','11111111-1111-4111-8111-111111111111','role','authenticated','session_id','11111111-1111-4111-8111-111111111111')::text,true);
 SELECT public.social_message_action('preference',_enabled=>true);
-SELECT set_config('request.jwt.claim.sub','22222222-2222-4222-8222-222222222222',true);
+SELECT set_config('request.jwt.claim.sub','22222222-2222-4222-8222-222222222222',true), set_config('request.jwt.claims',jsonb_build_object('sub','22222222-2222-4222-8222-222222222222','role','authenticated','session_id','22222222-2222-4222-8222-222222222222')::text,true);
 SELECT public.social_message_action('send','11111111-1111-4111-8111-111111111111','First private message');
 SELECT public.social_message_action('send','11111111-1111-4111-8111-111111111111','Second private message');
-SELECT set_config('request.jwt.claim.sub','42000000-0000-4000-8000-000000000001',true);
+SELECT set_config('request.jwt.claim.sub','42000000-0000-4000-8000-000000000001',true), set_config('request.jwt.claims',jsonb_build_object('sub','42000000-0000-4000-8000-000000000001','role','authenticated','session_id','42000000-0000-4000-8000-000000000001')::text,true);
 SELECT public.social_message_action('send','11111111-1111-4111-8111-111111111111','Separate conversation');
 DO $$ BEGIN
  IF jsonb_array_length(public.social_thread_page('22222222-2222-4222-8222-222222222222')->'messages')<>0 THEN RAISE EXCEPTION 'foreign pair history leaked'; END IF;
  BEGIN PERFORM public.social_inbox_page('22222222-2222-4222-8222-222222222222'); RAISE EXCEPTION 'unowned inbox cursor'; EXCEPTION WHEN no_data_found THEN NULL; END;
 END $$;
-SELECT set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111',true);
+SELECT set_config('request.jwt.claim.sub','11111111-1111-4111-8111-111111111111',true), set_config('request.jwt.claims',jsonb_build_object('sub','11111111-1111-4111-8111-111111111111','role','authenticated','session_id','11111111-1111-4111-8111-111111111111')::text,true);
 DO $$ DECLARE p jsonb; q jsonb; mid uuid; BEGIN
  p:=public.social_inbox_page(NULL,1);
  IF jsonb_array_length(p->'inbox')<>1 OR p->>'nextBefore' IS NULL THEN RAISE EXCEPTION 'inbox page missing'; END IF;

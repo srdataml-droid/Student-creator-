@@ -9,15 +9,18 @@ INSERT INTO public.student_profiles(user_id,institution_id,display_name,verified
 ('41000000-0000-4000-8000-000000000002','41000000-0000-4000-8000-000000000010','Member B',now()),
 ('41000000-0000-4000-8000-000000000003','41000000-0000-4000-8000-000000000020','Foreign member',now());
 INSERT INTO public.platform_staff(user_id,role) VALUES('41000000-0000-4000-8000-000000000004','admin');
+-- CI-only session fixtures inside this rollback transaction.
+UPDATE auth.users SET email_confirmed_at=coalesce(email_confirmed_at,now()) WHERE email_confirmed_at IS NULL;
+INSERT INTO auth.sessions(id,user_id) SELECT id,id FROM auth.users ON CONFLICT(id) DO NOTHING;
 SET LOCAL ROLE authenticated;
-SELECT set_config('request.jwt.claim.sub','41000000-0000-4000-8000-000000000001',true);
+SELECT set_config('request.jwt.claim.sub','41000000-0000-4000-8000-000000000001',true), set_config('request.jwt.claims',jsonb_build_object('sub','41000000-0000-4000-8000-000000000001','role','authenticated','session_id','41000000-0000-4000-8000-000000000001')::text,true);
 SELECT public.social_community_action('join','41000000-0000-4000-8000-000000000012');
 SELECT public.social_community_action('post','41000000-0000-4000-8000-000000000012','{"text":"Original synthetic discussion","creationKey":"synthetic_community_001"}');
 DO $$ BEGIN
  IF (SELECT count(id) FROM public.social_community_posts)<>1 OR has_table_privilege(current_user,'public.social_community_posts','INSERT') THEN RAISE EXCEPTION 'member grants incorrect'; END IF;
  IF public.social_community_action('post','41000000-0000-4000-8000-000000000012','{"text":"Original synthetic discussion","creationKey":"synthetic_community_001"}')->>'replayed'<>'true' THEN RAISE EXCEPTION 'post replay failed'; END IF;
 END $$;
-SELECT set_config('request.jwt.claim.sub','41000000-0000-4000-8000-000000000002',true);
+SELECT set_config('request.jwt.claim.sub','41000000-0000-4000-8000-000000000002',true), set_config('request.jwt.claims',jsonb_build_object('sub','41000000-0000-4000-8000-000000000002','role','authenticated','session_id','41000000-0000-4000-8000-000000000002')::text,true);
 DO $$ BEGIN IF (SELECT count(id) FROM public.social_community_posts)<>0 THEN RAISE EXCEPTION 'nonmember read private post'; END IF; END $$;
 SELECT public.social_community_action('join','41000000-0000-4000-8000-000000000012');
 DO $$ DECLARE root uuid; BEGIN
@@ -27,14 +30,14 @@ DO $$ DECLARE root uuid; BEGIN
  BEGIN PERFORM public.social_community_action('role','41000000-0000-4000-8000-000000000012','{"userId":"41000000-0000-4000-8000-000000000002","enabled":true,"reason":"Self promote"}'); RAISE EXCEPTION 'self promotion'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
  IF (SELECT count(*) FROM public.social_community_members)<>1 THEN RAISE EXCEPTION 'member list leak'; END IF;
 END $$;
-SELECT set_config('request.jwt.claim.sub','41000000-0000-4000-8000-000000000003',true);
+SELECT set_config('request.jwt.claim.sub','41000000-0000-4000-8000-000000000003',true), set_config('request.jwt.claims',jsonb_build_object('sub','41000000-0000-4000-8000-000000000003','role','authenticated','session_id','41000000-0000-4000-8000-000000000003')::text,true);
 DO $$ BEGIN
  IF (SELECT count(id) FROM public.social_community_posts)<>0 THEN RAISE EXCEPTION 'foreign campus read'; END IF;
  BEGIN PERFORM public.social_community_action('join','41000000-0000-4000-8000-000000000012'); RAISE EXCEPTION 'foreign campus join'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
 END $$;
-SELECT set_config('request.jwt.claim.sub','41000000-0000-4000-8000-000000000004',true);
+SELECT set_config('request.jwt.claim.sub','41000000-0000-4000-8000-000000000004',true), set_config('request.jwt.claims',jsonb_build_object('sub','41000000-0000-4000-8000-000000000004','role','authenticated','session_id','41000000-0000-4000-8000-000000000004')::text,true);
 SELECT public.social_community_action('role','41000000-0000-4000-8000-000000000012','{"userId":"41000000-0000-4000-8000-000000000002","enabled":true,"reason":"Authorized moderator"}');
-SELECT set_config('request.jwt.claim.sub','41000000-0000-4000-8000-000000000002',true);
+SELECT set_config('request.jwt.claim.sub','41000000-0000-4000-8000-000000000002',true), set_config('request.jwt.claims',jsonb_build_object('sub','41000000-0000-4000-8000-000000000002','role','authenticated','session_id','41000000-0000-4000-8000-000000000002')::text,true);
 DO $$ DECLARE root uuid; BEGIN
  SELECT id INTO STRICT root FROM public.social_community_posts WHERE parent_id IS NULL;
  PERFORM public.social_community_action('hide','41000000-0000-4000-8000-000000000012',jsonb_build_object('postId',root,'reason','Moderation reason'));

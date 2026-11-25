@@ -7,13 +7,9 @@ GRANT USAGE ON SCHEMA student_social_private TO authenticated;
 
 -- Signed bearer must refer to an existing, current session for its own subject.
 CREATE FUNCTION student_social_private.active_session() RETURNS boolean
-LANGUAGE plpgsql STABLE SECURITY DEFINER SET search_path='' AS $$
-DECLARE actor uuid:=auth.uid(); claim text:=auth.jwt()->>'session_id'; sid uuid;
-BEGIN
- IF actor IS NULL OR claim IS NULL OR claim !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' THEN RETURN false; END IF;
- sid:=claim::uuid;
- RETURN EXISTS(SELECT 1 FROM auth.sessions s WHERE s.id=sid AND s.user_id=actor AND (s.not_after IS NULL OR s.not_after>now()));
-END $$;
+LANGUAGE sql STABLE SECURITY INVOKER SET search_path='' AS $$
+ SELECT student_creators_private.current_session_active();
+$$;
 REVOKE ALL ON FUNCTION student_social_private.active_session() FROM PUBLIC,anon,authenticated;
 GRANT EXECUTE ON FUNCTION student_social_private.active_session() TO authenticated;
 
