@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {reversalEvents,providerId} from './live-reversal-worker.mjs';
 import {createCurrentSupabaseAuth} from './supabase-current-auth.mjs';
 import {createPaystackClient} from '../../payment-core/src/paystack-client.mjs';
 import {decodeVerifiedLegacyWebhook} from '../../payment-core/src/payments.mjs';
@@ -48,6 +49,11 @@ export function createHostedPaystackWebhook({store,signingSecrets,domain='test',
   if(request.method!=='POST')return json(405,{error:'METHOD_NOT_ALLOWED'});
   let raw,event;
   try{raw=await readRaw(request,1048576);const v1=request.headers.get('paystack-signature');event=v1?decodeVerifiedPaystackWebhookV1(raw,v1,signingSecrets):decodeVerifiedLegacyWebhook(raw,request.headers.get('x-paystack-signature'),legacySecrets);}catch{return json(401,{error:'INVALID_SIGNATURE_OR_BODY'});}
+  if(domain==='live'&&reversalEvents.has(event.event)){
+   const id=providerId(event.data.id);if(!id||typeof store.recordReversal!=='function')return json(400,{error:'INVALID_REVERSAL_EVENT'});
+   try{const result=await store.recordReversal(event.event,id,createHash('sha256').update(raw).digest('hex'));if(!['accepted','duplicate'].includes(result))throw unavailable();return json(200,{received:true});}
+   catch{return json(503,{error:'REVERSAL_INBOX_UNAVAILABLE'});}
+  }
   if(event.event!=='charge.success')return json(200,{received:true,ignored:true});
   const d=event.data;
   if(d.domain!==domain||!refPattern(domain).test(d.reference??'')||!(typeof d.id==='string'&&TX.test(d.id)||typeof d.id==='number'&&Number.isSafeInteger(d.id)&&d.id>0))return json(400,{error:domain==='test'?'INVALID_TEST_EVENT':'INVALID_LIVE_EVENT'});

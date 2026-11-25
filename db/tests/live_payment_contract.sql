@@ -41,7 +41,10 @@ BEGIN
  PERFORM set_config('request.jwt.claim.sub',b::text,true);
  PERFORM set_config('request.jwt.claims',jsonb_build_object('sub',b,'role','authenticated','session_id','f1960000-0000-4000-8000-000000000001')::text,true);
  IF NOT public.can_view_published_content(c) THEN RAISE EXCEPTION 'Paid viewing denied'; END IF;
- PERFORM public.live_record_reversal(ref,'tx_fixture','fixture-live-refund-1','refund',20000,'NGN','live');
+ IF public.enqueue_live_reversal_event('refund.processed','7',repeat('c',64))<>'accepted' OR public.enqueue_live_reversal_event('refund.processed','7',repeat('c',64))<>'duplicate' THEN RAISE EXCEPTION 'Reversal intake replay'; END IF;
+ e:=public.claim_live_reversal_event();
+ IF public.claim_live_reversal_event() IS NOT NULL OR public.apply_live_refund_event('7',gen_random_uuid(),'tx_fixture',20000) OR public.apply_live_refund_event('7',(e->>'lease')::uuid,'tx_fixture',100) THEN RAISE EXCEPTION 'Invalid reversal lease or amount'; END IF;
+ IF NOT public.apply_live_refund_event('7',(e->>'lease')::uuid,'tx_fixture',20000) THEN RAISE EXCEPTION 'Verified reversal settlement failed'; END IF;
  IF public.can_view_published_content(c) OR (SELECT state FROM public.entitlements WHERE order_id=oid)<>'revoked' THEN RAISE EXCEPTION 'Refund did not revoke access'; END IF;
  IF (SELECT count(*) FROM live_finance.journal WHERE order_id=oid)<>7 THEN RAISE EXCEPTION 'Reversal accounting missing'; END IF;
  IF (public.live_apply_charge(ref,'tx_fixture',20000,'NGN','live','buyer@example.invalid',100)->>'replayed') IS DISTINCT FROM 'true' THEN RAISE EXCEPTION 'Receipt replay failed'; END IF;

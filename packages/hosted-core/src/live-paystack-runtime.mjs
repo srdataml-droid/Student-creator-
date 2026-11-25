@@ -1,3 +1,4 @@
+import {createLiveReversalProvider} from './live-reversal-worker.mjs';
 import {readLivePaymentConfiguration} from './live-payment-preflight.mjs';
 import {createHostedCheckoutHandler,createHostedPaystackWebhook,readPaystackSigningSecrets} from './hosted-paystack-bridge.mjs';
 import {createCurrentSupabaseAuth} from './supabase-current-auth.mjs';
@@ -23,6 +24,11 @@ export function createLivePaystackRuntime({env=process.env,fetcher=fetch}={}){
   return JSON.parse(await readBoundedGatewayResponse(r,65536,unavailable));
  }
  const store={
+  recordReversal:(event,id,digest)=>rpc('enqueue_live_reversal_event',{_event:event,_id:id,_digest:digest}),
+  claimReversal:()=>rpc('claim_live_reversal_event',{}),
+  finishReversal:(event,id,lease,reason)=>rpc('finish_live_reversal_event',{_event:event,_id:id,_lease:lease,_reason:reason}),
+  reversalReceipt:tx=>rpc('live_reversal_receipt',{_tx:tx}),
+  applyRefund:(id,lease,tx,amount)=>rpc('apply_live_refund_event',{_id:id,_lease:lease,_tx:tx,_amount:amount}),
   reserve:(buyer,content,idempotency,terms)=>rpc('reserve_live_paystack_checkout',{_buyer:buyer,_content:content,_key:idempotency,_terms:terms}),
   finish:(order,url)=>rpc('finish_live_paystack_checkout',{_order:order,_url:url}),
   canReturn:(buyer,reference,terms)=>rpc('live_paystack_can_return',{_buyer:buyer,_reference:reference,_terms:terms}),
@@ -31,7 +37,7 @@ export function createLivePaystackRuntime({env=process.env,fetcher=fetch}={}){
   settle:(k,lease,c)=>rpc('settle_live_paystack_charge',{_key:k,_lease:lease,_tx:c.providerTransactionId,_amount:c.amountKobo,_fee:c.providerFeeKobo}),
   retry:(k,lease)=>rpc('retry_live_paystack_charge',{_key:k,_lease:lease})
  };
- return {domain:'live',checkoutEnabled,origin,auth,store,gateway,signingSecrets,legacySecrets:[key]};
+ return {domain:'live',checkoutEnabled,origin,auth,store,gateway,signingSecrets,legacySecrets:[key],provider:createLiveReversalProvider({key,fetcher})};
 }
 export function buildLivePaystackRoute({webhook=false,getEnv=()=>process.env,fetcher=fetch}={}){
  return async (request,context)=>{try{const r=createLivePaystackRuntime({env:getEnv(),fetcher});return webhook?await createHostedPaystackWebhook(r)(request):await createHostedCheckoutHandler(r)(request,context);}
