@@ -14,8 +14,14 @@ public final class CatalogTransport {
     static final int MAX_BYTES = 262144;
     private static final Pattern ID = Pattern.compile(
         "[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89aAbB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}");
+    interface ConnectionFactory { HttpURLConnection open(URI destination) throws IOException; }
     private final URI origin;
+    private final ConnectionFactory connections;
     public CatalogTransport(String configuredOrigin) {
+        this(configuredOrigin, destination -> (HttpURLConnection) destination.toURL().openConnection());
+    }
+    CatalogTransport(String configuredOrigin, ConnectionFactory connections) {
+        this.connections = java.util.Objects.requireNonNull(connections);
         origin = URI.create(configuredOrigin);
         String host = origin.getHost();
         if (!"https".equals(origin.getScheme()) || host == null || !host.contains(".")
@@ -34,7 +40,7 @@ public final class CatalogTransport {
     public String courses() throws IOException { return read(coursesUri()); }
     public String lessons(String id) throws IOException { return read(lessonsUri(id)); }
     private String read(URI destination) throws IOException {
-        HttpURLConnection c = (HttpURLConnection) destination.toURL().openConnection();
+        HttpURLConnection c = connections.open(destination);
         try {
             c.setInstanceFollowRedirects(false);
             c.setRequestMethod("GET");
