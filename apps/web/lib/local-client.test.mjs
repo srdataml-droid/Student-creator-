@@ -31,5 +31,30 @@ test('browser API transport keeps cookies private, reports ambiguous writes and 
   await assert.rejects(api('purchase',{method:'POST',body:{}}),{message:'MUTATION_OUTCOME_UNKNOWN',status:502});
   globalThis.fetch=async(...args)=>{calls.push(args);return Response.json({ok:true});};
   assert.deepEqual(await api('me'),{ok:true});
-  assert.deepEqual(calls.at(-1),['/api/local/me',{method:'GET',credentials:'same-origin',cache:'no-store',headers:{}}]);
+  const [url,options]=calls.at(-1);
+  assert.equal(url,'/api/local/me');
+  assert.ok(options.signal instanceof AbortSignal);
+  assert.equal(options.signal.aborted,false);
+  const {signal,...other}=options;
+  assert.deepEqual(other,{method:'GET',credentials:'same-origin',cache:'no-store',headers:{}});
+});
+
+
+test('request deadlines cover slow headers and bodies without replaying mutations',async(t)=>{
+  const original=globalThis.fetch;
+  t.after(()=>{globalThis.fetch=original;});
+  let calls=0;
+  const waitForAbort=signal=>new Promise((resolve,reject)=>{
+    if(signal.aborted){reject(new Error('aborted'));return;}
+    signal.addEventListener('abort',()=>reject(new Error('aborted')),{once:true});
+  });
+  globalThis.fetch=async(url,{signal})=>{calls++;return waitForAbort(signal);};
+  await assert.rejects(api('me',{timeoutMs:10}),{message:'NETWORK_TIMEOUT'});
+  await assert.rejects(api('purchase',{method:'POST',body:{},timeoutMs:10}),{message:'MUTATION_OUTCOME_UNKNOWN'});
+  globalThis.fetch=async(url,{signal})=>{calls++;return {status:200,ok:true,json:()=>waitForAbort(signal)};};
+  await assert.rejects(api('me',{timeoutMs:10}),{message:'NETWORK_TIMEOUT'});
+  await assert.rejects(api('messages',{method:'POST',body:{},timeoutMs:10}),{message:'MUTATION_OUTCOME_UNKNOWN'});
+  assert.equal(calls,4);
+  await assert.rejects(api('me',{timeoutMs:0}),RangeError);
+  assert.equal(calls,4);
 });
