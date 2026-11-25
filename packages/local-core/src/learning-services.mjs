@@ -386,7 +386,7 @@ export function createLearningServices({db,transaction,audit,error,requireVerifi
     classAttendance(actor,id){
       const row=classRow(actor,id);
       if(row.host_id!==actor.id)throw error('FORBIDDEN',403);
-      return db.prepare("SELECT student_id AS studentId,COUNT(*) AS providerEvents,MIN(created_at) AS firstObservedAt FROM interactive_class_presence WHERE class_id=? AND kind='joined' GROUP BY student_id ORDER BY firstObservedAt")
+      return db.prepare("SELECT p.student_id AS studentId,COUNT(*) AS providerEvents,MIN(p.created_at) AS firstObservedAt,COALESCE(e.status,'withdrawn') AS enrollmentStatus FROM interactive_class_presence p LEFT JOIN interactive_class_enrollments e ON e.class_id=p.class_id AND e.student_id=p.student_id WHERE p.class_id=? AND p.kind='joined' GROUP BY p.student_id,e.status ORDER BY firstObservedAt")
         .all(id);
     },
     setAvailability(actor,slots){
