@@ -15,7 +15,10 @@ test('synthetic verified payment through protected playback and refund',async({b
   const course=store.listCourses().find(c=>c.institutionId===f.creator.user.institutionId);
   f.id=store.createDraft(f.creator.user,{courseId:course.id,title:'Synthetic browser paid work',description:'Original',previewText:'Preview',lessonText:'An independent original synthetic explanation with worked steps and discussion. '.repeat(3),rightsAttested:true,creationKey:randomUUID()}).lesson.id;
   store.setLessonPrice(f.creator.user,f.id,20000);
-  store.saveVideo(f.creator.user,f.id,Buffer.from(readFileSync(new URL('../../../packages/local-core/test/fixtures/synthetic-1s.mp4.base64',import.meta.url),'utf8'),'base64'));
+  const media=process.env.PLAYWRIGHT_PLAYABLE_FIXTURE?
+   readFileSync(process.env.PLAYWRIGHT_PLAYABLE_FIXTURE):
+   Buffer.from(readFileSync(new URL('../../../packages/local-core/test/fixtures/synthetic-1s.mp4.base64',import.meta.url),'utf8'),'base64');
+  store.saveVideo(f.creator.user,f.id,media);
   store.submit(f.creator.user,f.id);store.review(f.admin.user,f.id,{decision:'approve',reason:'Synthetic original browser work'});
   const created=await context.request.post(`/api/local/lessons/${f.id}/orders`,{headers:{origin:'http://localhost:3000'},data:{requestKey:randomUUID()}});
   expect(created.status()).toBe(201);f.order=(await created.json()).order;
@@ -35,17 +38,30 @@ test('synthetic verified payment through protected playback and refund',async({b
   if(process.env.PLAYWRIGHT_VALIDATE_CODEC==='1'){
     // Opt-in codec validation requires a browser and media fixture with
     // matching decoder support; do not silently pass a NotSupportedError.
-    await page.locator('video').evaluate(v=>{v.muted=true;return v.play();});
-    await expect.poll(()=>page.locator('video').evaluate(v=>v.currentTime)).toBeGreaterThan(0);
+    expect(process.env.PLAYWRIGHT_PLAYABLE_FIXTURE,'Codec validation requires a generated playable fixture').toBeTruthy();
+    const cdp=await context.newCDPSession(page);
+    try{
+      await cdp.send('Network.enable');
+      await cdp.send('Network.emulateNetworkConditions',{offline:false,latency:150,downloadThroughput:200000,uploadThroughput:75000});
+      await page.locator('video').evaluate(v=>{v.muted=true;return v.play();});
+      await expect.poll(()=>page.locator('video').evaluate(v=>v.currentTime),{timeout:10000}).toBeGreaterThan(.2);
+      const decoded=await page.locator('video').evaluate(v=>{v.pause();return {width:v.videoWidth,height:v.videoHeight,position:v.currentTime,duration:v.duration};});
+      expect(decoded.width).toBe(64);expect(decoded.height).toBe(64);expect(decoded.duration).toBeGreaterThan(1);
+      console.log('Synthetic H.264 playback decoded under constrained Chromium network',JSON.stringify(decoded));
+    }finally{
+      await cdp.send('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});
+      await cdp.detach();
+    }
   }else{
     console.warn('Synthetic CI validates paid-media authorization, byte ranges, watermark and refund, NOT video codec decoding. Run a separate real Android/Chrome media acceptance.');
   }
   // Renewing an authorization must NOT remount the HTMLMediaElement or
   // reset its playback clock. The fixture's codec is verified separately.
-  await page.locator('video').evaluate(v=>{window.__beforeRenewVideo=v;});
+  const previousPosition=await page.locator('video').evaluate(v=>{window.__beforeRenewVideo=v;return v.currentTime;});
   await page.getByRole('button',{name:'Renew video access'}).click();
   await expect(page.getByRole('button',{name:'Renew video access'})).toBeVisible();
   expect(await page.locator('video').evaluate(v=>window.__beforeRenewVideo===v)).toBe(true);
+  if(process.env.PLAYWRIGHT_VALIDATE_CODEC==='1')expect(await page.locator('video').evaluate(v=>v.currentTime)).toBeGreaterThanOrEqual(previousPosition-.1);
   const watermark=page.getByTestId('playback-watermark');
   await expect(watermark).toBeVisible();await expect(watermark).toHaveText(/^WK-[a-f0-9]{12} · [a-f0-9]{8}$/);
   expect(await watermark.textContent()).not.toContain('@');

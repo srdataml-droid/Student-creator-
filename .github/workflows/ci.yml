@@ -158,13 +158,18 @@ jobs:
         run: |
           set -euo pipefail
           umask 077
+          # Generate a tiny real H.264 file from a synthetic color source, no student data.
+          export PLAYWRIGHT_PLAYABLE_FIXTURE="$RUNNER_TEMP/wk8-playable.mp4"
+          ffmpeg -hide_banner -loglevel error -y -f lavfi -i color=c=0x087b59:s=64x64:r=12:d=2 -c:v libx264 -profile:v baseline -level 3.0 -pix_fmt yuv420p -movflags +faststart -an -preset veryfast -crf 30 -map_metadata -1 "$PLAYWRIGHT_PLAYABLE_FIXTURE"
+          export PLAYWRIGHT_VALIDATE_CODEC=1
+          export PLAYWRIGHT_CHROMIUM_EXECUTABLE="$(command -v google-chrome || command -v google-chrome-stable)"
           export PAYMENT_FIXTURE_FILE="$RUNNER_TEMP/paid-browser-fixture.json"
           node scripts/seed-payment-browser-fixture.mjs "$PAYMENT_FIXTURE_FILE"
           export LOCAL_SQLITE_PATH="$(node -p 'JSON.parse(require("node:fs").readFileSync(process.env.PAYMENT_FIXTURE_FILE,"utf8")).path')"
           npm run build --prefix apps/web
           npm run start --prefix apps/web -- -p 3000 > "$RUNNER_TEMP/paid-browser.log" 2>&1 &
           server_pid=$!
-          trap 'kill "$server_pid" 2>/dev/null || true; rm -f "$PAYMENT_FIXTURE_FILE"' EXIT
+          trap 'kill "$server_pid" 2>/dev/null || true; rm -f "$PAYMENT_FIXTURE_FILE" "$PLAYWRIGHT_PLAYABLE_FIXTURE"' EXIT
           for i in $(seq 1 45); do
             if curl -fsS http://localhost:3000/api/local/health >/dev/null 2>&1; then break; fi
             if ! kill -0 "$server_pid" 2>/dev/null; then exit 1; fi
