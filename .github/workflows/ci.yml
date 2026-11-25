@@ -237,6 +237,8 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/tests/catalog_rpc_boundaries.sql
           psql -1 -v ON_ERROR_STOP=1 -f db/production/0013_creator_draft_price.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/creator_draft_price.sql
+          psql -1 -v ON_ERROR_STOP=1 -f db/production/0014_creator_workspace_edits.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/creator_workspace_edits.sql
           psql -1 -v ON_ERROR_STOP=1 -f db/production/0009_client_table_privileges.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/client_table_privileges.sql
           psql -1 -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-bookmarks.sql
