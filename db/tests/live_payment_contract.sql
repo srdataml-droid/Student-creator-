@@ -5,6 +5,13 @@ INSERT INTO public.departments(id,institution_id,slug,name) VALUES('f1930000-000
 INSERT INTO public.courses(id,institution_id,department_id,code,title) VALUES('f1940000-0000-4000-8000-000000000001','f1920000-0000-4000-8000-000000000001','f1930000-0000-4000-8000-000000000001','PAY19','Synthetic');
 INSERT INTO public.student_profiles(user_id,institution_id,display_name,verified_at) SELECT id,'f1920000-0000-4000-8000-000000000001','Synthetic',now() FROM auth.users WHERE id IN ('f1910000-0000-4000-8000-000000000001','f1910000-0000-4000-8000-000000000002');
 INSERT INTO public.content_items(id,creator_id,institution_id,course_id,title,rights_attested_at,creation_key,creation_hash,status,reviewer_id,review_reason,reviewed_at,published_at) VALUES('f1950000-0000-4000-8000-000000000001','f1910000-0000-4000-8000-000000000001','f1920000-0000-4000-8000-000000000001','f1940000-0000-4000-8000-000000000001','Synthetic payment lesson',now(),'fixture-paystack-19',repeat('a',64),'published','f1910000-0000-4000-8000-000000000003','Synthetic approval',now(),now());
+DO $$ DECLARE r jsonb; BEGIN
+ r:=public.reserve_mux_live_upload('f1910000-0000-4000-8000-000000000001','f1950000-0000-4000-8000-000000000001');
+ -- Already published content cannot acquire a new upload reservation.
+ IF r IS NOT NULL THEN RAISE EXCEPTION 'Published upload reservation accepted'; END IF;
+END $$;
+INSERT INTO public.mux_video_uploads(content_id,creator_id,state,upload_id,asset_id,playback_id) VALUES('f1950000-0000-4000-8000-000000000001','f1910000-0000-4000-8000-000000000001','ready','fixture_live_upload','fixture_live_asset','fixture_live_playback');
+INSERT INTO public.content_assets(content_id,private_object_key,mime_type,bytes,processing_status,scan_verdict) VALUES('f1950000-0000-4000-8000-000000000001','private/mux/fixture_live_asset','video/mp4',100,'ready','clean');
 INSERT INTO public.listings(content_id,creator_id,price_kobo) VALUES('f1950000-0000-4000-8000-000000000001','f1910000-0000-4000-8000-000000000001',20000);
 INSERT INTO auth.sessions(id,user_id,not_after) VALUES('f1960000-0000-4000-8000-000000000001','f1910000-0000-4000-8000-000000000002',now()+interval '1 hour');
 DO $$ BEGIN
@@ -40,7 +47,7 @@ BEGIN
  IF (SELECT count(*) FROM live_finance.journal WHERE order_id=oid)<>4 OR NOT EXISTS(SELECT 1 FROM live_finance.journal WHERE order_id=oid AND kind='provider_fee' AND debit_account='platform_pending' AND amount_kobo=100) THEN RAISE EXCEPTION 'Live accounting incorrect'; END IF;
  PERFORM set_config('request.jwt.claim.sub',b::text,true);
  PERFORM set_config('request.jwt.claims',jsonb_build_object('sub',b,'role','authenticated','session_id','f1960000-0000-4000-8000-000000000001')::text,true);
- IF NOT public.can_view_published_content(c) THEN RAISE EXCEPTION 'Paid viewing denied'; END IF;
+ IF NOT public.can_view_published_content(c) OR public.authorized_mux_live_playback(b,c) IS NULL THEN RAISE EXCEPTION 'Paid viewing denied'; END IF;
  IF public.enqueue_live_reversal_event('refund.processed','7',repeat('c',64))<>'accepted' OR public.enqueue_live_reversal_event('refund.processed','7',repeat('c',64))<>'duplicate' THEN RAISE EXCEPTION 'Reversal intake replay'; END IF;
  e:=public.claim_live_reversal_event();
  IF public.claim_live_reversal_event() IS NOT NULL OR public.apply_live_refund_event('7',gen_random_uuid(),'tx_fixture',20000) OR public.apply_live_refund_event('7',(e->>'lease')::uuid,'tx_fixture',100) THEN RAISE EXCEPTION 'Invalid reversal lease or amount'; END IF;
@@ -48,7 +55,7 @@ BEGIN
  IF public.enqueue_live_reversal_event('refund.processed',ref||':'||repeat('d',64),repeat('d',64))<>'accepted' THEN RAISE EXCEPTION 'Reference-only refund not enqueued'; END IF;
  e:=public.claim_live_reversal_event();
  IF NOT public.apply_live_refund_event(ref||':'||repeat('d',64),(e->>'lease')::uuid,'tx_fixture',20000) THEN RAISE EXCEPTION 'Reference refund replay failed'; END IF;
- IF public.can_view_published_content(c) OR (SELECT state FROM public.entitlements WHERE order_id=oid)<>'revoked' THEN RAISE EXCEPTION 'Refund did not revoke access'; END IF;
+ IF public.can_view_published_content(c) OR public.authorized_mux_live_playback(b,c) IS NOT NULL OR (SELECT state FROM public.entitlements WHERE order_id=oid)<>'revoked' THEN RAISE EXCEPTION 'Refund did not revoke access'; END IF;
  IF (SELECT count(*) FROM live_finance.journal WHERE order_id=oid)<>7 THEN RAISE EXCEPTION 'Reversal accounting missing'; END IF;
  IF (public.live_apply_charge(ref,'tx_fixture',20000,'NGN','live','buyer@example.invalid',100)->>'replayed') IS DISTINCT FROM 'true' THEN RAISE EXCEPTION 'Receipt replay failed'; END IF;
  IF public.can_view_published_content(c) THEN RAISE EXCEPTION 'Replay restored revoked access'; END IF;
