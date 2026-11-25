@@ -30,8 +30,15 @@ jobs:
       - name: Install from committed lockfile
         working-directory: apps/web
         run: npm ci --no-audit --no-fund
-      - name: Build Next.js app without production credentials
+      - name: Build Next.js with synthetic server-only credential canaries
         working-directory: apps/web
+        env:
+          APP_DATA_MODE: local
+          SUPABASE_SECRET_KEY: synthetic_ci_supabase_secret_canary_20261125
+          MUX_PLAYBACK_PRIVATE_KEY_BASE64: synthetic_ci_mux_secret_canary_20261125
+          LIVEKIT_API_SECRET: synthetic_ci_livekit_secret_canary_20261125
+          RESEND_API_KEY: synthetic_ci_resend_secret_canary_20261125
+          PAYSTACK_TEST_SECRET_KEY: synthetic_ci_paystack_secret_canary_20261125
         run: npm run build
 
   database-contract:
