@@ -201,6 +201,11 @@ jobs:
           psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-identity-review.sql
           psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-identity-review.test.sql
 
+      - name: Verify privacy request isolation and review-only decisions
+        run: |
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-privacy-requests.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-privacy-requests.test.sql
+
       - name: Restore disposable PostgreSQL backup into isolated database
         env:
           PG_CONTAINER: ${{ job.services.postgres.id }}

@@ -46,6 +46,8 @@ async function readCommandBody(request){
  return body&&typeof body==='object'&&!Array.isArray(body)?body:null;
 }
 function commandFor(path){
+ if(path==='privacy/requests')return {name:'week7_privacy_queue',scope:'privacy.review',allowed:['limit']};
+ if(/^privacy\/requests\/[0-9a-f-]{36}\/review$/i.test(path))return {name:'week7_review_privacy_request',scope:'privacy.review',allowed:['decision','note']};
  if(path==='identity/queue'||path==='identity/revalidation')return {name:path==='identity/queue'?'week7_identity_queue':'week7_identity_revalidation_queue',scope:'verification.review',allowed:['limit']};
  if(path==='identity/appeals')return {name:'week7_institution_appeal_queue',scope:'verification.review',allowed:['limit']};
  if(/^identity\/appeals\/[0-9a-f-]{36}\/review$/i.test(path))return {name:'week7_review_institution_appeal',scope:'verification.review',allowed:['decision','note']};
@@ -66,6 +68,9 @@ function validateCommand(cmd,body,path,actorId){
  if(Object.keys(body).some(key=>!cmd.allowed.includes(key)))return null;
  const id=path.split('/')[1];
  switch(cmd.name){
+  case 'week7_review_privacy_request':
+   return UUID.test(path.split('/')[2])&&['under_review','approved_for_manual_fulfilment','declined'].includes(body.decision)&&hasText(body.note,10,500)?{_actor:actorId,_id:path.split('/')[2],_decision:body.decision,_note:body.note.trim()}:null;
+  case 'week7_privacy_queue':
   case 'week7_identity_queue':
   case 'week7_identity_revalidation_queue':
   case 'week7_institution_appeal_queue':
@@ -156,6 +161,7 @@ export function createHostedGovernanceHandler({getEnv=()=>process.env,fetcher=fe
      if(!res.ok){
        const detail=await res.json().catch(()=>({}));
        const safeCodes={
+         PRIVACY_REVIEW_CONFLICT:[409,'PRIVACY_REVIEW_CONFLICT'],
          APPEAL_ALREADY_REVIEWED:[409,'APPEAL_ALREADY_REVIEWED'],
          LEARNING_REVIEW_CONFLICT:[409,'LEARNING_REVIEW_CONFLICT'],
          GOVERNANCE_RATE_LIMIT:[429,'GOVERNANCE_RATE_LIMIT'],
