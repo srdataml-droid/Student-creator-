@@ -48,6 +48,8 @@ BEGIN
  PERFORM set_config('request.jwt.claim.sub',b::text,true);
  PERFORM set_config('request.jwt.claims',jsonb_build_object('sub',b,'role','authenticated','session_id','f1960000-0000-4000-8000-000000000001')::text,true);
  IF NOT public.can_view_published_content(c) OR public.authorized_mux_live_playback(b,c) IS NULL THEN RAISE EXCEPTION 'Paid viewing denied'; END IF;
+ IF (public.authorized_mux_live_playback(b,c)->>'entitlementExpiresAt')::bigint IS DISTINCT FROM (SELECT floor(extract(epoch FROM expires_at))::bigint FROM public.entitlements WHERE order_id=oid) THEN RAISE EXCEPTION 'Playback entitlement expiry missing or incorrect'; END IF;
+ IF NOT (public.authorized_mux_live_playback('f1910000-0000-4000-8000-000000000001',c) @> '{"entitlementExpiresAt":null}'::jsonb) THEN RAISE EXCEPTION 'Creator expiry contract incorrect'; END IF;
  IF public.enqueue_live_reversal_event('refund.processed','7',repeat('c',64))<>'accepted' OR public.enqueue_live_reversal_event('refund.processed','7',repeat('c',64))<>'duplicate' THEN RAISE EXCEPTION 'Reversal intake replay'; END IF;
  e:=public.claim_live_reversal_event();
  IF public.claim_live_reversal_event() IS NOT NULL OR public.apply_live_refund_event('7',gen_random_uuid(),'tx_fixture',20000) OR public.apply_live_refund_event('7',(e->>'lease')::uuid,'tx_fixture',100) THEN RAISE EXCEPTION 'Invalid reversal lease or amount'; END IF;

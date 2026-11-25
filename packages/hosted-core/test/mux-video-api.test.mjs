@@ -65,3 +65,18 @@ test('live Mux upload never creates test assets and rejects test asset playback'
  assert.equal((await reconcileMuxUpload({mux:{testAsset:false,getAsset:async()=>asset},store,row,upload:finished})).state,'unsafe');
  await assert.rejects(reconcileMuxUpload({mux:{testAsset:false},store,row,upload}));
 });
+
+test('live playback fails closed on missing expiry and caps to fresh entitlement after provider check',async()=>{
+ const {privateKey}=generateKeyPairSync('rsa',{modulusLength:2048});
+ const lesson={id:lessonId,viewerId:creator,status:'published',videoStatus:'ready',playbackPolicy:'signed',assetId,playbackId,reservationId:reservation,uploadId};
+ let current=lesson;
+ const deps={auth:{getUser:async()=>({id:creator})},store:{authorizedPlayback:async()=>current},mux:{testAsset:false,getAsset:async()=>({...asset,test:false})},signingKeyId:'key_fixture',privateKeyBase64:Buffer.from(privateKey.export({type:'pkcs8',format:'pem'})).toString('base64')};
+ const handler=createMuxPlaybackHandler(deps);
+ assert.equal((await handler(req('GET'),{lessonId})).status,403);
+ current={...lesson,entitlementExpiresAt:Math.floor(Date.now()/1000)-1};
+ assert.equal((await handler(req('GET'),{lessonId})).status,403);
+ const expiry=Math.floor(Date.now()/1000)+30;
+ current={...lesson,entitlementExpiresAt:expiry};
+ const granted=await handler(req('GET'),{lessonId});assert.equal(granted.status,200);assert.equal((await granted.json()).expiresAt,expiry);
+ current={...lesson,entitlementExpiresAt:null};assert.equal((await handler(req('GET'),{lessonId})).status,200);
+});

@@ -56,3 +56,15 @@ test('rejects unsigned keys, weak keys and invalid lifetime',async()=>{
  for(const ttlSeconds of [1,59,901,1.5])
   await assert.rejects(issueAuthorizedMuxPlayback({...permitted,ttlSeconds}),err('INVALID_PLAYBACK_LIFETIME'));
 });
+
+test('caps signed expiry to entitlement, even below normal minimum TTL',async()=>{
+ const expiry=permitted.nowSeconds+15;
+ const result=await issueAuthorizedMuxPlayback({...permitted,loadLesson:async()=>({...lesson,entitlementExpiresAt:expiry})});
+ assert.equal(result.expiresAt,expiry);
+ const token=new URL(result.url).searchParams.get('token');
+ assert.equal(JSON.parse(Buffer.from(token.split('.')[1],'base64url')).exp,expiry);
+ for(const value of [permitted.nowSeconds,permitted.nowSeconds-1,'1800000015',NaN,1.5])
+  await assert.rejects(issueAuthorizedMuxPlayback({...permitted,loadLesson:async()=>({...lesson,entitlementExpiresAt:value})}),err('PLAYBACK_FORBIDDEN'));
+ const free=await issueAuthorizedMuxPlayback({...permitted,loadLesson:async()=>({...lesson,entitlementExpiresAt:null})});
+ assert.equal(free.expiresAt,permitted.nowSeconds+permitted.ttlSeconds);
+});

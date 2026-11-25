@@ -116,6 +116,8 @@ export function createMuxPlaybackHandler({auth,store,mux,signingKeyId,privateKey
    if(again?.id!==user.id)return json(401,{error:'AUTH_REQUIRED'});
    const fresh=await store.authorizedPlayback({viewer:user.id,lessonId});
    if(!fresh||['id','viewerId','assetId','uploadId','reservationId','playbackId','status','videoStatus','playbackPolicy'].some(k=>fresh[k]!==lesson[k]))return json(403,{error:'PLAYBACK_FORBIDDEN'});
+   // Live grants require the migrated DB contract. Null means owner/free access.
+   if(mux.testAsset===false&&(!Object.hasOwn(fresh,'entitlementExpiresAt')||(fresh.entitlementExpiresAt!==null&&(!Number.isSafeInteger(fresh.entitlementExpiresAt)||fresh.entitlementExpiresAt<=Math.floor(Date.now()/1000)))))return json(403,{error:'PLAYBACK_FORBIDDEN'});
    const grant=await issueAuthorizedMuxPlayback({viewer:user,lessonId,loadLesson:async()=>fresh,
     authorizeViewer:async({viewer})=>viewer.id===fresh.viewerId,signingKeyId,privateKeyBase64,ttlSeconds:120});
    return json(200,grant);
