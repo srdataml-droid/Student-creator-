@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto';
 import {createCurrentSupabaseAuth} from './supabase-current-auth.mjs';
-import {readSupabaseRuntimeConfig,supabaseServerHeaders} from '../../content-core/src/supabase-runtime-config.mjs';
+import {readDedicatedSupabaseRuntimeConfig,supabaseServerHeaders} from '../../content-core/src/supabase-runtime-config.mjs';
 
 const REF='jnkqmlbkkvccnxrgkpno', BUCKET='student-creators-private-identity';
 export const IDENTITY_MAX_BYTES=4194304;
@@ -130,7 +130,7 @@ export function buildIdentityEvidenceRoute({getEnv=()=>process.env,fetcher=fetch
     env.STUDENT_CREATORS_REAL_PAYMENT_ENABLED!=='false'||env.STUDENT_CREATORS_PRIVATE_IDENTITY_BUCKET!==BUCKET||
     env.STUDENT_CREATORS_IDENTITY_DATA_POLICY_APPROVED!=='true'||env.STUDENT_CREATORS_PRIVATE_IDENTITY_UPLOAD_ENABLED!=='true')
     throw unavailable();
-   const config=readSupabaseRuntimeConfig(env,{server:true});
+   const config=readDedicatedSupabaseRuntimeConfig(env,{server:true});
    if(!config||config.url!=='https://'+REF+'.supabase.co')throw unavailable();
    const auth=createCurrentSupabaseAuth({url:config.url,publicKey:config.publishableKey,serverKey:config.serverKey,fetcher});
    const provider=createPrivateIdentityProvider({url:config.url,serverKey:config.serverKey,fetcher});

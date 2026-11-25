@@ -1,6 +1,6 @@
 import {createHash} from 'node:crypto';
 import {verifyMuxWebhookEnvelope} from './mux-webhook-verify.mjs';
-import {readSupabaseRuntimeConfig,supabaseServerHeaders} from '../../content-core/src/supabase-runtime-config.mjs';
+import {readDedicatedSupabaseRuntimeConfig,supabaseServerHeaders} from '../../content-core/src/supabase-runtime-config.mjs';
 
 const MAX_BYTES=262144;
 const fail=(code,status)=>Object.assign(new Error(code),{status,code});
@@ -61,7 +61,7 @@ export function buildMuxWebhookRoute({getEnv=()=>process.env,fetcher=fetch}={}){
       env.STUDENT_CREATORS_PUBLIC_REGISTRATION!=='false'||
       env.STUDENT_CREATORS_REAL_PAYMENT_ENABLED!=='false'||
       env.STUDENT_CREATORS_MUX_WEBHOOK_ENABLED!=='true')return json(503,'MUX_WEBHOOK_UNAVAILABLE');
-   const config=readSupabaseRuntimeConfig(env,{server:true});
+   const config=readDedicatedSupabaseRuntimeConfig(env,{server:true});
    if(!config||config.url!=='https://jnkqmlbkkvccnxrgkpno.supabase.co')return json(503,'MUX_WEBHOOK_UNAVAILABLE');
    const record=async event=>{
     const response=await fetcher(new URL('/rest/v1/rpc/record_verified_mux_delivery',config.url),{

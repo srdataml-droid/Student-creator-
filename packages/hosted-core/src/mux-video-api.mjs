@@ -1,6 +1,6 @@
 import {createCurrentSupabaseAuth} from './supabase-current-auth.mjs';
 import {issueAuthorizedMuxPlayback} from './mux-playback.mjs';
-import {readSupabaseRuntimeConfig,supabaseServerHeaders} from '../../content-core/src/supabase-runtime-config.mjs';
+import {readDedicatedSupabaseRuntimeConfig,supabaseServerHeaders} from '../../content-core/src/supabase-runtime-config.mjs';
 import {readBoundedGatewayResponse} from '../../payment-core/src/bounded-response.mjs';
 const REF='jnkqmlbkkvccnxrgkpno';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -135,7 +135,7 @@ export function buildMuxVideoRoute({getEnv=()=>process.env,fetcher=fetch,playbac
    if(env.APP_DATA_MODE!=='hosted'||env.STUDENT_CREATORS_STAGING_APPROVED!=='true'||env.STUDENT_CREATORS_PROJECT_REF!==REF||
     env.STUDENT_CREATORS_PUBLIC_REGISTRATION!=='false'||env.STUDENT_CREATORS_REAL_PAYMENT_ENABLED!=='false'||
     env.STUDENT_CREATORS_MUX_TEST_VIDEO_ENABLED!=='true')throw unavailable();
-   const cfg=readSupabaseRuntimeConfig(env,{server:true});
+   const cfg=readDedicatedSupabaseRuntimeConfig(env,{server:true});
    if(!cfg||cfg.url!=='https://'+REF+'.supabase.co')throw unavailable();
    const origin=env.STUDENT_CREATORS_MUX_UPLOAD_ORIGIN;
    const mux=createMuxTestClient({tokenId:alias(env,['MUX_TOKEN_ID','mux_token_id']),

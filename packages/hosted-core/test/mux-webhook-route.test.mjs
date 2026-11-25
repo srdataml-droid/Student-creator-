@@ -31,7 +31,7 @@ test('duplicates acknowledged, collisions rejected, transient DB errors retryabl
 });
 const env={APP_DATA_MODE:'hosted',STUDENT_CREATORS_STAGING_APPROVED:'true',STUDENT_CREATORS_PROJECT_REF:'jnkqmlbkkvccnxrgkpno',
  STUDENT_CREATORS_PUBLIC_REGISTRATION:'false',STUDENT_CREATORS_REAL_PAYMENT_ENABLED:'false',STUDENT_CREATORS_MUX_WEBHOOK_ENABLED:'true',
- supabase_url:'https://jnkqmlbkkvccnxrgkpno.supabase.co',supabase_publishable_key:'public',supabase_secret_key:'sb_secret_test_fixture',
+ supabase_url:'https://jnkqmlbkkvccnxrgkpno.supabase.co',supabase_publishable_key:'sb_publishable_fixture_public',supabase_secret_key:'sb_secret_fixture_server',
  MUX_WEBHOOK_SIGNING_SECRET:secret};
 test('route requires explicit dedicated staging gates and independently named signing secret',async()=>{
  let calls=0;for(const e of [{},{...env,STUDENT_CREATORS_MUX_WEBHOOK_ENABLED:'false'},{...env,supabase_url:'https://other.supabase.co'},

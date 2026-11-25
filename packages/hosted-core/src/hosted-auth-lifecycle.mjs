@@ -1,5 +1,5 @@
 import {createHmac,timingSafeEqual} from 'node:crypto';
-import {readSupabaseRuntimeConfig,supabaseServerHeaders} from '../../content-core/src/supabase-runtime-config.mjs';
+import {readDedicatedSupabaseRuntimeConfig,supabaseServerHeaders} from '../../content-core/src/supabase-runtime-config.mjs';
 import {readBoundedGatewayResponse} from '../../payment-core/src/bounded-response.mjs';
 import {createCurrentSupabaseAuth} from './supabase-current-auth.mjs';
 const REF='jnkqmlbkkvccnxrgkpno',COOKIE='__Secure-wk_refresh';
@@ -149,7 +149,7 @@ export function hostedAuthDependencies(env,fetcher=fetch){
  env.STUDENT_CREATORS_PUBLIC_REGISTRATION!=='false'||env.STUDENT_CREATORS_REAL_PAYMENT_ENABLED!=='false'||
  env.STUDENT_CREATORS_HOSTED_AUTH_ENABLED!=='true'||env.STUDENT_CREATORS_SUPABASE_SIGNUPS_DISABLED_CONFIRMED!=='true'||
  env.STUDENT_CREATORS_AUTH_EMAIL_ENABLED!=='true'||env.STUDENT_CREATORS_PILOT_SEATS!=='1')throw unavailable();
- const cfg=readSupabaseRuntimeConfig(env,{server:true});
+ const cfg=readDedicatedSupabaseRuntimeConfig(env,{server:true});
  if(!cfg||cfg.url!=='https://'+REF+'.supabase.co')throw unavailable();
  const origin=env.STUDENT_CREATORS_AUTH_ORIGIN,o=new URL(origin);
  const pilotEmail=normalized(env.STUDENT_CREATORS_PILOT_EMAIL),adminEmail=normalized(env.STUDENT_CREATORS_STAGING_ADMIN_EMAIL);
