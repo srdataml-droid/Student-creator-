@@ -74,6 +74,7 @@ export function hostedCreatorRequest(operation,input={}){
  case 'mediaSourceStatus':return {path:'/api/lessons/'+id(input.lessonId)+'/media-source',method:'GET',headers:{}};
  case 'mediaSourceReserve':{if(!['video/mp4','video/webm'].includes(input.mime)||!Number.isSafeInteger(input.bytes)||input.bytes<12||input.bytes>104857600||! /^[a-f0-9]{64}$/.test(input.digest))throw Error('INVALID_MEDIA');return json('/api/lessons/'+id(input.lessonId)+'/media-source',{action:'reserve',mime:input.mime,bytes:input.bytes,digest:input.digest});}
  case 'mediaSourceComplete':return json('/api/lessons/'+id(input.lessonId)+'/media-source',{action:'complete',id:id(input.sourceId)});
+ case 'accountState':return {path:'/api/account/state',method:'GET',headers:{}};
  default:throw Error('UNKNOWN_CREATOR_OPERATION');
  }
 }
