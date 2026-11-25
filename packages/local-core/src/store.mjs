@@ -1137,6 +1137,7 @@ export function openLocalStore(path,{pilotStudentCap=null,pilotAllowedEmail=null
     dueAffiliationRevalidations:affiliations.due,
     submitVerificationAppeal:affiliations.appeal,
     myVerificationAppeals:affiliations.appeals,
+    verificationAppealQueue:affiliations.appealQueue,
     reviewVerificationAppeal:affiliations.reviewAppeal,
     setLessonPrice:commerce.setPrice,
     createPurchaseOrder:commerce.createOrder,
