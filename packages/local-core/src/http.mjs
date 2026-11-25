@@ -499,6 +499,10 @@ export function createLocalHandler(store,{sandboxGateway,payments=null,emailDeli
         if(Object.keys(body).length)return fail('UNEXPECTED_BODY',400);
         return responses({notification:store.markNoticeSeen(actor,segments[1])});
       }
+      if(segments.length===4&&segments[0]==='admin'&&segments[1]==='learning-requests'&&segments[3]==='finalize-dispute'){
+        if(Object.keys(body).some(k=>!['outcome','reason'].includes(k)))return fail('UNEXPECTED_BODY',400);
+        return responses({decision:store.finalizeHelpDispute(actor,segments[2],body)});
+      }
       if(segments.length===4&&segments[0]==='admin'&&segments[1]==='learning-disputes'&&segments[3]==='resolve'){
         if(Object.keys(body).some(k=>k!=='resolution'))return fail('UNEXPECTED_BODY',400);
         return responses({dispute:store.resolveHelpDispute(actor,segments[2],body)});
