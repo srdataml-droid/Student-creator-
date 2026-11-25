@@ -13,7 +13,7 @@ import {readDedicatedSupabaseRuntimeConfig,supabaseServerHeaders} from '../../co
 import {createCurrentSupabaseAuth} from './supabase-current-auth.mjs';
 import {readBoundedGatewayResponse} from '../../payment-core/src/bounded-response.mjs';
 const GOVERNANCE_ROLES=Object.freeze({"governance_owner":["staff.assign","dashboard.read","audit.read","verification.review","content.moderate","community.moderate","copyright.review","privacy.review","finance.review","incident.read","incident.write","retention.propose","retention.review"],"verification_reviewer":["dashboard.read","verification.review"],"content_moderator":["dashboard.read","content.moderate","community.moderate","copyright.review"],"privacy_reviewer":["dashboard.read","privacy.review","retention.propose"],"finance_reviewer":["dashboard.read","finance.review"],"incident_responder":["dashboard.read","incident.read","incident.write"],"auditor":["dashboard.read","audit.read","incident.read"]});
-const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const BEARER=/^Bearer ([A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+)$/;
 const HEADERS={'cache-control':'no-store','referrer-policy':'no-referrer','x-content-type-options':'nosniff'};
 const respond=(status,data)=>Response.json(data,{status,headers:HEADERS});
