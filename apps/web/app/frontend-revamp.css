@@ -435,3 +435,7 @@
 .account-form-wrap .form-stack button{margin-top:12px;width:100%}
 .account-form-wrap a:not(.primary-link){color:var(--brand-strong);font-weight:600}
 @media(max-width:760px){.account-form-wrap{margin:0 auto;padding:16px 0 30px}}
+
+/* Studio price input preserves literal digits; no scientific notation or implicit free price. */
+.creator-body .studio-grid input[inputmode=numeric]{width:100%;max-width:180px;min-height:44px;padding:8px 11px;border:1px solid var(--line);border-radius:8px}
+.creator-body .studio-grid .media-form .quiet-button{margin:5px 0 5px 8px}
