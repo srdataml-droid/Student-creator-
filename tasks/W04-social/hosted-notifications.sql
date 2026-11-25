@@ -22,7 +22,7 @@ GRANT SELECT,INSERT,UPDATE,DELETE ON public.social_notification_preferences,publ
 CREATE POLICY own_notification_preferences ON public.social_notification_preferences FOR SELECT TO authenticated USING(user_id=(SELECT auth.uid()) AND public.current_student_eligible());
 CREATE FUNCTION student_social_private.notification_visible(_id uuid)
 RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path='' AS $$
- SELECT public.current_student_eligible() AND EXISTS(
+ SELECT student_social_private.active_session() AND public.current_student_eligible() AND EXISTS(
  SELECT 1 FROM public.social_notifications n WHERE n.id=_id AND n.recipient_id=auth.uid()
  AND CASE n.kind
  WHEN 'community_reply' THEN student_social_private.visible_post(n.event_id,n.target_id)
@@ -86,7 +86,7 @@ CREATE FUNCTION student_social_private.notification_action(_action text,_input j
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE actor uuid:=auth.uid(); item uuid; changed integer; result jsonb;
 BEGIN
- IF actor IS NULL OR NOT public.affiliation_eligible(actor) THEN RAISE EXCEPTION 'STUDENT_REQUIRED' USING ERRCODE='42501'; END IF;
+ IF NOT student_social_private.active_session() OR NOT public.affiliation_eligible(actor) THEN RAISE EXCEPTION 'STUDENT_REQUIRED' USING ERRCODE='42501'; END IF;
  IF _input IS NULL OR jsonb_typeof(_input)<>'object' THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='22023'; END IF;
  IF _action='preferences' THEN
    IF _input<>'{}'::jsonb THEN

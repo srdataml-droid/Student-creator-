@@ -4,7 +4,7 @@ CREATE FUNCTION public.social_thread_page(_peer uuid,_before uuid DEFAULT NULL,_
 RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
 DECLARE actor uuid:=auth.uid(); cursor_at timestamptz; result jsonb;
 BEGIN
- IF actor IS NULL OR NOT public.current_student_eligible() THEN RAISE EXCEPTION 'STUDENT_REQUIRED' USING ERRCODE='42501'; END IF;
+ IF NOT student_social_private.active_session() OR NOT public.current_student_eligible() THEN RAISE EXCEPTION 'STUDENT_REQUIRED' USING ERRCODE='42501'; END IF;
  IF _peer IS NULL OR _peer=actor OR _limit IS NULL OR _limit NOT BETWEEN 1 AND 100 THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='22023'; END IF;
  IF _before IS NOT NULL THEN
   SELECT created_at INTO cursor_at FROM public.social_messages WHERE id=_before AND ((sender_id=actor AND recipient_id=_peer) OR (sender_id=_peer AND recipient_id=actor));
@@ -25,7 +25,7 @@ CREATE FUNCTION public.social_inbox_page(_before uuid DEFAULT NULL,_limit intege
 RETURNS jsonb LANGUAGE plpgsql SECURITY INVOKER SET search_path='' AS $$
 DECLARE actor uuid:=auth.uid(); cursor_at timestamptz; result jsonb;
 BEGIN
- IF actor IS NULL OR NOT public.current_student_eligible() THEN RAISE EXCEPTION 'STUDENT_REQUIRED' USING ERRCODE='42501'; END IF;
+ IF NOT student_social_private.active_session() OR NOT public.current_student_eligible() THEN RAISE EXCEPTION 'STUDENT_REQUIRED' USING ERRCODE='42501'; END IF;
  IF _limit IS NULL OR _limit NOT BETWEEN 1 AND 50 THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='22023'; END IF;
  IF _before IS NOT NULL THEN
   SELECT max(created_at) INTO cursor_at FROM public.social_messages WHERE (sender_id=actor AND recipient_id=_before) OR (sender_id=_before AND recipient_id=actor);

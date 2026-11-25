@@ -16,7 +16,7 @@ CREATE POLICY own_social_follows ON public.social_creator_follows FOR SELECT TO 
 
 CREATE FUNCTION student_social_private.preview_allowed(_creator uuid)
 RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path='' AS $$
- SELECT auth.uid() IS NOT NULL AND public.affiliation_eligible(_creator)
+ SELECT student_social_private.active_session() AND public.affiliation_eligible(_creator)
  AND NOT EXISTS(SELECT 1 FROM public.creator_restrictions WHERE creator_id=_creator AND viewer_id=auth.uid() AND deny_view);
 $$;
 REVOKE ALL ON FUNCTION student_social_private.preview_allowed(uuid) FROM PUBLIC,anon,authenticated;
@@ -32,7 +32,7 @@ CREATE FUNCTION student_social_private.follow_action(_creator uuid,_enabled bool
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE actor uuid:=auth.uid(); changed integer;
 BEGIN
- IF actor IS NULL OR NOT public.affiliation_eligible(actor) THEN RAISE EXCEPTION 'STUDENT_REQUIRED' USING ERRCODE='42501'; END IF;
+ IF NOT student_social_private.active_session() OR NOT public.affiliation_eligible(actor) THEN RAISE EXCEPTION 'STUDENT_REQUIRED' USING ERRCODE='42501'; END IF;
  IF _creator IS NULL OR _creator=actor OR _enabled IS NULL THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='22023'; END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended('student-social-follow:'||actor::text,0));
  IF NOT _enabled THEN
@@ -63,7 +63,7 @@ CREATE FUNCTION student_social_private.discover(_mode text,_q text,_institution 
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE actor uuid:=auth.uid(); school uuid; result jsonb; term text;
 BEGIN
- IF actor IS NULL OR NOT public.affiliation_eligible(actor) THEN RAISE EXCEPTION 'STUDENT_REQUIRED' USING ERRCODE='42501'; END IF;
+ IF NOT student_social_private.active_session() OR NOT public.affiliation_eligible(actor) THEN RAISE EXCEPTION 'STUDENT_REQUIRED' USING ERRCODE='42501'; END IF;
  IF _mode IS NULL OR _mode NOT IN ('all','following','creators') OR _limit IS NULL OR _limit NOT BETWEEN 1 AND 100 OR _q IS NULL
  OR length(btrim(_q))>80 OR length(btrim(_q))=1 THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='22023'; END IF;
  SELECT institution_id INTO school FROM public.student_profiles WHERE user_id=actor;

@@ -17,7 +17,7 @@ CREATE FUNCTION student_social_private.set_restriction(_viewer uuid,_view boolea
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE actor uuid:=auth.uid(); old_view boolean:=false; old_comment boolean:=false; old_message boolean:=false; previous public.creator_restrictions%ROWTYPE;
 BEGIN
- IF actor IS NULL OR NOT public.affiliation_eligible(actor) THEN RAISE EXCEPTION 'STUDENT_REQUIRED' USING ERRCODE='42501'; END IF;
+ IF NOT student_social_private.active_session() OR NOT public.affiliation_eligible(actor) THEN RAISE EXCEPTION 'STUDENT_REQUIRED' USING ERRCODE='42501'; END IF;
  IF _viewer IS NULL OR _viewer=actor OR _view IS NULL OR _comment IS NULL OR _message IS NULL
  OR NOT EXISTS(SELECT 1 FROM public.student_profiles WHERE user_id=_viewer) THEN RAISE EXCEPTION 'INVALID_VIEWER' USING ERRCODE='22023'; END IF;
  PERFORM pg_advisory_xact_lock(hashtextextended('student-social-restriction:'||actor::text,0));

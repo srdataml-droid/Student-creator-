@@ -8,7 +8,7 @@ CREATE INDEX social_comment_parent ON public.content_comments(parent_id);
 CREATE INDEX social_comment_author_quota ON public.content_comments(author_id,created_at DESC);
 CREATE FUNCTION student_social_private.comment_visible(_id uuid,_content uuid)
 RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path='' AS $$
- SELECT public.can_view_published_content(_content) AND EXISTS(
+ SELECT student_social_private.active_session() AND public.can_view_published_content(_content) AND EXISTS(
  SELECT 1 FROM public.content_comments c WHERE c.id=_id AND c.content_id=_content AND c.hidden_at IS NULL AND public.affiliation_eligible(c.author_id)
  AND (c.parent_id IS NULL OR EXISTS(SELECT 1 FROM public.content_comments p WHERE p.id=c.parent_id AND p.content_id=_content AND p.hidden_at IS NULL AND public.affiliation_eligible(p.author_id)))
  );
@@ -24,7 +24,7 @@ CREATE FUNCTION student_social_private.comment_action(_action text,_content uuid
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE actor uuid:=auth.uid(); creator uuid; item uuid; parent uuid; message text; key text; reason text; previous public.content_comments%ROWTYPE; changed integer;
 BEGIN
- IF actor IS NULL OR NOT public.affiliation_eligible(actor) THEN RAISE EXCEPTION 'STUDENT_REQUIRED' USING ERRCODE='42501'; END IF;
+ IF NOT student_social_private.active_session() OR NOT public.affiliation_eligible(actor) THEN RAISE EXCEPTION 'STUDENT_REQUIRED' USING ERRCODE='42501'; END IF;
  IF _content IS NULL OR _input IS NULL OR jsonb_typeof(_input)<>'object' THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='22023'; END IF;
  -- One content lock serializes social comment writes with owner removal.
  PERFORM pg_advisory_xact_lock(hashtextextended('student-social-comment-content:'||_content::text,0));

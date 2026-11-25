@@ -24,7 +24,7 @@ CREATE FUNCTION student_social_private.abuse_report(_kind text,_target uuid,_cat
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE actor uuid:=auth.uid(); subject uuid; message uuid; item uuid;
 BEGIN
- IF actor IS NULL OR NOT public.affiliation_eligible(actor) THEN RAISE EXCEPTION 'STUDENT_REQUIRED' USING ERRCODE='42501'; END IF;
+ IF NOT student_social_private.active_session() OR NOT public.affiliation_eligible(actor) THEN RAISE EXCEPTION 'STUDENT_REQUIRED' USING ERRCODE='42501'; END IF;
  IF _kind IS NULL OR _kind NOT IN('message','account') OR _target IS NULL OR _category IS NULL OR _category NOT IN('harassment','impersonation','spam','other')
  OR _reason IS NULL OR length(btrim(_reason)) NOT BETWEEN 10 AND 1000 THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='22023'; END IF;
  IF _kind='message' THEN
@@ -53,7 +53,7 @@ CREATE FUNCTION student_social_private.report_queue(_kind text,_limit integer)
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE actor uuid:=auth.uid(); result jsonb;
 BEGIN
- IF actor IS NULL OR NOT EXISTS(SELECT 1 FROM public.platform_staff WHERE user_id=actor AND role='admin' AND active) THEN RAISE EXCEPTION 'ADMIN_REQUIRED' USING ERRCODE='42501'; END IF;
+ IF NOT student_social_private.active_session() OR NOT EXISTS(SELECT 1 FROM public.platform_staff WHERE user_id=actor AND role='admin' AND active) THEN RAISE EXCEPTION 'ADMIN_REQUIRED' USING ERRCODE='42501'; END IF;
  IF _kind IS NULL OR _kind NOT IN('message','account','comment','community') OR _limit IS NULL OR _limit NOT BETWEEN 1 AND 100 THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='22023'; END IF;
  IF _kind IN('message','account') THEN
    SELECT coalesce(jsonb_agg(to_jsonb(q) ORDER BY q."createdAt",q.id),'[]'::jsonb) INTO result FROM (
@@ -83,7 +83,7 @@ CREATE FUNCTION student_social_private.review_report(_kind text,_id uuid,_decisi
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE actor uuid:=auth.uid(); item uuid; new_status text; changed integer;
 BEGIN
- IF actor IS NULL OR NOT EXISTS(SELECT 1 FROM public.platform_staff WHERE user_id=actor AND role='admin' AND active) THEN RAISE EXCEPTION 'ADMIN_REQUIRED' USING ERRCODE='42501'; END IF;
+ IF NOT student_social_private.active_session() OR NOT EXISTS(SELECT 1 FROM public.platform_staff WHERE user_id=actor AND role='admin' AND active) THEN RAISE EXCEPTION 'ADMIN_REQUIRED' USING ERRCODE='42501'; END IF;
  IF _kind IS NULL OR _kind NOT IN('message','account','comment','community') OR _id IS NULL OR _reason IS NULL OR length(btrim(_reason)) NOT BETWEEN 5 AND 1000
  OR _decision IS NULL OR (_kind IN('message','account') AND _decision<>'review') OR (_kind IN('comment','community') AND _decision NOT IN('hide','dismiss'))
  THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='22023'; END IF;

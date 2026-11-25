@@ -44,7 +44,7 @@ GRANT SELECT ON public.social_community_members,public.social_community_moderato
 GRANT SELECT(id,course_id,author_id,topic_id,parent_id,body,created_at) ON public.social_community_posts TO authenticated;
 GRANT SELECT,INSERT,UPDATE,DELETE ON public.social_community_members,public.social_community_moderators,public.social_community_posts,public.social_community_reports TO service_role;
 CREATE FUNCTION student_social_private.joined_course(_course uuid) RETURNS boolean LANGUAGE sql STABLE SECURITY DEFINER SET search_path='' AS $$
- SELECT public.current_student_eligible() AND EXISTS(
+ SELECT student_social_private.active_session() AND public.current_student_eligible() AND EXISTS(
  SELECT 1 FROM public.social_community_members m JOIN public.courses c ON c.id=m.course_id
  WHERE m.user_id=auth.uid() AND m.course_id=_course AND c.active
  );
@@ -65,7 +65,7 @@ CREATE FUNCTION student_social_private.community_action(_action text,_course uui
 RETURNS jsonb LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 DECLARE actor uuid:=auth.uid(); school uuid; target uuid; post uuid; parent uuid; topic uuid; message text; key text; reason text; previous public.social_community_posts%ROWTYPE; changed integer; enabled boolean; staff boolean;
 BEGIN
- IF actor IS NULL THEN RAISE EXCEPTION 'AUTH_REQUIRED' USING ERRCODE='42501'; END IF;
+ IF NOT student_social_private.active_session() THEN RAISE EXCEPTION 'AUTH_REQUIRED' USING ERRCODE='42501'; END IF;
  IF _course IS NULL OR _input IS NULL OR jsonb_typeof(_input)<>'object' THEN RAISE EXCEPTION 'INVALID_INPUT' USING ERRCODE='22023'; END IF;
  SELECT c.institution_id INTO school FROM public.courses c WHERE c.id=_course AND c.active;
  IF school IS NULL THEN RAISE EXCEPTION 'COMMUNITY_UNAVAILABLE' USING ERRCODE='P0002'; END IF;
