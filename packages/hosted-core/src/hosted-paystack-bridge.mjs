@@ -2,7 +2,7 @@ import {createHash} from 'node:crypto';
 import {createCurrentSupabaseAuth} from './supabase-current-auth.mjs';
 import {createPaystackClient} from '../../payment-core/src/paystack-client.mjs';
 import {decodeVerifiedPaystackWebhookV1} from '../../payment-core/src/webhooks.mjs';
-import {readSupabaseRuntimeConfig,supabaseServerHeaders} from '../../content-core/src/supabase-runtime-config.mjs';
+import {readDedicatedSupabaseRuntimeConfig,supabaseServerHeaders} from '../../content-core/src/supabase-runtime-config.mjs';
 const REF='jnkqmlbkkvccnxrgkpno',UUID=/^[0-9a-f-]{36}$/i,REFERENCE=/^sc_[0-9a-f]{32}$/,TX=/^[A-Za-z0-9_-]{1,128}$/;
 const unavailable=()=>new Error('Hosted test payment unavailable');
 const json=(status,data)=>Response.json(data,{status,headers:{'cache-control':'no-store','referrer-policy':'no-referrer'}});
@@ -81,7 +81,7 @@ export function readPaystackSigningSecrets(env){
 }
 export function createHostedPaystackRuntime({env=process.env,fetcher=fetch}={}){
  if(env.APP_DATA_MODE!=='hosted'||env.STUDENT_CREATORS_PROJECT_REF!==REF||env.STUDENT_CREATORS_STAGING_APPROVED!=='true'||env.STUDENT_CREATORS_PUBLIC_REGISTRATION!=='false'||env.STUDENT_CREATORS_REAL_PAYMENT_ENABLED!=='false'||env.STUDENT_CREATORS_PAYSTACK_TEST_ENABLED!=='true'||env.STUDENT_CREATORS_DISTRIBUTION_CHANNEL!=='independent_web')throw unavailable();
- const cfg=readSupabaseRuntimeConfig(env,{server:true});
+ const cfg=readDedicatedSupabaseRuntimeConfig(env,{server:true});
  if(!cfg||cfg.url!=='https://'+REF+'.supabase.co')throw unavailable();
  const keys=['PAYSTACK_TEST_SECRET_KEY','paystack_secret_key'].map(k=>env[k]).filter(Boolean);
  if(!keys.length||keys.some(k=>k!==keys[0])||!/^sk_test_[A-Za-z0-9]+$/.test(keys[0]))throw unavailable();
