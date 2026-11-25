@@ -439,3 +439,6 @@
 /* Studio price input preserves literal digits; no scientific notation or implicit free price. */
 .creator-body .studio-grid input[inputmode=numeric]{width:100%;max-width:180px;min-height:44px;padding:8px 11px;border:1px solid var(--line);border-radius:8px}
 .creator-body .studio-grid .media-form .quiet-button{margin:5px 0 5px 8px}
+
+/* Private hosted creator workspace: readable controls and mobile wrapping. */
+.creator-body .hosted-workspace{max-width:860px;min-width:0}.hosted-workspace>h1{font-size:clamp(1.5rem,3vw,2.1rem);letter-spacing:-.035em}.hosted-workspace .panel{margin:0 0 20px;min-width:0}.hosted-workspace input:not([type=checkbox]),.hosted-workspace select,.hosted-workspace textarea{max-width:100%;width:100%;min-height:44px}.hosted-workspace code{overflow-wrap:anywhere;word-break:break-word}.hosted-workspace .button-row{flex-wrap:wrap}.hosted-workspace label select{display:block;margin-top:6px}.hosted-workspace .check-line input{width:auto;min-height:0}@media(max-width:760px){.hosted-workspace .panel{padding:16px}.hosted-workspace .button-row>*{flex:1 1 130px}}
