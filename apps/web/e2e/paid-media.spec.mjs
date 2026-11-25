@@ -86,6 +86,31 @@ test('synthetic verified payment through protected playback and refund',async({b
   await page.getByRole('button',{name:'Fullscreen',exact:true}).click();
   await expect.poll(()=>page.evaluate(()=>Boolean(document.fullscreenElement?.querySelector('[data-testid="playback-watermark"]')))).toBe(true);
   await page.evaluate(()=>document.exitFullscreen());
+  // A short-lived synthetic UI grant preserves the real server response and
+  // cookie, but exercises the client timer independently of real time.
+  const grantPath='**/api/local/lessons/'+f.id+'/playback-grant';
+  let shortGrantRequests=0;
+  await page.clock.install();
+  await page.route(grantPath,async route=>{
+    shortGrantRequests++;
+    const response=await route.fetch();
+    const grant=await response.json();
+    if(response.ok())grant.expiresAt=Math.floor(Date.now()/1000)+90;
+    await route.fulfill({response,json:grant});
+  });
+  try{
+    await page.reload();
+    await page.getByRole('button',{name:'Enable playback'}).click();
+    await expect(page.locator('video')).toBeVisible();
+    await page.locator('video').evaluate(v=>v.pause());
+    await page.clock.fastForward(50000);
+    expect(shortGrantRequests).toBe(1);
+    await expect(page.locator('video')).toBeVisible();
+    await page.clock.fastForward(45000);
+    await expect(page.locator('video')).toHaveCount(0);
+    await expect(page.getByText('Video access expired.',{exact:false})).toBeVisible();
+    expect(shortGrantRequests).toBe(1);
+  }finally{await page.unroute(grantPath);}
   store.setCreatorRestrictions(f.creator.user,f.creator.user.id,f.buyer.user.id,{view:true,comment:false,message:false});
   expect((await context.request.get(videoPath,{headers:{range:'bytes=0-4'}})).status()).toBe(403);
   await page.goto('/purchases');
