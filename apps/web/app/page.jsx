@@ -2,17 +2,20 @@ import Link from 'next/link';
 import FeedExperience from './FeedExperience.jsx';
 import {toFeedPreview} from '../lib/feed-preview.mjs';
 import {getLocalPublicCourses,getLocalCourseLessons,getLocalPublicInstitutions,isLocalMode} from '../lib/local-public.mjs';
+import HostedDiscovery from './HostedDiscovery.jsx';
 export const dynamic='force-dynamic';
 export const metadata={title:'Home | Student Creators'};
-export default function Home(){
+export default async function Home({searchParams}){
  let courses=[],institutions=[],posts=[],ready=true;
+ const local=isLocalMode();
+ if(!local)return <main id="main" className="creator-main modern-home hosted-home"><div className="feed-column"><h1 className="visually-hidden">Discover student creators</h1><HostedDiscovery params={(await searchParams)||{}}/></div></main>;
  try{
-  if(isLocalMode()){
+  if(local){
    courses=getLocalPublicCourses().slice(0,80);
    institutions=getLocalPublicInstitutions();
    const bySchool=new Map(institutions.map(item=>[item.id,item.name]));
    posts=courses.flatMap(course=>getLocalCourseLessons(course.id).map(item=>toFeedPreview(item,course,bySchool.get(course.institutionId)||'Campus creator'))).sort((a,b)=>String(b.publishedAt||b.createdAt).localeCompare(String(a.publishedAt||a.createdAt))).slice(0,60);
-  }else{ready=false;}
+  }
  }catch{ready=false;}
  return <main id="main" className="creator-main modern-home">
   <div className="feed-column">
