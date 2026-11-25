@@ -1,0 +1,72 @@
+'use client';
+import Link from 'next/link';
+import {usePathname} from 'next/navigation';
+import {useEffect,useRef,useState} from 'react';
+
+const paths={
+ home:<><path d="M3 10.5 12 3l9 7.5V21h-6v-7H9v7H3z"/></>,
+ search:<><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></>,
+ create:<><rect x="3" y="3" width="18" height="18" rx="5"/><path d="M12 7v10M7 12h10"/></>,
+ saved:<path d="M6 3h12v18l-6-4-6 4z"/>,
+ access:<><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M7 15h4"/></>,
+ messages:<path d="M21 11.5a9 9 0 0 1-9 9 9.4 9.4 0 0 1-4-.9L3 21l1.4-5A9 9 0 1 1 21 11.5z"/>,
+ shield:<><path d="m12 3 8 3v6c0 5-4.5 8-8 9-3.5-1-8-4-8-9V6z"/><path d="m8 12 3 3 5-6"/></>,
+ user:<><circle cx="12" cy="8" r="3.5"/><path d="M4 21v-2a8 8 0 0 1 16 0v2"/></>,
+ menu:<><path d="M4 7h16M4 12h16M4 17h16"/></>,
+ arrow:<path d="m9 18 6-6-6-6"/>,
+ };
+function Icon({name}){return <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;}
+const primary=[
+ {href:'/',label:'For you',mobile:'Home',icon:'home'},
+ {href:'/search',label:'Explore',mobile:'Explore',icon:'search'},
+ {href:'/studio',label:'Creator studio',mobile:'Create',icon:'create'},
+ {href:'/messages',label:'Messages',mobile:'Chats',icon:'messages'},
+ {href:'/saved',label:'Saved posts',icon:'saved'},
+ {href:'/purchases',label:'My access',mobile:'My access',icon:'access'}
+];
+const account=[
+ {href:'/verification',label:'Student membership',icon:'shield'},
+ {href:'/account-security',label:'Account security',icon:'user'}
+];
+function isCurrent(path,href){return href==='/'?path==='/':path===href||path.startsWith(href+'/');}
+function NavItem({item,path,mobile=false}){const current=isCurrent(path,item.href);return <Link href={item.href} className={(current?'current ':'')+(mobile&&item.icon==='create'?'mobile-create-tab':'')} aria-current={current?'page':undefined}><Icon name={item.icon}/><span>{mobile?item.mobile:item.label}</span></Link>;}
+
+export default function AppShell({children}){
+ const path=usePathname()||'/';
+ const menu=useRef(null);
+ const [open,setOpen]=useState(false);
+ useEffect(()=>{setOpen(false)},[path]);
+ useEffect(()=>{
+  if(!open)return;
+  function dismiss(e){if(e.key==='Escape'){setOpen(false);menu.current?.querySelector('button')?.focus();}else if(e.type==='pointerdown'&&!menu.current?.contains(e.target))setOpen(false);}
+  document.addEventListener('keydown',dismiss);document.addEventListener('pointerdown',dismiss);
+  return ()=>{document.removeEventListener('keydown',dismiss);document.removeEventListener('pointerdown',dismiss);};
+ },[open]);
+ return <>
+  <header className="creator-nav modern-header"><div className="nav-inner">
+   <Link href="/" className="creator-logo" aria-label="Student Creators home"><span className="logo-glyph" aria-hidden="true">SC</span><span>Student Creators<small>by Worthkind</small></span></Link>
+   <form className="shell-search" action="/search" method="GET"><Icon name="search"/><label className="visually-hidden" htmlFor="shell-search">Search Student Creators</label><input id="shell-search" type="search" name="q" placeholder="Search creators, courses and posts" required minLength={2} maxLength={80}/><button type="submit" aria-label="Submit search"><Icon name="arrow"/></button></form>
+   <div className="nav-auth"><Link className="nav-signin" href="/sign-in">Log in</Link><Link className="nav-join" href="/join">Join</Link>
+    <div className="shell-menu" ref={menu}>
+     <button type="button" className="shell-menu-toggle" aria-label="Account and navigation menu" aria-expanded={open} aria-controls="shell-account-menu" onClick={()=>setOpen(v=>!v)}><Icon name="menu"/></button>
+     {open&&<nav id="shell-account-menu" className="shell-menu-panel" aria-label="Account menu">
+       {[{href:'/sign-in',label:'Log in',icon:'user'},...primary,...account,{href:'/manage',label:'Staff console',icon:'shield'}].map(item=><Link key={item.href} href={item.href} onClick={()=>setOpen(false)} aria-current={isCurrent(path,item.href)?'page':undefined}><Icon name={item.icon}/>{item.label}</Link>)}
+     </nav>}
+    </div>
+   </div>
+  </div></header>
+  <div className="app-frame modern-frame">
+   <aside className="creator-sidebar" aria-label="Community navigation">
+    <div className="side-section-label">Discover</div>
+    <nav className="side-nav" aria-label="Primary navigation">{primary.slice(0,2).map(item=><NavItem key={item.href} item={item} path={path}/>)}</nav>
+    <div className="side-section-label">Your space</div>
+    <nav className="side-nav" aria-label="Your workspace">{primary.slice(2).map(item=><NavItem key={item.href} item={item} path={path}/>)}</nav>
+    <div className="sidebar-divider"/>
+    <div className="side-section-label">Account</div>
+    <nav className="side-nav" aria-label="Account navigation">{account.map(item=><NavItem key={item.href} item={item} path={path}/>)}</nav>
+    <div className="side-foot">Student Creators by Worthkind<br/>Original work. Real community.</div>
+   </aside>
+   <div className="app-content">{children}<nav className="mobile-creator-tabs" aria-label="Mobile navigation">{primary.filter(item=>item.mobile).map(item=><NavItem key={item.href} item={item} path={path} mobile/>)}</nav><footer className="creator-footer"><span>© Student Creators by Worthkind</span><Link href="/verification">Student membership</Link></footer></div>
+  </div>
+ </>;
+}
