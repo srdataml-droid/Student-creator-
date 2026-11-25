@@ -17,14 +17,14 @@ do $$ begin
  if has_function_privilege('anon','public.week05_apply_test_charge(text,text,bigint,text,text,text,bigint)','execute') or has_function_privilege('authenticated','public.week05_create_test_order(uuid,text,uuid,text)','execute') or has_schema_privilege('authenticated','week05_finance','usage') then raise exception 'Browser access leaked'; end if;
 end $$;
 set local role service_role;
-do $ begin
+do $$ begin
  begin perform public.week05_create_test_order('50000000-0000-4000-8000-000000000002','buyer@example.invalid','50000000-0000-4000-8000-000000000007','week05-disabled-0001'); raise exception 'Disabled staging gate accepted order'; exception when insufficient_privilege then null; end;
  begin update week05_finance.runtime_gate set allow_test_checkout=true; raise exception 'Service role can enable staging checkout'; exception when insufficient_privilege then null; end;
-end $;
+end $$;
 reset role;
 update week05_finance.runtime_gate set allow_test_checkout=true where singleton;
 set local role service_role;
-do $
+do $$
 declare b uuid:='50000000-0000-4000-8000-000000000002'; c uuid:='50000000-0000-4000-8000-000000000007'; other uuid:='50000000-0000-4000-8000-000000000003'; r jsonb; ref text; oid uuid; ref2 text; oid2 uuid;
 begin
  r:=public.week05_create_test_order(b,'buyer@example.invalid',c,'week05-request-0001'); ref:=r->>'reference'; oid:=(r->>'order_id')::uuid;

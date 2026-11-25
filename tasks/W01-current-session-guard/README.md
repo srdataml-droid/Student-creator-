@@ -1,0 +1,7 @@
+# Week 1 current-session boundary
+
+Draft, submission and moderation hosted REST adapters now share an Auth boundary. It asks Supabase Auth to validate the bearer before using its session and user IDs, then uses a service-only RPC to check session ownership, expiry and current user status. Student writes also require the existing affiliation eligibility RPC. Failure, missing migration or unknown response denies access. The staff role remains checked by the existing moderation handler.
+
+Reference: https://supabase.com/docs/guides/auth/sessions and https://github.com/supabase/auth (MIT, reviewed as reference only; no upstream source copied or dependencies installed). Original implementation; no additional packages.
+
+This is not registration, logout, password recovery, or real provider acceptance. SQL migration 0010_week01_current_session_guard.sql requires independent review before dedicated hosted application; coordinate the numeric prefix with parallel Week 6/7 migrations. Do not deploy on another project. CI bootstrap only models the used Auth fields; real sign-in, logout and revocation must be tested with a synthetic authorized account, not a fabricated JWT. A revoked session can be denied only when the provider removes/invalidates its row or Auth rejects the token; configured inactivity/time-box policies still require provider verification. No public registration or live charges.
