@@ -243,6 +243,12 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     await viewerPage.goto('/watch/'+lessonId);
     await expect(viewerPage.getByRole('heading',{name:title}).first()).toBeVisible();
     await expect(viewerPage.getByRole('navigation',{name:'Mobile navigation'})).toBeVisible();
+    await expect(viewerPage.getByRole('heading',{name:title,exact:true})).toHaveCount(1);
+    await expect(viewerPage.getByRole('region',{name:'Lesson discussion'})).toBeVisible();
+    await expect(viewerPage.getByRole('complementary',{name:'More from this course'})).toBeVisible();
+    await viewerPage.setViewportSize({width:320,height:720});
+    expect(await viewerPage.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(321);
+    await viewerPage.setViewportSize({width:360,height:780});
     const watchViewport=await viewerPage.evaluate(()=>({width:window.innerWidth,scrollWidth:document.documentElement.scrollWidth}));
     expect(watchViewport.scrollWidth,'Protected Android-width viewer overflows horizontally').toBeLessThanOrEqual(watchViewport.width+1);
     const playButton=viewerPage.getByRole('button',{name:'Enable playback'});
