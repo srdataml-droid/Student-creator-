@@ -13,6 +13,7 @@ export default function Manage(){
  return <main id="main" className="main admin-console"><section className="hero compact"><p className="eyebrow">Content operations</p><h1>Protect the learning community.</h1><p className="intro">Set up campuses and courses, review student membership, and approve or reject lessons with recorded reasons.</p></section>
  {state==='loading'?<p role="status">Loading administration…</p>:state==='signed-out'?<div className="status">Administrator sign-in is required. <Link href="/sign-in">Sign in</Link>.</div>:state==='forbidden'?<p role="alert" className="status">Your account is not an administrator. <Link href="/studio">Go to your studio</Link>.</p>:state==='unavailable'?<p role="alert" className="status">Administration is temporarily unavailable. Please try again.</p>:<>
  <div className="studio-meta"><p>Signed in as <strong>{user.email}</strong> · Administrator</p><button className="quiet-button" onClick={signOut}>Sign out</button></div>
+ <p><Link className="secondary-link" href="/manage/learning">Review night classes, tutoring disputes and payment cases</Link></p>
  {message&&<p role="status" className="form-success">{message}</p>}{error&&<p role="alert" className="form-error">{error}</p>}
  <div className="manage-grid">
  <section className="panel"><p className="eyebrow">Step 1</p><h2>Campuses</h2><p className="hint">Manage institutions and their available courses.</p>
