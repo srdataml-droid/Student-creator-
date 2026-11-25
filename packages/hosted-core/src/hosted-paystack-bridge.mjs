@@ -63,12 +63,29 @@ export async function processHostedPaystackCharge({store,gateway}){
   return {state:'retry'};
  }
 }
+// Two explicit server-only slots support Paystack's signed rotation overlap.
+export function readPaystackSigningSecrets(env){
+ const pairs=[
+  [env.PAYSTACK_WEBHOOK_KEY_ID,env.PAYSTACK_WEBHOOK_SIGNING_SECRET],
+  [env.PAYSTACK_WEBHOOK_PREVIOUS_KEY_ID,env.PAYSTACK_WEBHOOK_PREVIOUS_SIGNING_SECRET]
+ ];
+ const result=[];
+ for(const [id,secret] of pairs){
+  if(id===undefined&&secret===undefined&&result.length)continue;
+  if(typeof id!=='string'||!/^whk_[A-Za-z0-9_-]{3,80}$/.test(id)||
+   typeof secret!=='string'||!/^whsec_[A-Za-z0-9_-]{4,256}$/.test(secret)||
+   result.some(k=>k.id===id||k.secret===secret))throw unavailable();
+  result.push(Object.freeze({id,secret}));
+ }
+ return Object.freeze(result);
+}
 export function createHostedPaystackRuntime({env=process.env,fetcher=fetch}={}){
  if(env.APP_DATA_MODE!=='hosted'||env.STUDENT_CREATORS_PROJECT_REF!==REF||env.STUDENT_CREATORS_STAGING_APPROVED!=='true'||env.STUDENT_CREATORS_PUBLIC_REGISTRATION!=='false'||env.STUDENT_CREATORS_REAL_PAYMENT_ENABLED!=='false'||env.STUDENT_CREATORS_PAYSTACK_TEST_ENABLED!=='true'||env.STUDENT_CREATORS_DISTRIBUTION_CHANNEL!=='independent_web')throw unavailable();
  const cfg=readSupabaseRuntimeConfig(env,{server:true});
  if(!cfg||cfg.url!=='https://'+REF+'.supabase.co')throw unavailable();
  const keys=['PAYSTACK_TEST_SECRET_KEY','paystack_secret_key'].map(k=>env[k]).filter(Boolean);
  if(!keys.length||keys.some(k=>k!==keys[0])||!/^sk_test_[A-Za-z0-9]+$/.test(keys[0]))throw unavailable();
+ const signingSecrets=readPaystackSigningSecrets(env);
  const origin=env.STUDENT_CREATORS_PAYSTACK_ORIGIN,parsed=new URL(origin);
  if(parsed.protocol!=='https:'||parsed.origin!==origin||parsed.username||parsed.password)throw unavailable();
  const gateway=createPaystackClient({secretKey:keys[0],environment:'test',fetchImpl:fetcher});
@@ -77,7 +94,7 @@ export function createHostedPaystackRuntime({env=process.env,fetcher=fetch}={}){
  const store={reserve:(buyer,content,key)=>rpc('reserve_hosted_paystack_checkout',{_buyer:buyer,_content:content,_key:key}),finish:(order,url)=>rpc('finish_hosted_paystack_checkout',{_order:order,_url:url}),
  record:(ref,tx,digest)=>rpc('record_hosted_paystack_charge',{_reference:ref,_tx:tx,_digest:digest}),claim:()=>rpc('claim_hosted_paystack_charge',{}),snapshot:reference=>rpc('hosted_paystack_order_snapshot',{_reference:reference}),
  settle:(key,lease,c)=>rpc('settle_hosted_paystack_charge',{_key:key,_lease:lease,_tx:c.providerTransactionId,_amount:c.amountKobo,_fee:c.providerFeeKobo}),retry:(key,lease)=>rpc('retry_hosted_paystack_charge',{_key:key,_lease:lease})};
- return {auth,store,gateway,origin,signingSecrets:[{id:env.PAYSTACK_WEBHOOK_KEY_ID,secret:env.PAYSTACK_WEBHOOK_SIGNING_SECRET}]};
+ return {auth,store,gateway,origin,signingSecrets};
 }
 export function buildHostedPaystackRoute({webhook=false,getEnv=()=>process.env,fetcher=fetch}={}){
  return async(request,context)=>{try{const runtime=createHostedPaystackRuntime({env:getEnv(),fetcher});return webhook?await createHostedPaystackWebhook(runtime)(request):await createHostedCheckoutHandler(runtime)(request,context);}catch{return json(503,{error:'PAYSTACK_TEST_UNAVAILABLE'});}};
