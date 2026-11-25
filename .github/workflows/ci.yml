@@ -211,6 +211,8 @@ jobs:
         run: |
           psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-privacy-requests.sql
           psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-privacy-requests.test.sql
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-privacy-fulfilment.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-privacy-fulfilment.test.sql
 
       - name: Verify manual identity decision and expiry controls
         run: |
