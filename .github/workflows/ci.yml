@@ -242,6 +242,7 @@ jobs:
           psql -1 -v ON_ERROR_STOP=1 -f db/production/0010_catalog_and_finance_indexes.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/catalog_and_finance_indexes.sql
           psql -1 -v ON_ERROR_STOP=1 -f db/production/0011_media_source_quarantine.sql
+          psql -1 -v ON_ERROR_STOP=1 -f db/production/0013_media_quarantine_recovery.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/media_source_quarantine.sql
           psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-bookmarks.test.sql
 

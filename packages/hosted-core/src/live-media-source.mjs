@@ -34,6 +34,7 @@ export function createMediaSourceProvider({url,serverKey,fetcher=fetch}={}){
   store:{
    reserve:({creatorId,contentId,mime,bytes,digest})=>rpc('reserve_live_media_source',{_creator:creatorId,_content:contentId,_mime:mime,_bytes:bytes,_digest:digest}),
    get:({creatorId,contentId})=>rpc('get_live_media_source',{_creator:creatorId,_content:contentId}),
+   restart:({creatorId,contentId,id})=>rpc('restart_live_media_source',{_creator:creatorId,_content:contentId,_id:id}),
    queue:({creatorId,contentId,id})=>rpc('queue_live_media_source',{_creator:creatorId,_content:contentId,_id:id}),
    claim:()=>rpc('claim_live_media_source',{}),
    fail:({id,leaseId,verdict})=>rpc('fail_live_media_source',{_id:id,_lease:leaseId,_verdict:verdict}),
@@ -70,6 +71,9 @@ export function createMediaSourceHandler({auth,store,storage,origin}={}){
    if(!/^application\/json(?:\s*;|\s*$)/i.test(request.headers.get('content-type')??''))return respond(415,{error:'JSON_REQUIRED'});
    let input;try{input=JSON.parse(await readBoundedGatewayResponse(request,4096,unavailable));}catch{return respond(422,{error:'INVALID_INPUT'});}
    if(!input||typeof input!=='object'||Array.isArray(input))return respond(422,{error:'INVALID_INPUT'});
+   if(input.action==='restart'&&Object.keys(input).every(k=>['action','id'].includes(k))&&UUID.test(input.id??'')){
+    return await store.restart({...identity,id:input.id})===true?respond(200,{restarted:true}):respond(409,{error:'MEDIA_RESTART_NOT_AVAILABLE'});
+   }
    if(input.action==='complete'&&Object.keys(input).every(k=>['action','id'].includes(k))&&UUID.test(input.id??'')){
     return await store.queue({...identity,id:input.id})===true?respond(202,{queued:true}):respond(404,{error:'MEDIA_SOURCE_NOT_FOUND'});
    }
