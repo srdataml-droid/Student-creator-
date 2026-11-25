@@ -97,6 +97,23 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/migrations/0016_week01_hosted_auth_lifecycle.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/hosted_auth_lifecycle.sql
 
+      - name: Restore disposable PostgreSQL backup into isolated database
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          test "$PGDATABASE" = campus_ci
+          test -n "$PG_CONTAINER"
+          umask 077
+          dump="$RUNNER_TEMP/student-creators-disposable.dump"
+          trap 'rm -f "$dump"' EXIT
+          psql -v ON_ERROR_STOP=1 -f db/tests/backup_restore_fixture.sql
+          docker exec "$PG_CONTAINER" pg_dump -U postgres -d campus_ci --format=custom > "$dump"
+          test -s "$dump"
+          docker exec "$PG_CONTAINER" createdb -U postgres campus_ci_restore
+          docker exec -i "$PG_CONTAINER" pg_restore -U postgres --dbname=campus_ci_restore --exit-on-error < "$dump"
+          docker exec -i "$PG_CONTAINER" psql -U postgres -d campus_ci_restore -v ON_ERROR_STOP=1 < db/tests/backup_restore_assert.sql
+
   browser-alpha:
     runs-on: ubuntu-24.04
     timeout-minutes: 15
