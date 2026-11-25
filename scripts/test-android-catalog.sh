@@ -8,3 +8,5 @@ java -cp "$out" org.worthkind.studentcreators.CatalogTransportTest
 java -cp "$out" org.worthkind.studentcreators.MobileSessionBoundaryTest
 
 bash scripts/test-android-instrumentation-result.sh
+
+bash scripts/test-android-apk-verification.sh
