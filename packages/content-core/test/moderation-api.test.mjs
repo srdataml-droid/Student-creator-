@@ -65,14 +65,15 @@ test('privileged REST moderation adapter validates external user and CAS precond
  const seen=[];
  const fetcher=async(dest,options)=>{
   seen.push({url:String(dest),options});
-  if(String(dest).includes('/auth/v1/user'))return Response.json({id:staffId});
+  if(String(dest).includes('/auth/v1/user'))return Response.json({id:staffId,email:'synthetic@example.invalid',email_confirmed_at:'2026-01-01T00:00:00Z'});
+  if(String(dest).includes('/student_creators_session_active'))return Response.json(true);
   if(String(dest).includes('platform_staff'))return Response.json([{user_id:staffId,active:true,role:'moderator'}]);
   if(String(dest).includes('content_items')&&options.method==='GET')return Response.json([{id:lessonId,creator_id:creatorId,status:'in_review'}]);
   if(options.method==='PATCH')return Response.json([{id:lessonId,status:'published'}]);
   throw new Error('Unexpected provider URL');
  };
  const {auth,store}=createSupabaseModerationDependencies({url:'https://test.supabase.co',publicKey:'public-key',serverKey:'server-key',fetcher});
- assert.deepEqual(await auth.getUser('valid-user-token'),{id:staffId});
+ assert.deepEqual(await auth.getUser('e30.'+Buffer.from(JSON.stringify({sub:staffId,session_id:lessonId,role:'authenticated',exp:Math.floor(Date.now()/1000)+600})).toString('base64url')+'.signature'),{id:staffId});
  assert.equal((await store.getStaff(staffId)).active,true);
  assert.equal((await store.getContent(lessonId)).status,'in_review');
  assert.equal(await store.changeStatusOnce({contentId:lessonId,reviewerId:staffId,decision:'published',reason:'Original work'}),true);
