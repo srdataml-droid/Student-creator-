@@ -45,6 +45,10 @@ public final class CatalogSmokeInstrumentation extends Instrumentation {
             check(CatalogPreview.parsePage(paged.put("nextOffset",0).toString(),courseId,0).nextOffset==null);
             check(CatalogPreview.parsePage(paged.put("nextOffset","https://example.invalid").toString(),courseId,0).nextOffset==null);
             check(CatalogPreview.parsePage(paged.put("nextOffset",1020).toString(),courseId,1000).nextOffset==null);
+            check(Integer.valueOf(20).equals(CatalogPreview.parsePage(new JSONObject()
+                .put("items",new JSONArray().put(lesson)).put("nextOffset",20).toString(),courseId,0).nextOffset));
+            check(Integer.valueOf(20).equals(CatalogPreview.parsePage(new JSONObject()
+                .put("items",new JSONArray()).put("nextOffset",20).toString(),courseId,0).nextOffset));
             Intent intent = new Intent(getTargetContext(), MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             activity = startActivitySync(intent);
             waitForIdleSync();
@@ -58,6 +62,7 @@ public final class CatalogSmokeInstrumentation extends Instrumentation {
                 check(list.getAdapter() == null || list.getAdapter().getCount() == 0);
                 check(screen.findViewById(R.id.catalog_retry).getVisibility() == android.view.View.GONE);
                 check(screen.findViewById(R.id.catalog_more).getVisibility() == android.view.View.GONE);
+                check(screen.findViewById(R.id.catalog_filter).getVisibility() == android.view.View.GONE);
             });
             results.putString("stream","\nANDROID_CATALOG_SMOKE_PASS\n");
             finish(Activity.RESULT_OK, results);

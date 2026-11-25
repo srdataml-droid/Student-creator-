@@ -49,11 +49,7 @@ final class CatalogPreview {
             rows.add(new Row(id, title, course == null ? text(item, "code", 32) : "",
                 course == null ? "" : text(item, "previewText", 800)));
         }
-        Integer next = null;
-        if (course != null && input.length() == 20 && offset < 1000) {
-            Object raw = response.opt("nextOffset");
-            if ((raw instanceof Integer || raw instanceof Long) && ((Number) raw).longValue() == offset + 20L) next = offset + 20;
-        }
+        Integer next = course == null ? null : CatalogPaging.nextOffset(offset, input.length(), response.opt("nextOffset"));
         return new Page(rows, next);
     }
 }

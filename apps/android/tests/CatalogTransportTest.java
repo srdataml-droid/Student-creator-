@@ -78,6 +78,16 @@ public final class CatalogTransportTest {
         refuses(new FakeConnection(503, "application/json", new byte[0]));
         refuses(new FakeConnection(200, "text/html", new byte[0]));
         refuses(new FakeConnection(200, "application/json", new byte[CatalogTransport.MAX_BYTES + 1]));
+        equal(CatalogPaging.nextOffset(0, 0, 20),20);
+        equal(CatalogPaging.nextOffset(20, 3, 40L),40);
+        equal(CatalogPaging.nextOffset(980, 20, 1000),1000);
+        for (Object invalid : new Object[]{"20",20.0,0,-20,40,null}) {
+            if (CatalogPaging.nextOffset(0, 20, invalid) != null) throw new AssertionError("Invalid cursor accepted");
+            checks++;
+        }
+        if (CatalogPaging.nextOffset(1000, 20, 1020) != null || CatalogPaging.nextOffset(0,21,20) != null)
+            throw new AssertionError("Unbounded cursor accepted");
+        checks++;
         System.out.println("Android catalog JVM checks passed: " + checks);
     }
 }

@@ -5,4 +5,5 @@
   <item name="catalog_list" type="id"/>
   <item name="catalog_retry" type="id"/>
   <item name="catalog_more" type="id"/>
+  <item name="catalog_filter" type="id"/>
 </resources>
