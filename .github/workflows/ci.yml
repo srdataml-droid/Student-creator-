@@ -172,6 +172,11 @@ jobs:
           psql -1 -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-bookmarks.sql
           psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-bookmarks.test.sql
 
+      - name: Verify scoped social moderation and learning notifications
+        run: |
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-scoped-moderation.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-scoped-moderation.test.sql
+
       - name: Restore disposable PostgreSQL backup into isolated database
         env:
           PG_CONTAINER: ${{ job.services.postgres.id }}

@@ -125,6 +125,7 @@ function operation(name,input,actor){
  case 'startHelp':case 'submitHelp':case 'completeHelp':case 'cancelHelp':case 'disputeHelp':{
   const b=shape(input,name==='disputeHelp'?['requestId','reason']:['requestId']);return rpc('hosted_learning_action',{_action:{startHelp:'start_help',submitHelp:'submit_help',completeHelp:'complete_help',cancelHelp:'cancel_help',disputeHelp:'dispute_help'}[name],_input:{requestId:id(b.requestId),...(name==='disputeHelp'?{reason:string(b.reason,10,1000)}:{})}});
  }
+ case 'readLearningNotification':{const b=shape(input,['id']);return rpc('hosted_read_learning_notification',{_id:id(b.id)});}
  case 'learningNotifications':{const b=shape(input,['limit']);return select('learning_notifications','id,kind,resource_id,body,created_at,seen_at',{order:'created_at.desc,id.desc',limit:String(integer(b.limit,100,50))});}
  case 'notifications':{
   const b=shape(input,['limit']);return select('social_notifications','id,kind,target_id,created_at,read_at',{order:'created_at.desc,id.desc',limit:String(integer(b.limit,100,100))});
