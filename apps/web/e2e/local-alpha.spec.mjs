@@ -1,6 +1,7 @@
 import {test, expect} from '@playwright/test';
 import {readFileSync} from 'node:fs';
 import {randomUUID, randomBytes} from 'node:crypto';
+import {openLocalStore} from '../../../packages/local-core/src/store.mjs';
 
 const BASE='http://localhost:3000';
 const syntheticVideo=Buffer.from(readFileSync(new URL('../../../packages/local-core/test/fixtures/synthetic-1s.mp4.base64',import.meta.url),'utf8'),'base64');
@@ -117,9 +118,17 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     const roomId=classCreated.class.id;
     const enrollment=await viewer.request.post('/api/local/classes/'+roomId+'/enroll',{data:{}});
     expect(enrollment.status()).toBe(200);
-    expect((await creator.request.post('/api/local/classes/'+roomId+'/open',{data:{}})).status()).toBe(200);
-    // Test the UI independently of the missing provider credentials. Room-token HTTP
-    // responses are mocked here; server permissions are tested in Node separately.
+    // In a production-mode Next.js process, class opening MUST fail closed
+    // without a provider. The isolated test fixture marks it open through local
+    // domain code only (no provider network request and no production bypass).
+    expect((await creator.request.post('/api/local/classes/'+roomId+'/open',{data:{}})).status()).toBe(503);
+    const fixtureStore=openLocalStore(process.env.LOCAL_SQLITE_PATH);
+    try{
+      const syntheticCreator=fixtureStore.login(creatorEmail,password).user;
+      expect(fixtureStore.openClass(syntheticCreator,roomId).status).toBe('room_open');
+    }finally{fixtureStore.close();}
+    // Test UI behavior independently of absent credentials. Room-token responses
+    // are deliberately mocked; real auth and access control are covered in Node.
     const livekitMock=()=>{
       class Room {
         constructor(){this.handlers={};this.localParticipant={
