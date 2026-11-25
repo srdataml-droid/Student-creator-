@@ -49,3 +49,6 @@ Course/student composite institution foreign keys, joined-member RLS, private me
 
 ## Thirteenth increment: hosted discovery/follows
 Current-student-only discovery RPC ranks campus, follow state and recency, returns allowlisted metadata and public aliases, validates cross-campus filters and uses literal substring search. Own follow graph RLS, mutation RPC and quota. Authenticated raw catalog policy now excludes creator view-denied previews; existing anonymous preview policy remains and is not an evasion defense. Paid listing metadata remains distinct from entitlement. No hosted deployment. Disposable SQL regression added; exact-head CI pending. Existing local discovery source reused conceptually, no external code copied.
+
+## Fourteenth increment: hosted lesson replies
+Additive parent FK, one-level replies, owner removal and report submission via verified student RPC. Paid entitlement and independent comment restriction are checked before writes. Hidden root also hides its replies; raw request keys/hashes removed from authenticated comment SELECT grants. Rate quota and idempotent creation retained. Tests use existing rollback-only synthetic paid fixtures; exact-head CI pending. No external code copied; this adapts existing local/hosted contracts.
