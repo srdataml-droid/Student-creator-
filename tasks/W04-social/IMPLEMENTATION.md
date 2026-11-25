@@ -55,3 +55,6 @@ Additive parent FK, one-level replies, owner removal and report submission via v
 
 ## Fifteenth increment: hosted in-app notification persistence
 Transaction-local notification triggers on new messages, follows, likes, lesson comments/replies and community replies. Preference changes affect subsequent events only. Recipient RLS hides actor/internal event IDs; community/comment events recheck visibility and eligibility. No external push, email or service-key dependency. Rollback-only regression covers event deduplication, foreign read-state denial and notification opt-out without blocking DM delivery. Exact-head CI pending. No external code copied.
+
+## Sixteenth increment: hosted abuse intake and review
+Account and recipient-only message reports, duplicate and hourly quota checks, admin-only queues for message/account/comment/community cases and audited resolution. Reported messages only are included in staff queue, never arbitrary private inbox access; reviews do not auto-suspend. Existing platform staff role is the Week 7 coordination boundary; no separate identity or punishment system. Tests added for unauthorized reports/review, private evidence and no automatic sanctions. Exact-head CI pending. No external code copied.
