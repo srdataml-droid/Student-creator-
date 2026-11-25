@@ -418,3 +418,11 @@
 .creator-body .hosted-home .hosted-course-list a{display:flex;align-items:center;min-height:44px;text-decoration:none}
 .creator-body .hosted-home .hosted-course-list a:hover{text-decoration:underline}
 @media(max-width:600px){.creator-body .hosted-home .hosted-course-list{grid-template-columns:minmax(0,1fr)}}
+
+.hosted-search{margin:16px 0 24px;max-width:720px}
+.hosted-search-row{display:flex;gap:8px;align-items:center}
+.hosted-search-row input{flex:1;min-width:0}
+.hosted-search-row button{flex:none}
+.hosted-pagination{display:flex;align-items:center;justify-content:center;gap:20px;padding:20px 0;color:var(--muted)}
+.hosted-pagination a{min-height:44px;display:inline-flex;align-items:center}
+@media(max-width:360px){.hosted-pagination{gap:10px}.hosted-search-row{gap:6px}}
