@@ -53,6 +53,12 @@ export function hostedCreatorRequest(operation,input={}){
  case 'notifications':return json('/api/social/notifications',{limit:100});
  case 'readNotification':return json('/api/social/readNotification',{id:id(input.id)});
  case 'reportMessage':return json('/api/social/reportMessage',{targetId:id(input.targetId),category:choice(input.category,['harassment','impersonation','spam','other']),reason:bounded(input.reason,10,1000)});
+ case 'communityStatus':case 'joinCommunity':case 'leaveCommunity':return json('/api/social/'+operation,{courseId:id(input.courseId)});
+ case 'communityPosts':return json('/api/social/communityPosts',{courseId:id(input.courseId),limit:100});
+ case 'communityPost':return json('/api/social/communityPost',{courseId:id(input.courseId),text:bounded(input.text,3,2000),creationKey:key(input.creationKey),replyTo:input.replyTo?id(input.replyTo):null,topicId:null});
+ case 'communityReport':return json('/api/social/communityReport',{courseId:id(input.courseId),postId:id(input.postId),reason:bounded(input.reason,10,1000)});
+ case 'classGrant':return {path:'/api/classes/'+id(input.classId)+'/hosted-room-token',method:'POST',headers:{}};
+ case 'checkout':return {path:'/api/lessons/'+id(input.lessonId)+'/hosted-checkout',method:'POST',headers:{'idempotency-key':key(input.creationKey)}};
  default:throw Error('UNKNOWN_CREATOR_OPERATION');
  }
 }
@@ -84,4 +90,27 @@ export function mergePrivateMessages(previous,incoming,actor,peer){
  map.set(row.id,row);
  }
  return [...map.values()].sort((a,b)=>Date.parse(a.createdAt)-Date.parse(b.createdAt)||a.id.localeCompare(b.id));
+}
+
+export function readCheckoutResult(data){
+ if(!UUID.test(data?.orderId??''))throw Error('INVALID_CHECKOUT_RESPONSE');
+ if(data.authorizationUrl!==undefined){
+  const raw=data.authorizationUrl;
+  if(typeof raw!=='string'||raw.length>2048||/[\\\s]/.test(raw))throw Error('INVALID_CHECKOUT_URL');
+  const u=new URL(raw);
+  if(u.protocol!=='https:'||!['checkout.paystack.com','paystack.com'].includes(u.hostname)||u.username||u.password||u.port||u.hash)throw Error('INVALID_CHECKOUT_URL');
+  return {orderId:data.orderId,authorizationUrl:u.href};
+ }
+ if(typeof data.status!=='string'||!/^[a-z_]{2,40}$/.test(data.status))throw Error('INVALID_CHECKOUT_RESPONSE');
+ return {orderId:data.orderId,status:data.status};
+}
+export function readClassGrant(data,classId,now=Math.floor(Date.now()/1000)){
+ if(data?.classId!==id(classId)||!['host','participant'].includes(data.role)||typeof data.token!=='string'||data.token.length>8192||! /^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(data.token)||!Number.isSafeInteger(data.expiresAt)||data.expiresAt<=now||data.expiresAt>now+900)throw Error('INVALID_CLASS_GRANT');
+ const u=new URL(data.url);
+ if(u.protocol!=='wss:'||!u.hostname.endsWith('.livekit.cloud')||u.username||u.password||u.port||u.pathname!=='/'||u.search||u.hash)throw Error('INVALID_CLASS_URL');
+ return {url:u.origin,token:data.token,role:data.role,expiresAt:data.expiresAt};
+}
+export function readCommunityPosts(rows,courseId){
+ if(!Array.isArray(rows)||rows.length>100)throw Error('INVALID_COMMUNITY_RESPONSE');
+ return rows.map(r=>{if(!UUID.test(r?.id??'')||r.course_id!==id(courseId)||typeof r.body!=='string'||!Number.isFinite(Date.parse(r.created_at))||(r.parent_id!==null&&!UUID.test(r.parent_id??'')))throw Error('INVALID_COMMUNITY_RESPONSE');return {id:r.id,body:r.body,createdAt:r.created_at,parentId:r.parent_id};});
 }
