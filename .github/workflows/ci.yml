@@ -84,6 +84,8 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/tests/hosted_rls_isolation.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/0010_week01_current_session_guard.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/current_session_guard.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0013_week01_private_identity_api.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/private_identity_api.sql
 
   browser-alpha:
     runs-on: ubuntu-24.04
