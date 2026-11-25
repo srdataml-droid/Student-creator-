@@ -82,6 +82,8 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/tests/institution_identity.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/mux_webhook_inbox.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/hosted_rls_isolation.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-messaging.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-messaging.test.sql
 
   browser-alpha:
     runs-on: ubuntu-24.04
