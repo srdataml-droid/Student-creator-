@@ -13,7 +13,7 @@ export default async function HostedDiscovery({params={},search=false}){
  const path=search?'/search':'/';
  let data,error='';
  try{data=await getHostedDiscovery({filters});}catch(e){error=e.message==='INVALID_DISCOVERY_FILTER'?'Enter 2–80 letters or numbers and use a valid page or course.':'Discovery is temporarily unavailable. Please try again.';}
- return <HostedFeedBoundary><section className="feed-area hosted-discovery" aria-labelledby="hosted-discovery-title">
+ return <HostedFeedBoundary query={typeof filters.q==='string'?filters.q.slice(0,80):''}><section className="feed-area hosted-discovery" aria-labelledby="hosted-discovery-title">
  <div className="reference-feed-heading"><h2 id="hosted-discovery-title">{search?'Search student work':'Discover student work'}</h2><p className="hint">Published public previews across active campuses.</p></div>
  <form className="form-stack hosted-search" method="GET" action="/search"><label htmlFor="hosted-query">Search public previews</label><div className="hosted-search-row"><input id="hosted-query" name="q" type="search" defaultValue={typeof filters.q==='string'?filters.q:''} placeholder="Search titles and excerpts" maxLength={80} minLength={2}/><button className="primary-link" type="submit">Search</button></div>{typeof filters.courseId==='string'&&filters.courseId&&<input type="hidden" name="courseId" value={filters.courseId}/>}</form>
  {error?<div role="alert" className="feed-empty"><h3>Unable to show results</h3><p>{error}</p><Link href={path}>Reset and retry</Link></div>:<>
