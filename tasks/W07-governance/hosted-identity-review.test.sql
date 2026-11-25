@@ -1,0 +1,20 @@
+BEGIN;
+INSERT INTO auth.users(id,email,email_confirmed_at) VALUES('ab000000-0000-4000-8000-000000000001','scope-applicant@example.invalid',now()),('ab000000-0000-4000-8000-000000000002','scope-reviewer@example.invalid',now()),('ab000000-0000-4000-8000-000000000003','scope-legacy-admin@example.invalid',now()),('ab000000-0000-4000-8000-000000000004','scope-finance@example.invalid',now());
+INSERT INTO public.institutions(id,slug,name) VALUES('ab000000-0000-4000-8000-000000000010','fixture-scope-identity','Synthetic institution');
+INSERT INTO public.student_profiles(user_id,institution_id,display_name) VALUES('ab000000-0000-4000-8000-000000000001','ab000000-0000-4000-8000-000000000010','Synthetic applicant');
+INSERT INTO public.platform_staff(user_id,role,active) VALUES('ab000000-0000-4000-8000-000000000002','moderator',true),('ab000000-0000-4000-8000-000000000003','admin',true),('ab000000-0000-4000-8000-000000000004','admin',true);
+INSERT INTO public.governance_staff_role_grants(user_id,role) VALUES('ab000000-0000-4000-8000-000000000002','verification_reviewer'),('ab000000-0000-4000-8000-000000000004','finance_reviewer');
+INSERT INTO public.verification_requests(id,user_id,institution_id,method,status,expires_at) VALUES('ab000000-0000-4000-8000-000000000011','ab000000-0000-4000-8000-000000000001','ab000000-0000-4000-8000-000000000010','manual_id','pending',now()+interval '1 day');
+INSERT INTO public.private_identity_uploads(id,request_id,owner_id,object_key,mime_type,bytes,digest,state) VALUES('ab000000-0000-4000-8000-000000000012','ab000000-0000-4000-8000-000000000011','ab000000-0000-4000-8000-000000000001','private/ab000000-0000-4000-8000-000000000001/ab000000-0000-4000-8000-000000000011/ab000000-0000-4000-8000-000000000012.pdf','application/pdf',20,repeat('a',64),'clean');
+UPDATE public.verification_requests SET private_evidence_path='private/ab000000-0000-4000-8000-000000000001/ab000000-0000-4000-8000-000000000011/ab000000-0000-4000-8000-000000000012.pdf' WHERE id='ab000000-0000-4000-8000-000000000011';
+DO $$ DECLARE r uuid:='ab000000-0000-4000-8000-000000000002'; a uuid:='ab000000-0000-4000-8000-000000000003'; f uuid:='ab000000-0000-4000-8000-000000000004'; req uuid:='ab000000-0000-4000-8000-000000000011'; q jsonb;
+BEGIN
+ q:=public.week7_identity_queue(r,10);
+ IF jsonb_array_length(q->'items')<>1 OR q->'items'->0->>'evidence_ready'<>'true' OR q::text LIKE '%private/%' THEN RAISE EXCEPTION 'Identity queue data boundary'; END IF;
+ IF public.get_private_identity_review_object(r,req) IS NULL OR public.get_private_identity_review_object(a,req) IS NOT NULL OR public.get_private_identity_review_object(f,req) IS NOT NULL THEN RAISE EXCEPTION 'Identity scope bypass'; END IF;
+ BEGIN PERFORM public.week7_identity_queue(f,10); RAISE EXCEPTION 'Finance accessed identity queue'; EXCEPTION WHEN insufficient_privilege THEN NULL; END;
+ DELETE FROM public.governance_staff_role_grants WHERE user_id=r AND role='verification_reviewer';
+ IF public.get_private_identity_review_object(r,req) IS NOT NULL THEN RAISE EXCEPTION 'Revoked grant retained evidence access'; END IF;
+ IF has_function_privilege('authenticated','public.get_private_identity_review_object(uuid,uuid)','EXECUTE') THEN RAISE EXCEPTION 'Client evidence bypass'; END IF;
+END $$;
+ROLLBACK;

@@ -46,6 +46,7 @@ async function readCommandBody(request){
  return body&&typeof body==='object'&&!Array.isArray(body)?body:null;
 }
 function commandFor(path){
+ if(path==='identity/queue'||path==='identity/revalidation')return {name:path==='identity/queue'?'week7_identity_queue':'week7_identity_revalidation_queue',scope:'verification.review',allowed:['limit']};
  if(path==='identity/appeals')return {name:'week7_institution_appeal_queue',scope:'verification.review',allowed:['limit']};
  if(/^identity\/appeals\/[0-9a-f-]{36}\/review$/i.test(path))return {name:'week7_review_institution_appeal',scope:'verification.review',allowed:['decision','note']};
  if(path==='learning/disputes'||path==='learning/refunds')return {name:'week7_learning_review_queue',scope:path.endsWith('disputes')?'content.moderate':'finance.review',allowed:['limit']};
@@ -65,6 +66,8 @@ function validateCommand(cmd,body,path,actorId){
  if(Object.keys(body).some(key=>!cmd.allowed.includes(key)))return null;
  const id=path.split('/')[1];
  switch(cmd.name){
+  case 'week7_identity_queue':
+  case 'week7_identity_revalidation_queue':
   case 'week7_institution_appeal_queue':
    return (body.limit===undefined||Number.isInteger(body.limit)&&body.limit>=1&&body.limit<=100)?{_actor:actorId,_limit:body.limit??50}:null;
   case 'week7_review_institution_appeal':

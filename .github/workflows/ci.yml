@@ -196,6 +196,11 @@ jobs:
           psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-institution-appeals.sql
           psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-institution-appeals.test.sql
 
+      - name: Verify scoped identity evidence and revalidation queues
+        run: |
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-identity-review.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-identity-review.test.sql
+
       - name: Restore disposable PostgreSQL backup into isolated database
         env:
           PG_CONTAINER: ${{ job.services.postgres.id }}
