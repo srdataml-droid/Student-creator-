@@ -35,7 +35,7 @@ export function HostedCreatorStudio({courses=[],catalogAvailable}){
  <label className="check-line"><input name="rights" type="checkbox" required disabled={action.busy}/>I own or have permission to publish this material.</label>
  <button className="primary-link" disabled={action.busy}>{action.busy?'Saving…':'Save private draft'}</button></form>}
  <Feedback action={action}/>{draft&&<div><h3>{draft.title}</h3><p>Draft ID: <code>{draft.id}</code></p><p className="hint">Keep this ID to reopen upload status. A hosted draft list is not yet connected.</p></div>}</section>
- <MuxUpload lessonId={lessonId} setLessonId={setLessonId}/><HostedPrivacy/></HostedGate>;
+ <MuxUpload key={draft?.id||'manual'} lessonId={lessonId} setLessonId={setLessonId}/><HostedPrivacy/></HostedGate>;
 }
 function MuxUpload({lessonId,setLessonId}){
  const account=useHostedAccount(),action=useAction();const [state,setState]=useState(null),[file,setFile]=useState(null);const fileRef=useRef(null);
@@ -55,9 +55,9 @@ function HostedPrivacy(){
  return <section className="panel"><h2>Creator privacy</h2><p className="hint">Control which verified accounts may view, comment or contact you. Public profile editing is not connected to hosted storage yet.</p>
  <button type="button" className="secondary-link" disabled={action.busy} onClick={load}>Load privacy settings</button>
  {rows!==null&&<><h3>Current restrictions</h3>{!rows.length?<p>No restrictions returned.</p>:<ul>{rows.map(r=><li key={r.viewer_id}><code>{r.viewer_id}</code> · {['view','comment','message'].filter(k=>r['deny_'+k]===true).join(', ')||'No restriction'}</li>)}</ul>}
- <form className="form-stack" onSubmit={e=>{e.preventDefault();const d=new FormData(e.currentTarget);action.run(async notice=>{await account.creatorRequest('setRestrictions',{viewerId:String(d.get('viewerId')).trim(),view:d.get('view')==='on',comment:d.get('comment')==='on',message:d.get('message')==='on'});setRows(null);notice('Restriction request accepted. Reload settings to verify the saved state.');});}}>
+ <form className="form-stack" onSubmit={e=>{e.preventDefault();const d=new FormData(e.currentTarget);action.run(async notice=>{await account.creatorRequest('setRestrictions',{viewerId:String(d.get('viewerId')).trim(),view:d.get('view')==='deny',comment:d.get('comment')==='deny',message:d.get('message')==='deny'});setRows(null);notice('Restriction request accepted. Reload settings to verify the saved state.');});}}>
  <label htmlFor="privacy-viewer">Viewer account ID</label><input id="privacy-viewer" name="viewerId" required maxLength={36}/>
- {['view','comment','message'].map(k=><label className="check-line" key={k}><input name={k} type="checkbox"/>Restrict {k}</label>)}<button className="primary-link" disabled={action.busy}>Save restrictions</button></form></>}
+ {['view','comment','message'].map(k=><label key={k}>{k}<select name={k} required defaultValue=""><option value="" disabled>Choose permission</option><option value="allow">Allow</option><option value="deny">Restrict</option></select></label>)}<button className="primary-link" disabled={action.busy}>Save restrictions</button></form></>}
  {preference!==null&&<><p>New messages: {preference?'Allowed':'Restricted'}</p><button className="secondary-link" disabled={action.busy} type="button" onClick={()=>action.run(async notice=>{await account.creatorRequest('setMessagePreference',{allowMessages:!preference});setPreference(null);notice('Preference request accepted. Reload settings to verify.');})}>{preference?'Restrict new messages':'Allow new messages'}</button></>}
  <Feedback action={action}/></section>;
 }
