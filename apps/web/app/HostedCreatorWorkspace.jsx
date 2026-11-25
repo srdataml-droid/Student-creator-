@@ -1,6 +1,7 @@
 'use client';
 import HostedGate from './HostedGate.jsx';
 import {ReviewSubmission} from './HostedSocialWorkspace.jsx';
+import {HostedEarnings} from './HostedLearningWorkspace.jsx';
 import {useRef,useState} from 'react';
 import {makeDraftKey} from '../lib/studio-workflow.mjs';
 import {readMuxStatus,putMuxVideo} from '../lib/hosted-creator-client.mjs';
@@ -33,7 +34,7 @@ export function HostedCreatorStudio({courses=[],catalogAvailable}){
  <label className="check-line"><input name="rights" type="checkbox" required disabled={action.busy}/>I own or have permission to publish this material.</label>
  <button className="primary-link" disabled={action.busy}>{action.busy?'Saving…':'Save private draft'}</button></form>}
  <Feedback action={action}/>{draft&&<div><h3>{draft.title}</h3><p>Draft ID: <code>{draft.id}</code></p><p className="hint">Keep this ID to reopen upload status. A hosted draft list is not yet connected.</p></div>}</section>
- <MuxUpload key={draft?.id||'manual'} lessonId={lessonId} setLessonId={setLessonId}/><ReviewSubmission key={lessonId} lessonId={lessonId.trim()}/><HostedPrivacy/></HostedGate>;
+ <MuxUpload key={draft?.id||'manual'} lessonId={lessonId} setLessonId={setLessonId}/><ReviewSubmission key={lessonId} lessonId={lessonId.trim()}/><HostedPrivacy/><HostedEarnings/></HostedGate>;
 }
 function MuxUpload({lessonId,setLessonId}){
  const account=useHostedAccount(),action=useAction();const [state,setState]=useState(null),[file,setFile]=useState(null);const fileRef=useRef(null);
