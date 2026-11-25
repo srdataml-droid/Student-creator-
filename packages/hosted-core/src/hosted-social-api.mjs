@@ -18,6 +18,7 @@ const key=v=>{if(typeof v!=='string'||!/^[A-Za-z0-9_-]{16,128}$/.test(v))throw f
 const rpc=(name,args)=>({path:'rpc/'+name,method:'POST',body:args});
 const select=(name,fields,filters={})=>({path:name+'?'+new URLSearchParams({select:fields,...filters}),method:'GET'});
 const readIds=v=>{if(!Array.isArray(v)||v.length<1||v.length>100||new Set(v).size!==v.length)throw fault('INVALID_INPUT',422);return v.map(id);};
+const accountOperations=new Set(['myPayouts','cancelPayout','myCopyrightCases','copyrightClaim','copyrightAppeal','myCreatorFinance']);
 const adminOperations=new Set(['setCommunityModerator','reportQueue','reviewReport']);
 const rateMessages=new Set(['MESSAGE_RATE_LIMIT','POST_RATE_LIMIT','COMMENT_RATE_LIMIT','FOLLOW_RATE_LIMIT','REPORT_RATE_LIMIT','RESTRICTION_RATE_LIMIT','LIKE_RATE_LIMIT']);
 function mapError(status,data){
@@ -31,6 +32,16 @@ function mapError(status,data){
 }
 function operation(name,input,actor){
  switch(name){
+ case 'myPayouts':shape(input,[]);return rpc('creator_payout_request',{_action:'list'});
+ case 'requestPayout':{const b=shape(input,['amountKobo','requestKey']);if(!Number.isSafeInteger(b.amountKobo)||b.amountKobo<1)throw fault('INVALID_INPUT',422);return rpc('creator_payout_request',{_action:'request',_amount:b.amountKobo,_key:key(b.requestKey)});}
+ case 'cancelPayout':{const b=shape(input,['requestId']);return rpc('creator_payout_request',{_action:'cancel',_id:id(b.requestId)});}
+ case 'myCopyrightCases':shape(input,[]);return rpc('my_copyright_cases',{});
+ case 'copyrightClaim':case 'copyrightAppeal':{const b=shape(input,['id','reason']);return rpc('copyright_action',{_action:name==='copyrightClaim'?'submit':'appeal',_id:id(b.id),_reason:string(b.reason,name==='copyrightClaim'?30:20,name==='copyrightClaim'?1500:1000)});}
+ case 'myCreatorFinance':{
+  const b=shape(input,['from','to']);const pattern=/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?Z$/;const f=Date.parse(b.from),t=Date.parse(b.to);
+  if(typeof b.from!=='string'||typeof b.to!=='string'||!pattern.test(b.from)||!pattern.test(b.to)||!Number.isFinite(f)||!Number.isFinite(t)||t<=f||t-f>366*86400000||t>Date.now()+86400000)throw fault('INVALID_INPUT',422);
+  return rpc('my_creator_finance_report',{_from:new Date(f).toISOString(),_to:new Date(t).toISOString()});
+ }
  case 'feed':case 'search':case 'creators':{
   const b=shape(input,['mode','q','institutionId','courseId','topicId','limit']);
   return rpc('social_discover',{_mode:name==='creators'?'creators':choice(b.mode??'all',['all','following']),_q:string(b.q??'',0,80),_institution:optionalId(b.institutionId),_course:optionalId(b.courseId),_topic:optionalId(b.topicId),_limit:integer(b.limit,100,60)});
@@ -160,7 +171,7 @@ export function createHostedSocialClient({projectRef,publishableKey,isCurrentSes
    // The shared verifier checks identity/session and a trusted authorization predicate.
    // Staff are not required to be enrolled students: use the independent admin predicate.
    let verified;
-   try{verified=await verifyCurrentStudentBearer({accessToken,projectRef,publishableKey,isCurrentSession,authorizeStudent:staff?authorizeAdmin:authorizeStudent,fetchImpl});}
+   try{verified=await verifyCurrentStudentBearer({accessToken,projectRef,publishableKey,isCurrentSession,authorizeStudent:staff?authorizeAdmin:accountOperations.has(name)?async()=>true:authorizeStudent,fetchImpl});}
    catch(e){if(staff&&e.code==='STUDENT_NOT_ELIGIBLE')throw fault('ADMIN_REQUIRED',403);throw e;}
    const request=operation(name,input,verified.userId);
    const headers={apikey:publishableKey,Authorization:'Bearer '+accessToken,Accept:'application/json',...(request.body!==undefined?{'Content-Type':'application/json'}:{}),...(request.prefer?{Prefer:request.prefer}:{})};
