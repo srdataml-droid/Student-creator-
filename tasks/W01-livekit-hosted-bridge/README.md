@@ -1,0 +1,2 @@
+# Hosted LiveKit grant bridge
+Depends on Week 6 PR #46 and Week 1 current session #50. Reuses Week 6 room service/token primitives; no edits to Week 6 branch. Dedicated staging, explicit gate, two-minute tokens, immutable role, fresh server check, no client payment claims. Provider secret must be supplied separately from SIP. Hosted class creation/closure, attendance and client integration require Week 6 coordinated review; actual two-client streaming, reconnect and revocation not verified. No room created in SQL or mocked tests.
