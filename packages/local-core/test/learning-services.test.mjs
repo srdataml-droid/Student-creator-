@@ -339,11 +339,15 @@ test('admin expiry prevents abandoned live rooms and queues financial review for
   try{
     const a=await x.prepare();
     const paid=await x.call('courses/'+a.course+'/classes','POST',x.schedule(a.course,'expired-paid',25000),a.host.cookie);
-    const open=await x.call('courses/'+a.course+'/classes','POST',x.schedule(a.course,'expired-open'),a.host.cookie);
+    // The real scheduling contract rejects overlapping classes for one host.
+    const later=x.schedule(a.course,'expired-open');
+    later.startsAt=new Date(x.clock.ms+90*60000).toISOString();
+    later.endsAt=new Date(x.clock.ms+150*60000).toISOString();
+    const open=await x.call('courses/'+a.course+'/classes','POST',later,a.host.cookie);
     assert.equal(paid.status,201);assert.equal(open.status,201);
     const paidId=paid.body.class.id,openId=open.body.class.id;
     assert.equal((await x.call('classes/'+paidId+'/enroll','POST',{},a.viewer.cookie)).status,200);
-    x.clock.ms+=4*60000;
+    x.clock.ms+=86*60000;
     assert.equal((await x.call('classes/'+openId+'/open','POST',{},a.host.cookie)).status,200);
     x.clock.ms+=70*60000;
     assert.equal((await x.call('admin/learning-classes/expire','POST',{},a.viewer.cookie)).status,403);
