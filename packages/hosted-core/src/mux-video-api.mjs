@@ -20,7 +20,8 @@ function alias(env,names){
  const vals=names.map(n=>env[n]).filter(v=>typeof v==='string'&&v.trim()).map(v=>v.trim());
  if(vals.some(v=>v!==vals[0]))throw unavailable();return vals[0];
 }
-export function createMuxTestClient({tokenId,tokenSecret,origin,fetcher=fetch}={}){
+export function createMuxTestClient({tokenId,tokenSecret,origin,fetcher=fetch,testAsset=true}={}){
+ if(typeof testAsset!=='boolean')throw unavailable();
  if(!ID.test(tokenId??'')||typeof tokenSecret!=='string'||tokenSecret.length<8||tokenSecret.length>512||
  tokenSecret.includes('\n')||!validOrigin(origin))throw unavailable();
  const headers={authorization:'Basic '+Buffer.from(tokenId+':'+tokenSecret).toString('base64'),'content-type':'application/json'};
@@ -32,20 +33,23 @@ export function createMuxTestClient({tokenId,tokenSecret,origin,fetcher=fetch}={
   if(!data||typeof data!=='object'||Array.isArray(data))throw unavailable();return data;
  }
  return {
-  create:reservation=>{if(!UUID.test(reservation))throw unavailable();return call('uploads',{cors_origin:origin,timeout:900,test:true,
-   new_asset_settings:{test:true,playback_policies:['signed'],video_quality:'basic',passthrough:reservation,master_access:'none'}});},
+  testAsset,
+  create:reservation=>{if(!UUID.test(reservation))throw unavailable();return call('uploads',{cors_origin:origin,timeout:900,test:testAsset,
+   new_asset_settings:{test:testAsset,playback_policies:['signed'],video_quality:'basic',passthrough:reservation,master_access:'none'}});},
   getUpload:id=>{if(!ID.test(id))throw unavailable();return call('uploads/'+id);},
   getAsset:id=>{if(!ID.test(id))throw unavailable();return call('assets/'+id);}
  };
 }
-export function validUpload(data,reservation,uploadId){
+// Mux may omit the false test flag for normal production resources.
+export const muxModeMatches=(value,testAsset=true)=>testAsset?value===true:value===false||value===undefined;
+export function validUpload(data,reservation,uploadId,testAsset=true){
  const settings=data?.new_asset_settings;
  return ID.test(data?.id??'')&&(!uploadId||data.id===uploadId)&&settings?.passthrough===reservation&&
  Array.isArray(settings.playback_policies)&&settings.playback_policies.length===1&&settings.playback_policies[0]==='signed'&&
- data.test===true&&settings.test!==false;
+ muxModeMatches(data.test,testAsset)&&(testAsset?settings.test!==false:muxModeMatches(settings.test,false));
 }
-export function assetSnapshot(asset,reservation,uploadId,assetId){
- if(asset?.id!==assetId||asset.passthrough!==reservation||asset.upload_id!==uploadId||asset.test!==true||
+export function assetSnapshot(asset,reservation,uploadId,assetId,testAsset=true){
+ if(asset?.id!==assetId||asset.passthrough!==reservation||asset.upload_id!==uploadId||!muxModeMatches(asset.test,testAsset)||
  (Array.isArray(asset.playback_ids)&&asset.playback_ids.some(p=>p?.policy!=='signed')))
  return {state:'unsafe',assetId,playbackId:null};
  if(asset.status==='errored')return {state:'errored',assetId,playbackId:null};
@@ -55,12 +59,12 @@ export function assetSnapshot(asset,reservation,uploadId,assetId){
  return {state:'unsafe',assetId,playbackId:null};
 }
 export async function reconcileMuxUpload({mux,store,row,upload}){
- if(!UUID.test(row?.id??'')||!validUpload(upload,row.id,row.uploadId))throw unavailable();
+ if(!UUID.test(row?.id??'')||!validUpload(upload,row.id,row.uploadId,mux.testAsset!==false))throw unavailable();
  let snap={state:upload.status,assetId:null,playbackId:null};
  let uploadUrl;
  if(upload.status==='waiting')uploadUrl=safeUploadUrl(upload.url);
  else if(upload.status==='asset_created'&&ID.test(upload.asset_id??'')){
-  snap=assetSnapshot(await mux.getAsset(upload.asset_id),row.id,upload.id,upload.asset_id);
+  snap=assetSnapshot(await mux.getAsset(upload.asset_id),row.id,upload.id,upload.asset_id,mux.testAsset!==false);
  }else if(!['errored','cancelled','timed_out'].includes(upload.status))throw unavailable();
  const updated=await store.apply({reservation:row.id,uploadId:upload.id,...snap});
  if(!updated||updated.id!==row.id||!states.includes(updated.state))throw unavailable();
@@ -107,15 +111,20 @@ export function createMuxPlaybackHandler({auth,store,mux,signingKeyId,privateKey
    if(!lesson||lesson.viewerId!==user.id||lesson.id!==lessonId)return json(403,{error:'PLAYBACK_FORBIDDEN'});
    // Recheck the provider before every staging grant; a deleted, public or
    // differently associated asset must never get a fresh signed token.
-   const current=assetSnapshot(await mux.getAsset(lesson.assetId),lesson.reservationId,lesson.uploadId,lesson.assetId);
+   const current=assetSnapshot(await mux.getAsset(lesson.assetId),lesson.reservationId,lesson.uploadId,lesson.assetId,mux.testAsset!==false);
    if(current.state!=='ready'||current.playbackId!==lesson.playbackId)return json(403,{error:'PLAYBACK_UNAVAILABLE'});
    const grant=await issueAuthorizedMuxPlayback({viewer:user,lessonId,loadLesson:async()=>lesson,
-    authorizeViewer:async({viewer})=>viewer.id===lesson.viewerId,signingKeyId,privateKeyBase64,ttlSeconds:120});
+    authorizeViewer:async({viewer})=>{
+     if(viewer.id!==lesson.viewerId)return false;
+     const currentUser=await auth.getUser(token),fresh=await store.authorizedPlayback({viewer:viewer.id,lessonId});
+     return currentUser?.id===viewer.id&&fresh?.viewerId===viewer.id&&fresh.id===lessonId&&fresh.assetId===lesson.assetId&&fresh.playbackId===lesson.playbackId;
+    },signingKeyId,privateKeyBase64,ttlSeconds:120});
    return json(200,grant);
   }catch{return json(503,{error:'MUX_PLAYBACK_UNAVAILABLE'});}
  };
 }
-export function createMuxVideoStore({url,serverKey,fetcher=fetch}){
+export function createMuxVideoStore({url,serverKey,fetcher=fetch,testAsset=true}){
+ const mode=testAsset?'test':'live';
  if(url!=='https://'+REF+'.supabase.co'||!serverKey)throw unavailable();
  async function rpc(name,body){
   const r=await fetcher(new URL('/rest/v1/rpc/'+name,url),{method:'POST',
@@ -123,25 +132,25 @@ export function createMuxVideoStore({url,serverKey,fetcher=fetch}){
    redirect:'error',cache:'no-store',signal:AbortSignal.timeout(8000)});
   if(!r.ok)throw unavailable();return r.json();
  }
- return {reserve:({creator,lessonId})=>rpc('reserve_mux_test_upload',{_creator:creator,_content:lessonId}),
-  get:({creator,lessonId})=>rpc('get_mux_test_upload',{_creator:creator,_content:lessonId}),
-  apply:({reservation,uploadId,assetId,playbackId,state})=>rpc('apply_mux_test_snapshot',{_reservation:reservation,_upload:uploadId,_asset:assetId,_playback:playbackId,_state:state}),
-  authorizedPlayback:({viewer,lessonId})=>rpc('authorized_mux_test_playback',{_viewer:viewer,_content:lessonId})};
+ return {reserve:({creator,lessonId})=>rpc('reserve_mux_'+mode+'_upload',{_creator:creator,_content:lessonId}),
+  get:({creator,lessonId})=>rpc('get_mux_'+mode+'_upload',{_creator:creator,_content:lessonId}),
+  apply:({reservation,uploadId,assetId,playbackId,state})=>rpc('apply_mux_'+mode+'_snapshot',{_reservation:reservation,_upload:uploadId,_asset:assetId,_playback:playbackId,_state:state}),
+  authorizedPlayback:({viewer,lessonId})=>rpc('authorized_mux_'+mode+'_playback',{_viewer:viewer,_content:lessonId})};
 }
 export function buildMuxVideoRoute({getEnv=()=>process.env,fetcher=fetch,playback=false}={}){
  return async(request,context)=>{
   try{
    const env=getEnv();
-   if(env.APP_DATA_MODE!=='hosted'||env.STUDENT_CREATORS_STAGING_APPROVED!=='true'||env.STUDENT_CREATORS_PROJECT_REF!==REF||
-    env.STUDENT_CREATORS_PUBLIC_REGISTRATION!=='false'||env.STUDENT_CREATORS_REAL_PAYMENT_ENABLED!=='false'||
-    env.STUDENT_CREATORS_MUX_TEST_VIDEO_ENABLED!=='true')throw unavailable();
+   const live=env.STUDENT_CREATORS_ENVIRONMENT==='production';
+   if(env.APP_DATA_MODE!=='hosted'||env.STUDENT_CREATORS_PROJECT_REF!==REF||env.STUDENT_CREATORS_PUBLIC_REGISTRATION!=='false'||
+    (live?env.STUDENT_CREATORS_MUX_LIVE_VIDEO_ENABLED!=='true'||env.STUDENT_CREATORS_MUX_TEST_VIDEO_ENABLED==='true':env.STUDENT_CREATORS_STAGING_APPROVED!=='true'||env.STUDENT_CREATORS_REAL_PAYMENT_ENABLED!=='false'||env.STUDENT_CREATORS_MUX_TEST_VIDEO_ENABLED!=='true'))throw unavailable();
    const cfg=readDedicatedSupabaseRuntimeConfig(env,{server:true});
    if(!cfg||cfg.url!=='https://'+REF+'.supabase.co')throw unavailable();
    const origin=env.STUDENT_CREATORS_MUX_UPLOAD_ORIGIN;
    const mux=createMuxTestClient({tokenId:alias(env,['MUX_TOKEN_ID','mux_token_id']),
-    tokenSecret:alias(env,['MUX_TOKEN_SECRET','mux_token_secret']),origin,fetcher});
+    tokenSecret:alias(env,['MUX_TOKEN_SECRET','mux_token_secret']),origin,fetcher,testAsset:!live});
    const auth=createCurrentSupabaseAuth({url:cfg.url,publicKey:cfg.publishableKey,serverKey:cfg.serverKey,requireStudent:true,fetcher});
-   const store=createMuxVideoStore({url:cfg.url,serverKey:cfg.serverKey,fetcher});
+   const store=createMuxVideoStore({url:cfg.url,serverKey:cfg.serverKey,fetcher,testAsset:!live});
    const handler=playback?createMuxPlaybackHandler({auth,store,mux,
     signingKeyId:alias(env,['MUX_PLAYBACK_SIGNING_KEY_ID','mux_playback_signing_key_id']),
     privateKeyBase64:alias(env,['MUX_PLAYBACK_PRIVATE_KEY_BASE64','mux_playback_private_key_base64'])})

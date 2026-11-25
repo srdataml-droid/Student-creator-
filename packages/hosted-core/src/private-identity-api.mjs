@@ -125,9 +125,10 @@ export function buildIdentityEvidenceRoute({getEnv=()=>process.env,fetcher=fetch
  return async (request,context)=>{
   try{
    const env=getEnv();
-   if(env.APP_DATA_MODE!=='hosted'||env.STUDENT_CREATORS_STAGING_APPROVED!=='true'||
+   const live=env.STUDENT_CREATORS_ENVIRONMENT==='production';
+   if(env.APP_DATA_MODE!=='hosted'||(!live&&env.STUDENT_CREATORS_STAGING_APPROVED!=='true')||
     env.STUDENT_CREATORS_PROJECT_REF!==REF||env.STUDENT_CREATORS_PUBLIC_REGISTRATION!=='false'||
-    env.STUDENT_CREATORS_REAL_PAYMENT_ENABLED!=='false'||env.STUDENT_CREATORS_PRIVATE_IDENTITY_BUCKET!==BUCKET||
+    (!live&&env.STUDENT_CREATORS_REAL_PAYMENT_ENABLED!=='false')||env.STUDENT_CREATORS_PRIVATE_IDENTITY_BUCKET!==BUCKET||
     env.STUDENT_CREATORS_IDENTITY_DATA_POLICY_APPROVED!=='true'||env.STUDENT_CREATORS_PRIVATE_IDENTITY_UPLOAD_ENABLED!=='true')
     throw unavailable();
    const config=readDedicatedSupabaseRuntimeConfig(env,{server:true});

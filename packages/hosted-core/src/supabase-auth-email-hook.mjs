@@ -77,8 +77,9 @@ export function buildSupabaseAuthEmailHook({getEnv=()=>process.env,fetcher=fetch
  return async request=>{
   try{
    const env=getEnv();
-   if(env.APP_DATA_MODE!=='hosted'||env.STUDENT_CREATORS_STAGING_APPROVED!=='true'||env.STUDENT_CREATORS_PROJECT_REF!==REF||
-    env.STUDENT_CREATORS_PUBLIC_REGISTRATION!=='false'||env.STUDENT_CREATORS_REAL_PAYMENT_ENABLED!=='false'||
+   const live=env.STUDENT_CREATORS_ENVIRONMENT==='production';
+   if(env.APP_DATA_MODE!=='hosted'||(!live&&env.STUDENT_CREATORS_STAGING_APPROVED!=='true')||env.STUDENT_CREATORS_PROJECT_REF!==REF||
+    env.STUDENT_CREATORS_PUBLIC_REGISTRATION!=='false'||(!live&&env.STUDENT_CREATORS_REAL_PAYMENT_ENABLED!=='false')||
     env.STUDENT_CREATORS_AUTH_EMAIL_ENABLED!=='true'||env.STUDENT_CREATORS_PILOT_SEATS!=='1')throw invalid();
    const cfg=readDedicatedSupabaseRuntimeConfig(env,{server:true});
    if(!cfg||cfg.url!=='https://'+REF+'.supabase.co')throw invalid();
