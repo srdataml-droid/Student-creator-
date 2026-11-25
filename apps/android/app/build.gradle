@@ -19,5 +19,8 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
-    // Internal package ID is deliberately provisional. No release key is present.
+    // Internal package ID is deliberately provisional. Do not create a release variant.
+}
+androidComponents {
+    beforeVariants(selector().withBuildType('release')) { variant -> variant.enable = false }
 }
