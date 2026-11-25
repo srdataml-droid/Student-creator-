@@ -1,3 +1,4 @@
+import {requireSafePilotAuthSettings} from './supabase-auth-settings.mjs';
 import {createHmac,timingSafeEqual} from 'node:crypto';
 import {readDedicatedSupabaseRuntimeConfig,supabaseServerHeaders} from '../../content-core/src/supabase-runtime-config.mjs';
 import {readBoundedGatewayResponse} from '../../payment-core/src/bounded-response.mjs';
@@ -41,6 +42,7 @@ export function createHostedAuthProvider({url,publicKey,serverKey,origin,fetcher
   return session(JSON.parse(await readBoundedGatewayResponse(r,65536,unavailable)));
  }
  return {
+  assertSafeSettings:()=>requireSafePilotAuthSettings({url,publicKey,fetcher}),
   invite:email=>call('invite?redirect_to='+encodeURIComponent(origin+'/auth/confirm'),{admin:true,data:{email}}),
   signIn:(email,password)=>call('token?grant_type=password',{data:{email,password},sessionResponse:true}),
   refresh:refreshToken=>call('token?grant_type=refresh_token',{data:{refresh_token:refreshToken},sessionResponse:true}),
@@ -86,6 +88,7 @@ export function createHostedAuthHandler({provider,store,currentAuth,origin,pilot
    if(action==='refresh'){
     const refresh=readRefresh(request);if(!refresh)return unauthorized();
     if(await admit('refresh',refresh)!==true)return json(429,{error:'TRY_LATER'});
+    if(await provider.assertSafeSettings()!==true)throw unavailable();
     const s=await provider.refresh(refresh);
     if(!s)return json(401,{error:'AUTH_REQUIRED'},clearCookie());
     return await publishSession(s);
@@ -107,6 +110,7 @@ export function createHostedAuthHandler({provider,store,currentAuth,origin,pilot
     const code=typeof b.inviteCode==='string'&&b.inviteCode.length<=128?b.inviteCode:'';
     const left=Buffer.from(digest(pepper,'invite',code),'hex'),right=Buffer.from(digest(pepper,'invite',inviteSecret),'hex');
     if(!timingSafeEqual(left,right))return json(403,{error:'INVITATION_NOT_AVAILABLE'});
+    if(await provider.assertSafeSettings()!==true)throw unavailable();
     if(await store.claimInvite(recipient)!==true)return accepted();
     let requested=false;try{requested=await provider.invite(pilotEmail)===true;}catch{}
     const done=await store.finishInvite(recipient,requested?'requested':'uncertain');
@@ -123,10 +127,12 @@ export function createHostedAuthHandler({provider,store,currentAuth,origin,pilot
    if(await admit(action,email)!==true)return json(429,{error:'TRY_LATER'});
    if(action==='sign-in'){
     if(!allowedLogin(email)||!passwordOK(b.password))return unauthorized();
+    if(await provider.assertSafeSettings()!==true)throw unavailable();
     return await publishSession(await provider.signIn(email,b.password));
    }
    if(email!==pilotEmail||!['invite','signup','recovery'].includes(b.purpose)||!/^\d{6,10}$/.test(b.code??'')||!passwordOK(b.password))
     return unauthorized();
+   if(await provider.assertSafeSettings()!==true)throw unavailable();
    const verified=await provider.verify(email,b.code,b.purpose);
    if(!verified||normalized(verified.user?.email)!==email)return unauthorized();
    const user=await currentAuth.getUser(verified.accessToken);
@@ -166,6 +172,7 @@ export function buildHostedAuthRoute({getEnv=()=>process.env,fetcher=fetch}={}){
  catch{return json(503,{error:'HOSTED_AUTH_UNAVAILABLE'});}};
 }
 export async function processHostedRecovery({provider,store,pilotEmail,pepper}){
+ if(await provider.assertSafeSettings()!==true)throw unavailable();
  const job=await store.claimRecovery(digest(pepper,'pilot',pilotEmail));
  if(job===null)return {status:'idle'};
  if(!UUID.test(job?.id??'')||!UUID.test(job.leaseId??''))throw unavailable();

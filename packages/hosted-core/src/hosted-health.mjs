@@ -1,3 +1,4 @@
+import {isSafePilotAuthSettings} from './supabase-auth-settings.mjs';
 import {createHash,timingSafeEqual,randomUUID} from 'node:crypto';
 import {readDedicatedSupabaseRuntimeConfig,supabaseServerHeaders} from '../../content-core/src/supabase-runtime-config.mjs';
 import {readBoundedGatewayResponse} from '../../payment-core/src/bounded-response.mjs';
@@ -40,7 +41,7 @@ export function buildHostedHealthRoute({getEnv=()=>process.env,fetcher=fetch}={}
   const sessionBody={_user_id:'00000000-0000-4000-8000-000000000001',_session_id:'00000000-0000-4000-8000-000000000002'};
   const rpc='/rest/v1/rpc/student_creators_session_active';
   const [auth,catalog,session,publicDenied,identityBucket,mediaBucket]=await Promise.all([
-   probe(async()=>{const r=await json(await call('/auth/v1/settings',authHeaders));return r.disable_signup===true;}),
+   probe(async()=>{const r=await json(await call('/auth/v1/settings',authHeaders));return isSafePilotAuthSettings(r);}),
    probe(async()=>{const r=await json(await call('/rest/v1/institutions?select=id&limit=0',authHeaders));return Array.isArray(r)&&r.length===0;}),
    probe(async()=>await json(await call(rpc,serverHeaders,sessionBody))===false),
    probe(async()=>{const r=await call(rpc,authHeaders,sessionBody);return [401,403,404].includes(r.status);}),
@@ -49,7 +50,7 @@ export function buildHostedHealthRoute({getEnv=()=>process.env,fetcher=fetch}={}
     return r.id===b.id&&r.public===false&&r.file_size_limit===b.size&&sameTypes(r.allowed_mime_types,b.types);
    }))
   ]);
-  const checks={configuration:true,authSignupsDisabled:auth,catalogRead:catalog,serviceSessionRpc:session,
+  const checks={configuration:true,authPilotSettingsSafe:auth,catalogRead:catalog,serviceSessionRpc:session,
     publicSessionRpcDenied:publicDenied,identityBucketPrivate:identityBucket,mediaBucketPrivate:mediaBucket};
   const ok=Object.values(checks).every(Boolean);
   // No claim about provider delivery, enrollment, streaming, payment, scanner,

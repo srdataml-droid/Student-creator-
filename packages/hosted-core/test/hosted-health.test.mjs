@@ -11,7 +11,7 @@ function fixture({e=env,breakCheck}={}){
  const calls=[];
  const handler=buildHostedHealthRoute({getEnv:()=>e,fetcher:async(url,opts)=>{
   calls.push({url:String(url),opts});const path=new URL(url).pathname;
-  if(path==='/auth/v1/settings')return Response.json({disable_signup:breakCheck!=='signup',private:'never show'});
+  if(path==='/auth/v1/settings')return Response.json({disable_signup:breakCheck!=='signup',mailer_autoconfirm:false,external:{anonymous_users:false,email:true},private:'never show'});
   if(path==='/rest/v1/institutions')return Response.json([]);
   if(path.endsWith('/student_creators_session_active')){
    return opts.headers.apikey===env.supabase_publishable_key?Response.json(false,{status:breakCheck==='rpc'?200:403}):Response.json(false);
