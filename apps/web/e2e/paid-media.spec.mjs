@@ -1,5 +1,5 @@
 import {test,expect} from '@playwright/test';
-import {randomUUID} from 'node:crypto';
+import {randomUUID,createHash} from 'node:crypto';
 import {readFileSync} from 'node:fs';
 import {openLocalStore} from '../../../packages/local-core/src/store.mjs';
 import {createPaystackClient} from '../../../packages/payment-core/src/paystack-client.mjs';
@@ -15,9 +15,20 @@ test('synthetic verified payment through protected playback and refund',async({b
   const course=store.listCourses().find(c=>c.institutionId===f.creator.user.institutionId);
   f.id=store.createDraft(f.creator.user,{courseId:course.id,title:'Synthetic browser paid work',description:'Original',previewText:'Preview',lessonText:'An independent original synthetic explanation with worked steps and discussion. '.repeat(3),rightsAttested:true,creationKey:randomUUID()}).lesson.id;
   store.setLessonPrice(f.creator.user,f.id,20000);
-  const media=process.env.PLAYWRIGHT_PLAYABLE_FIXTURE?
-   readFileSync(process.env.PLAYWRIGHT_PLAYABLE_FIXTURE):
-   Buffer.from(readFileSync(new URL('../../../packages/local-core/test/fixtures/synthetic-1s.mp4.base64',import.meta.url),'utf8'),'base64');
+  let codec='structural',filename='synthetic-1s.mp4.base64';
+  if(process.env.PLAYWRIGHT_VALIDATE_CODEC==='1'){
+   codec=await page.evaluate(()=>{
+    const video=document.createElement('video');
+    if(video.canPlayType('video/mp4; codecs="avc1.42c01e"'))return 'h264';
+    if(video.canPlayType('video/mp4; codecs="vp09.00.10.08"'))return 'vp9';
+    return 'unsupported';
+   });
+   expect(['h264','vp9']).toContain(codec);
+   filename=codec==='h264'?'synthetic-playable-h264.mp4.base64':'synthetic-playable-vp9.mp4.base64';
+  }
+  const media=Buffer.from(readFileSync(new URL('../../../packages/local-core/test/fixtures/'+filename,import.meta.url),'utf8'),'base64');
+  if(codec!=='structural')expect(createHash('sha256').update(media).digest('hex')).toBe(
+    codec==='h264'?'d0ff3303abf0f3d98c364ce8a6512e03b3742650e17cbf589ca4a85e4c6c0b79':'7363779f4ba238f2007a5573009b1cd4ca2310e5de3a600c8fdefde25da2f2cf');
   store.saveVideo(f.creator.user,f.id,media);
   store.submit(f.creator.user,f.id);store.review(f.admin.user,f.id,{decision:'approve',reason:'Synthetic original browser work'});
   const created=await context.request.post(`/api/local/lessons/${f.id}/orders`,{headers:{origin:'http://localhost:3000'},data:{requestKey:randomUUID()}});
@@ -38,7 +49,7 @@ test('synthetic verified payment through protected playback and refund',async({b
   if(process.env.PLAYWRIGHT_VALIDATE_CODEC==='1'){
     // Opt-in codec validation requires a browser and media fixture with
     // matching decoder support; do not silently pass a NotSupportedError.
-    expect(process.env.PLAYWRIGHT_PLAYABLE_FIXTURE,'Codec validation requires a generated playable fixture').toBeTruthy();
+    expect(['h264','vp9']).toContain(codec);
     const cdp=await context.newCDPSession(page);
     try{
       await cdp.send('Network.enable');
@@ -47,7 +58,7 @@ test('synthetic verified payment through protected playback and refund',async({b
       await expect.poll(()=>page.locator('video').evaluate(v=>v.currentTime),{timeout:10000}).toBeGreaterThan(.2);
       const decoded=await page.locator('video').evaluate(v=>{v.pause();return {width:v.videoWidth,height:v.videoHeight,position:v.currentTime,duration:v.duration};});
       expect(decoded.width).toBe(64);expect(decoded.height).toBe(64);expect(decoded.duration).toBeGreaterThan(1);
-      console.log('Synthetic H.264 playback decoded under constrained Chromium network',JSON.stringify(decoded));
+      console.log('Synthetic protected playback decoded under constrained Chromium network',JSON.stringify({codec,...decoded}));
     }finally{
       await cdp.send('Network.emulateNetworkConditions',{offline:false,latency:0,downloadThroughput:-1,uploadThroughput:-1});
       await cdp.detach();
