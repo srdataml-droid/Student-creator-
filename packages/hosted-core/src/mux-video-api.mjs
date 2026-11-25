@@ -1,6 +1,6 @@
 import {createCurrentSupabaseAuth} from './supabase-current-auth.mjs';
 import {issueAuthorizedMuxPlayback} from './mux-playback.mjs';
-import {readSupabaseRuntimeConfig,supabaseServerHeaders} from '../../content-core/src/supabase-runtime-config.mjs';
+import {readDedicatedSupabaseRuntimeConfig,supabaseServerHeaders} from '../../content-core/src/supabase-runtime-config.mjs';
 import {readBoundedGatewayResponse} from '../../payment-core/src/bounded-response.mjs';
 const REF='jnkqmlbkkvccnxrgkpno';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -11,7 +11,7 @@ const states=['initializing','waiting','processing','ready','errored','cancelled
 function validOrigin(value){
  try{const u=new URL(value);return u.protocol==='https:'&&u.origin===value&&!u.username&&!u.password&&!!u.hostname;}catch{return false;}
 }
-function safeUploadUrl(value){
+export function safeUploadUrl(value){
  try{const u=new URL(value);if(u.protocol!=='https:'||u.username||u.password||u.port||u.hash||!u.search||
  !(u.hostname==='storage.googleapis.com'||u.hostname.endsWith('.storage.googleapis.com')||u.hostname.endsWith('.mux.com')||u.hostname.endsWith('.amazonaws.com')))
  throw unavailable();return u.toString();}catch{throw unavailable();}
@@ -38,13 +38,13 @@ export function createMuxTestClient({tokenId,tokenSecret,origin,fetcher=fetch}={
   getAsset:id=>{if(!ID.test(id))throw unavailable();return call('assets/'+id);}
  };
 }
-function validUpload(data,reservation,uploadId){
+export function validUpload(data,reservation,uploadId){
  const settings=data?.new_asset_settings;
  return ID.test(data?.id??'')&&(!uploadId||data.id===uploadId)&&settings?.passthrough===reservation&&
  Array.isArray(settings.playback_policies)&&settings.playback_policies.length===1&&settings.playback_policies[0]==='signed'&&
- data.test!==false&&settings.test!==false;
+ data.test===true&&settings.test!==false;
 }
-function assetSnapshot(asset,reservation,uploadId,assetId){
+export function assetSnapshot(asset,reservation,uploadId,assetId){
  if(asset?.id!==assetId||asset.passthrough!==reservation||asset.upload_id!==uploadId||asset.test!==true||
  (Array.isArray(asset.playback_ids)&&asset.playback_ids.some(p=>p?.policy!=='signed')))
  return {state:'unsafe',assetId,playbackId:null};
@@ -135,7 +135,7 @@ export function buildMuxVideoRoute({getEnv=()=>process.env,fetcher=fetch,playbac
    if(env.APP_DATA_MODE!=='hosted'||env.STUDENT_CREATORS_STAGING_APPROVED!=='true'||env.STUDENT_CREATORS_PROJECT_REF!==REF||
     env.STUDENT_CREATORS_PUBLIC_REGISTRATION!=='false'||env.STUDENT_CREATORS_REAL_PAYMENT_ENABLED!=='false'||
     env.STUDENT_CREATORS_MUX_TEST_VIDEO_ENABLED!=='true')throw unavailable();
-   const cfg=readSupabaseRuntimeConfig(env,{server:true});
+   const cfg=readDedicatedSupabaseRuntimeConfig(env,{server:true});
    if(!cfg||cfg.url!=='https://'+REF+'.supabase.co')throw unavailable();
    const origin=env.STUDENT_CREATORS_MUX_UPLOAD_ORIGIN;
    const mux=createMuxTestClient({tokenId:alias(env,['MUX_TOKEN_ID','mux_token_id']),

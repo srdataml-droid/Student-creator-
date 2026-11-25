@@ -1,5 +1,5 @@
 import {reconcileMuxUpload,createMuxTestClient,createMuxVideoStore} from './mux-video-api.mjs';
-import {readSupabaseRuntimeConfig,supabaseServerHeaders} from '../../content-core/src/supabase-runtime-config.mjs';
+import {readDedicatedSupabaseRuntimeConfig,supabaseServerHeaders} from '../../content-core/src/supabase-runtime-config.mjs';
 const UUID=/^[0-9a-f-]{36}$/i, ID=/^[A-Za-z0-9_-]{6,128}$/;
 const REF='jnkqmlbkkvccnxrgkpno';
 const unavailable=()=>new Error('Mux worker unavailable');
@@ -27,7 +27,7 @@ export async function processMuxEvent({queue,mux,store}){
     if(upload.id!==asset.upload_id||upload.asset_id!==asset.id||upload.new_asset_settings?.passthrough!==asset.passthrough)throw unavailable();
    }
    const reservation=upload.new_asset_settings?.passthrough;
-   if(!UUID.test(reservation??'')||upload.test===false||upload.new_asset_settings?.test===false)throw unavailable();
+   if(!UUID.test(reservation??'')||upload.test!==true||upload.new_asset_settings?.test===false)throw unavailable();
    await reconcileMuxUpload({mux,store,row:{id:reservation},upload});
    outcome='processed';
   }
@@ -40,7 +40,7 @@ export function createMuxWorker({env=process.env,fetcher=fetch}={}){
  env.STUDENT_CREATORS_PUBLIC_REGISTRATION!=='false'||env.STUDENT_CREATORS_REAL_PAYMENT_ENABLED!=='false'||
  env.STUDENT_CREATORS_MUX_TEST_VIDEO_ENABLED!=='true'||env.STUDENT_CREATORS_MUX_WEBHOOK_ENABLED!=='true'||
  env.STUDENT_CREATORS_MUX_WORKER_ENABLED!=='true')throw unavailable();
- const cfg=readSupabaseRuntimeConfig(env,{server:true});
+ const cfg=readDedicatedSupabaseRuntimeConfig(env,{server:true});
  if(!cfg||cfg.url!=='https://'+REF+'.supabase.co')throw unavailable();
  function alias(names){const vals=names.map(n=>env[n]).filter(v=>typeof v==='string'&&v.trim()).map(v=>v.trim());if(vals.some(v=>v!==vals[0]))throw unavailable();return vals[0];}
  const mux=createMuxTestClient({tokenId:alias(['MUX_TOKEN_ID','mux_token_id']),tokenSecret:alias(['MUX_TOKEN_SECRET','mux_token_secret']),origin:env.STUDENT_CREATORS_MUX_UPLOAD_ORIGIN,fetcher});

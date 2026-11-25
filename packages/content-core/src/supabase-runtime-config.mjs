@@ -45,3 +45,30 @@ export function supabaseServerHeaders(serverKey) {
     ...(serverKey.startsWith('sb_secret_')?{}:{authorization:'Bearer '+serverKey})
   };
 }
+
+// Actual app entrypoints require explicit staging approval, the dedicated project,
+// and distinct public/server credential types. Legacy JWT role claims here are
+// a configuration sanity check only; Supabase verifies their signatures.
+const STAGING_REF='jnkqmlbkkvccnxrgkpno';
+function credentialRole(key,role){
+  if(typeof key!=='string'||key.length>4096)return false;
+  if(role==='anon'&&/^sb_publishable_[A-Za-z0-9_-]{12,}$/.test(key))return true;
+  if(role==='service_role'&&/^sb_secret_[A-Za-z0-9_-]{12,}$/.test(key))return true;
+  if(!/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(key))return false;
+  try{
+    const p=JSON.parse(Buffer.from(key.split('.')[1],'base64url').toString('utf8'));
+    return p.role===role&&p.ref===STAGING_REF;
+  }catch{return false;}
+}
+export function readDedicatedSupabaseRuntimeConfig(env={},options={}){
+  if(env.APP_DATA_MODE!=='hosted'||env.STUDENT_CREATORS_STAGING_APPROVED!=='true'||
+     env.STUDENT_CREATORS_PROJECT_REF!==STAGING_REF||
+     env.STUDENT_CREATORS_PUBLIC_REGISTRATION!=='false'||
+     env.STUDENT_CREATORS_REAL_PAYMENT_ENABLED!=='false')return null;
+  const config=readSupabaseRuntimeConfig(env,options);
+  if(!config)return null;
+  if(!credentialRole(config.publishableKey,'anon')||
+     (options.server&&(!credentialRole(config.serverKey,'service_role')||
+       config.serverKey===config.publishableKey)))throw Error('INVALID_SUPABASE_CREDENTIAL_ROLE');
+  return config;
+}

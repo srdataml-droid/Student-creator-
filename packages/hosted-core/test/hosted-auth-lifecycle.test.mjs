@@ -10,7 +10,7 @@ function req(action,data,headers={}){
 }
 function fixture({providerOverrides={},storeOverrides={}}={}){
  const calls=[];
- const provider={invite:async e=>{calls.push(['invite',e]);return true;},signIn:async()=>session,refresh:async()=>session,
+ const provider={assertSafeSettings:async()=>true,invite:async e=>{calls.push(['invite',e]);return true;},signIn:async()=>session,refresh:async()=>session,
   verify:async()=>session,updatePassword:async()=>{calls.push(['password']);return true;},logout:async(t,g)=>{calls.push(['logout',g]);return true;},
   recover:async e=>{calls.push(['recover',e]);return true;},...providerOverrides};
  const store={admit:async x=>{calls.push(['admit',x]);return true;},claimInvite:async()=>true,finishInvite:async()=>true,
@@ -65,4 +65,18 @@ test('staging disabled or wrong origin fails without provider request',async()=>
  let n=0;const h=buildHostedAuthRoute({getEnv:()=>({}),fetcher:async()=>{n++;}});
  assert.equal((await h(req('sign-in',{email:pilotEmail,password}),{action:'sign-in'})).status,503);assert.equal(n,0);
  const d=fixture();assert.equal((await d.handler(req('invite',{inviteCode:inviteSecret},{origin:'https://evil.example'}),{action:'invite'})).status,403);assert.equal(d.calls.length,0);
+});
+
+test('unsafe Auth settings deny invite before reservation, sign-in, OTP completion, refresh and recovery worker',async()=>{
+ let claimed=0,providerCalls=0;
+ const d=fixture({providerOverrides:{assertSafeSettings:async()=>false,invite:async()=>{providerCalls++;},signIn:async()=>{providerCalls++;},
+ refresh:async()=>{providerCalls++;},verify:async()=>{providerCalls++;}},
+ storeOverrides:{claimInvite:async()=>{claimed++;return true;},claimRecovery:async()=>{claimed++;return null;}}});
+ for(const [action,body,headers] of [['invite',{inviteCode:inviteSecret},{}],['sign-in',{email:pilotEmail,password},{}],
+ ['complete',{email:pilotEmail,code:'123456',purpose:'recovery',password},{}],['refresh',null,{cookie:'__Secure-wk_refresh='+refreshToken}]]){
+  assert.equal((await d.handler(req(action,body,headers),{action})).status,503);
+ }
+ await assert.rejects(processHostedRecovery(d.deps));assert.equal(claimed,0);assert.equal(providerCalls,0);
+ // Logout remains available for containment even if the provider settings drift.
+ assert.equal((await d.handler(req('logout',null,{authorization:'Bearer '+token}),{action:'logout'})).status,200);
 });

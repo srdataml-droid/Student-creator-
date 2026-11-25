@@ -1,5 +1,5 @@
 import {createHmac,timingSafeEqual} from 'node:crypto';
-import {readSupabaseRuntimeConfig,supabaseServerHeaders} from '../../content-core/src/supabase-runtime-config.mjs';
+import {readDedicatedSupabaseRuntimeConfig,supabaseServerHeaders} from '../../content-core/src/supabase-runtime-config.mjs';
 import {createResendTransport} from './resend-transport.mjs';
 const MAX=65536,REF='jnkqmlbkkvccnxrgkpno';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -80,7 +80,7 @@ export function buildSupabaseAuthEmailHook({getEnv=()=>process.env,fetcher=fetch
    if(env.APP_DATA_MODE!=='hosted'||env.STUDENT_CREATORS_STAGING_APPROVED!=='true'||env.STUDENT_CREATORS_PROJECT_REF!==REF||
     env.STUDENT_CREATORS_PUBLIC_REGISTRATION!=='false'||env.STUDENT_CREATORS_REAL_PAYMENT_ENABLED!=='false'||
     env.STUDENT_CREATORS_AUTH_EMAIL_ENABLED!=='true'||env.STUDENT_CREATORS_PILOT_SEATS!=='1')throw invalid();
-   const cfg=readSupabaseRuntimeConfig(env,{server:true});
+   const cfg=readDedicatedSupabaseRuntimeConfig(env,{server:true});
    if(!cfg||cfg.url!=='https://'+REF+'.supabase.co')throw invalid();
    const origin=env.STUDENT_CREATORS_AUTH_ORIGIN,parsed=new URL(origin);
    if(parsed.origin!==origin||parsed.protocol!=='https:'||parsed.username||parsed.password)throw invalid();

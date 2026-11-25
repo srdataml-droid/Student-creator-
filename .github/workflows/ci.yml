@@ -15,6 +15,12 @@ jobs:
           node-version: '22'
       - name: Run tests (no dependencies required)
         run: npm test
+      - name: Install disposable ClamAV engine (no production signatures or credentials)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clamav-daemon
+      - name: Verify real clamd engine and worker integration on harmless synthetic signature
+        run: bash scripts/test-clamd-engine.sh
       - name: Verify source artefacts do not contain development secrets
         run: |
           if git ls-files | grep -E '(^|/)(\.env(\..*)?|.*\.pem|.*\.key)$' | grep -vE '\.env\.example$'; then
@@ -30,8 +36,15 @@ jobs:
       - name: Install from committed lockfile
         working-directory: apps/web
         run: npm ci --no-audit --no-fund
-      - name: Build Next.js app without production credentials
+      - name: Build Next.js with synthetic server-only credential canaries
         working-directory: apps/web
+        env:
+          APP_DATA_MODE: local
+          SUPABASE_SECRET_KEY: synthetic_ci_supabase_secret_canary_20261125
+          MUX_PLAYBACK_PRIVATE_KEY_BASE64: synthetic_ci_mux_secret_canary_20261125
+          LIVEKIT_API_SECRET: synthetic_ci_livekit_secret_canary_20261125
+          RESEND_API_KEY: synthetic_ci_resend_secret_canary_20261125
+          PAYSTACK_TEST_SECRET_KEY: synthetic_ci_paystack_secret_canary_20261125
         run: npm run build
 
   database-contract:
@@ -74,6 +87,9 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/migrations/0006_institution_identity_contract.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/0007_mux_webhook_idempotency.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/0008_hosted_rls_read_grants.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0009_restrict_content_metadata_columns.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0021_week01_runtime_privileges.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/runtime_privileges.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/smoke.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/creator_public_profiles.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/creator_restrictions.sql
@@ -96,6 +112,8 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/tests/auth_email_delivery.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/0016_week01_hosted_auth_lifecycle.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/hosted_auth_lifecycle.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0018_week01_session_aware_rls.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/session_aware_rls.sql
 
       - name: Restore disposable PostgreSQL backup into isolated database
         env:

@@ -9,6 +9,7 @@ DO $$ BEGIN
 END $$;
 BEGIN;
 SET LOCAL request.jwt.claim.sub='f2010000-0000-4000-8000-000000000001';
+SET LOCAL request.jwt.claims='{"sub":"f2010000-0000-4000-8000-000000000001","role":"authenticated","session_id":"f2030000-0000-4000-8000-000000000001"}';
 SET LOCAL ROLE authenticated;
 DO $$ BEGIN
  IF NOT EXISTS(SELECT 1 FROM public.student_profiles WHERE user_id='f2010000-0000-4000-8000-000000000001') OR EXISTS(SELECT 1 FROM public.student_profiles WHERE user_id='f2010000-0000-4000-8000-000000000002') THEN RAISE EXCEPTION 'Restored profile isolation broken'; END IF;

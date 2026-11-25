@@ -4,7 +4,7 @@ import {generateKeyPairSync} from 'node:crypto';
 import {createMuxTestClient,createMuxUploadHandler,createMuxPlaybackHandler,buildMuxVideoRoute,reconcileMuxUpload} from '../src/mux-video-api.mjs';
 const creator='11111111-1111-4111-8111-111111111111',lessonId='22222222-2222-4222-8222-222222222222',reservation='33333333-3333-4333-8333-333333333333';
 const origin='https://preview.example.invalid',uploadId='upload_123',assetId='asset_123',playbackId='playback_123';
-const upload={id:uploadId,status:'waiting',url:'https://storage.googleapis.com/private/upload?sig=synthetic',new_asset_settings:{passthrough:reservation,playback_policies:['signed'],test:true}};
+const upload={id:uploadId,test:true,status:'waiting',url:'https://storage.googleapis.com/private/upload?sig=synthetic',new_asset_settings:{passthrough:reservation,playback_policies:['signed'],test:true}};
 const asset={id:assetId,upload_id:uploadId,passthrough:reservation,test:true,status:'ready',playback_ids:[{id:playbackId,policy:'signed'}]};
 const req=(method='POST',token='fixture',o=origin)=>new Request(origin+'/api/lesson',{method,headers:{origin:o,...(token?{authorization:'Bearer '+token}:{})}});
 test('test-mode Mux creation sends only signed policy, bounded origin/expiry and no user metadata',async()=>{
@@ -47,4 +47,11 @@ test('signed playback requires DB authorization plus current provider asset; exp
 test('disabled staging configuration contacts no provider',async()=>{
  let n=0;const h=buildMuxVideoRoute({getEnv:()=>({}),fetcher:async()=>{n++;}});
  assert.equal((await h(req(),{lessonId})).status,503);assert.equal(n,0);
+});
+
+test('missing or false provider test flag never releases direct upload URL or reconciles asset',async()=>{
+ const row={id:reservation,uploadId,state:'waiting'};let applied=0;
+ const store={apply:async()=>{applied++;}};
+ for(const testFlag of [undefined,false,null])await assert.rejects(reconcileMuxUpload({mux:{},store,row,upload:{...upload,test:testFlag}}));
+ assert.equal(applied,0);
 });
