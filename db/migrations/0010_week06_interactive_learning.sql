@@ -51,6 +51,18 @@ CREATE TABLE public.learning_room_closures (
   attempts integer NOT NULL DEFAULT 0 CHECK(attempts>=0),
   updated_at timestamptz NOT NULL DEFAULT now()
 );
+-- Server-only participant eviction/revocation queue.
+-- Never allow a client to choose provider identities or revoke another user's grant.
+CREATE TABLE public.learning_participant_removals (
+  class_id uuid NOT NULL REFERENCES public.interactive_classes(id),
+  student_id uuid NOT NULL REFERENCES public.student_profiles(user_id),
+  state text NOT NULL DEFAULT 'pending' CHECK(state IN ('pending','done')),
+  attempts integer NOT NULL DEFAULT 0 CHECK(attempts>=0),
+  revoke_token_ts bigint NOT NULL CHECK(revoke_token_ts>0),
+  reason text NOT NULL CHECK(length(trim(reason)) BETWEEN 8 AND 500),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  PRIMARY KEY(class_id,student_id)
+);
 CREATE TABLE public.creator_availability (
   creator_id uuid PRIMARY KEY REFERENCES public.student_profiles(user_id),
   slots_json jsonb NOT NULL CHECK(jsonb_typeof(slots_json)='array'),
@@ -111,6 +123,7 @@ ALTER TABLE public.interactive_classes ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.interactive_class_enrollments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.interactive_class_presence ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.learning_room_closures ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.learning_participant_removals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.creator_availability ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.personal_learning_requests ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.personal_learning_disputes ENABLE ROW LEVEL SECURITY;
@@ -159,14 +172,14 @@ FOR SELECT TO authenticated USING (
 -- The refund review queue is never browser-readable. A service operator must
 -- verify an actual charge/refund against Week 5 ledger and policy.
 REVOKE ALL ON public.interactive_classes,public.interactive_class_enrollments,
- public.interactive_class_presence,public.learning_room_closures,public.creator_availability,public.personal_learning_requests,
+ public.interactive_class_presence,public.learning_room_closures,public.learning_participant_removals,public.creator_availability,public.personal_learning_requests,
  public.personal_learning_disputes,public.learning_refund_reviews,public.learning_notifications
  FROM PUBLIC,anon,authenticated;
 GRANT SELECT ON public.interactive_classes,public.interactive_class_enrollments,
  public.interactive_class_presence,public.creator_availability,public.personal_learning_requests,
  public.personal_learning_disputes,public.learning_notifications TO authenticated;
 GRANT ALL ON public.interactive_classes,public.interactive_class_enrollments,
- public.interactive_class_presence,public.learning_room_closures,public.creator_availability,public.personal_learning_requests,
+ public.interactive_class_presence,public.learning_room_closures,public.learning_participant_removals,public.creator_availability,public.personal_learning_requests,
  public.personal_learning_disputes,public.learning_refund_reviews,public.learning_notifications TO service_role;
 
 -- Class/service entitlements and money mutations are deliberately NOT created here:
