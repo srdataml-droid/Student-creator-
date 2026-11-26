@@ -6,7 +6,16 @@ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]
 const reference=/^pt_[a-f0-9]{32}$/;
 const recipient=/^RCP_[A-Za-z0-9]{8,80}$/;
 const providerCode=/^TRF_[A-Za-z0-9]{8,80}$/;
-const statuses=new Set(['pending','otp','success','failed','reversed']);
+// Paystack's documented transfer lifecycle has additional approval states.
+// https://paystack.com/docs/transfers/how-transfers-work/
+// Normalize into the existing durable observation schema. A conclusive
+// non-payment still requires independent bank-return evidence before funds
+// are made available; no extra transfer POST or automatic release.
+const statuses=new Map([
+ ['pending','pending'],['received','pending'],['otp','otp'],
+ ['success','success'],['failed','failed'],['abandoned','failed'],
+ ['blocked','failed'],['rejected','failed'],['reversed','reversed']
+]);
 const amount=x=>Number.isSafeInteger(x)&&x>0;
 const jobValid=j=>j&&uuid.test(j.id??'')&&uuid.test(j.lease??'')&&reference.test(j.reference??'')&&recipient.test(j.recipientCode??'')&&amount(j.amountKobo)&&typeof j.dispatch==='boolean';
 export function createPaystackTransferProvider({key,fetcher=fetch}={}){
@@ -30,7 +39,7 @@ export function createPaystackTransferProvider({key,fetcher=fetch}={}){
    if(d.reference!==j.reference||d.domain!=='live'||d.currency!=='NGN'||d.source!=='balance'||d.amount!==j.amountKobo||d.recipient?.recipient_code!==j.recipientCode||d.recipient?.domain!=='live'||d.recipient?.currency!=='NGN'||!providerCode.test(d.transfer_code??'')||!statuses.has(d.status))throw unavailable();
    const fee=d.fee_charged??null;
    if(fee!==null&&(!Number.isSafeInteger(fee)||fee<0)||d.status==='success'&&fee===null)throw unavailable();
-   return {status:d.status,code:d.transfer_code,fee};
+   return {status:statuses.get(d.status),code:d.transfer_code,fee};
   }
  };
 }
