@@ -5,8 +5,9 @@ import {createPrivateIdentityProvider} from './private-identity-api.mjs';
 import {createClamdIdentityScanner,processNextIdentityScan} from './private-identity-scanner.mjs';
 import {buildMediaSourceWorker} from './live-media-source.mjs';
 import {buildPayoutTransferWorker} from './payout-transfer-worker.mjs';
+import {hostedAuthDependencies,processHostedRecovery} from './hosted-auth-lifecycle.mjs';
 const unavailable=()=>new Error('DEDICATED_WORKER_CONFIGURATION_UNAVAILABLE');
-export function buildDedicatedWorkerJobs(env=process.env,fetcher=fetch,{operationsFactory=buildHostedOperationsJobs,providerFactory=createPrivateIdentityProvider,scannerFactory=createClamdIdentityScanner,scan=processNextIdentityScan}={}){
+export function buildDedicatedWorkerJobs(env=process.env,fetcher=fetch,{operationsFactory=buildHostedOperationsJobs,providerFactory=createPrivateIdentityProvider,scannerFactory=createClamdIdentityScanner,scan=processNextIdentityScan,recoveryFactory=hostedAuthDependencies,recover=processHostedRecovery}={}){
  if(env.STUDENT_CREATORS_BACKGROUND_WORKER_ENABLED!=='true'||env.STUDENT_CREATORS_DEDICATED_WORKER_ENABLED!=='true')throw unavailable();
  const jobs=operationsFactory(env,fetcher,{eager:true});
  if(env.STUDENT_CREATORS_IDENTITY_SCANNER_ENABLED==='true'){
@@ -26,6 +27,17 @@ export function buildDedicatedWorkerJobs(env=process.env,fetcher=fetch,{operatio
  }
  if(env.STUDENT_CREATORS_MEDIA_SOURCE_WORKER_ENABLED==='true'){const run=buildMediaSourceWorker({env,fetcher});jobs.push({name:'mediaSource',run});}
  if(env.STUDENT_CREATORS_PAYOUT_TRANSFER_WORKER_ENABLED==='true'){const run=buildPayoutTransferWorker({env,fetcher});jobs.push({name:'payoutTransfers',run});}
+ if(env.STUDENT_CREATORS_AUTH_RECOVERY_WORKER_ENABLED==='true'){
+  const deps=recoveryFactory(env,fetcher);
+  jobs.push({name:'authRecovery',run:async()=>{
+   const result=await recover(deps);
+   if(result.status==='idle')return {state:'empty'};
+   if(result.status==='requested')return {state:'processed'};
+   // An uncertain provider request must not be replayed blindly.
+   if(result.status==='uncertain')return {state:'review'};
+   throw unavailable();
+  }});
+ }
  if(!jobs.length||jobs.length>8||jobs.some(j=>!j||typeof j.run!=='function'||typeof j.name!=='string'||!/^[A-Za-z][A-Za-z0-9]{0,31}$/.test(j.name)||['constructor','prototype'].includes(j.name))||new Set(jobs.map(j=>j.name)).size!==jobs.length)throw unavailable();
  return jobs;
 }
