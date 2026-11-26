@@ -8,3 +8,9 @@ export function availableNightClasses(rows,now=Date.now()){
 export function sessionHref(id){if(!UUID.test(id??''))throw Error('INVALID_CLASS');return '/communities?tab=night&session='+id;}
 export function publicCommunityPreview(courses,limit=3){if(!Array.isArray(courses))throw Error('INVALID_COMMUNITIES');return courses.slice(0,limit);}
 export function isSessionId(value){return typeof value==='string'&&UUID.test(value);}
+
+export function currentNightClass(rows,now=Date.now()){
+ const hour=Number(new Intl.DateTimeFormat('en-GB',{timeZone:'Africa/Lagos',hour:'2-digit',hourCycle:'h23'}).format(new Date(now)));
+ if(hour>=6&&hour<18)return null;
+ return availableNightClasses(rows,now).find(c=>c.status==='room_open'&&Date.parse(c.starts_at)<=now)??null;
+}
