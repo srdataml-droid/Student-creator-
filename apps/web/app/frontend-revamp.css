@@ -555,3 +555,16 @@ html[data-appearance] .creator-body :is(.discovery-card,.discovery-copy,.hosted-
 .creator-body .feed-tabs>*{flex-shrink:0}
 .creator-body .hosted-workspace video{display:block;width:100%;max-height:70dvh;aspect-ratio:16/9;background:#000;border-radius:10px}
 @media(max-width:760px){.creator-body .watch-feed-grid{grid-template-columns:1fr;gap:16px}.watch-resume ul{grid-template-columns:1fr}.creator-body .hosted-home .feed-column{padding-inline:0}}
+
+/* Public-first Watch: reserve actual media dimensions without inventing student posts. */
+.creator-body .watch-media-space{display:grid;place-items:center;aspect-ratio:16/9;width:100%;background:var(--surface-2);color:var(--muted);border-radius:10px;text-decoration:none;min-width:0}
+.watch-media-space svg{opacity:.65}.watch-media-space>span{font-size:1.5rem}
+.empty-media-slot{min-width:0}.empty-media-lines{display:flex;flex-direction:column;gap:9px;padding:13px 0 10px}
+.empty-media-lines span{display:block;width:70%;height:8px;border-radius:6px;background:var(--surface-2)}.empty-media-lines span+span{width:44%}
+.platform-intro{max-width:750px;margin:0 0 24px}.platform-intro video{display:block;width:100%;aspect-ratio:16/9;background:#101010;border-radius:10px}.platform-intro h3{font-size:1.05rem;margin:10px 0 4px}.platform-intro p{margin:0}
+.public-watch-card{min-width:0;overflow-wrap:anywhere}.public-watch-card h3{font-size:1.05rem;margin:10px 0 5px}.public-watch-card h3 a{color:inherit;text-decoration:none}
+.public-feed-tabs>a{padding:9px 14px;background:var(--surface-2);color:var(--text);text-decoration:none;border-radius:8px;white-space:nowrap;font-size:.875rem;font-weight:600}
+.public-feed-tabs>a[aria-current=page]{background:var(--action);color:var(--on-action)}
+.creator-body .shorts-page{max-width:520px;width:100%;margin-inline:auto}.shorts-empty{aspect-ratio:9/16;max-height:65dvh;background:var(--surface-2);border-radius:16px;display:grid;place-items:center;color:var(--muted)}
+.creator-body .hosted-home .feed-area{min-width:0;width:100%}
+@media(max-width:760px){.platform-intro video,.creator-body .watch-media-space{border-radius:6px}.creator-body .community-switch{overflow-x:auto}.creator-body .hosted-home .feed-column{min-width:0}.creator-body .creator-footer{padding-bottom:80px}}
