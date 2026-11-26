@@ -67,7 +67,7 @@ export default function AppShell({children}){
     <div className="shell-menu" ref={menu}>
      <button type="button" className="shell-menu-toggle" aria-label="Account and navigation menu" aria-expanded={open} aria-controls="shell-account-menu" onClick={()=>setOpen(v=>!v)}><Icon name="menu"/></button>
      {open&&<nav id="shell-account-menu" className="shell-menu-panel" aria-label="Account menu">
-       {[...(!signedIn?[{href:'/sign-in',label:'Log in',icon:'user'},{href:'/join',label:'Join Student Creators',icon:'user'}]:[]),...primary,...account,...(hostedAccount?[{href:'/notifications',label:'Notifications',icon:'messages'},{href:'/classes',label:'Live classes',icon:'community'}]:[]),...(session.role==='admin'?[{href:'/manage',label:'Staff console',icon:'shield'}]:[])].map(item=><Link key={item.href} href={item.href} prefetch={false} onClick={()=>setOpen(false)} aria-current={isCurrent(path,item.href)?'page':undefined}><Icon name={item.icon}/>{item.label}</Link>)}
+       {[...(!signedIn?[{href:'/sign-in',label:'Log in',icon:'user'},{href:'/join',label:'Join Student Creators',icon:'user'}]:[]),...primary,...account,...(hostedAccount?[{href:'/notifications',label:'Notifications',icon:'messages'}]:[]),...(session.role==='admin'?[{href:'/manage',label:'Staff console',icon:'shield'}]:[])].map(item=><Link key={item.href} href={item.href} prefetch={false} onClick={()=>setOpen(false)} aria-current={isCurrent(path,item.href)?'page':undefined}><Icon name={item.icon}/>{item.label}</Link>)}
      </nav>}
     </div>
    </div>
@@ -77,7 +77,7 @@ export default function AppShell({children}){
     <div className="side-section-label">Discover</div>
     <nav className="side-nav" aria-label="Primary navigation">{primary.slice(0,2).map(item=><NavItem key={item.href} item={item} path={path}/>)}</nav>
     <div className="side-section-label">Your space</div>
-    <nav className="side-nav" aria-label="Your workspace">{[...primary.slice(2),...(hostedAccount?[{href:'/notifications',label:'Notifications',icon:'messages'},{href:'/classes',label:'Live classes',icon:'community'}]:[])].map(item=><NavItem key={item.href} item={item} path={path}/>)}</nav>
+    <nav className="side-nav" aria-label="Your workspace">{[...primary.slice(2),...(hostedAccount?[{href:'/notifications',label:'Notifications',icon:'messages'}]:[])].map(item=><NavItem key={item.href} item={item} path={path}/>)}</nav>
     <div className="sidebar-divider"/>
     <div className="side-section-label">Account</div>
     <nav className="side-nav" aria-label="Account navigation">{account.map(item=><NavItem key={item.href} item={item} path={path}/>)}</nav>
