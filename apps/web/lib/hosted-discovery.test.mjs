@@ -31,3 +31,5 @@ test('lookahead, last page and empty data',async()=>{
 test('provider errors and malformed payloads fail closed',async()=>{
  for(const fetcher of [async()=>new Response(null,{status:503}),async()=>Response.json({items:[]}),async()=>Response.json(Array.from({length:26},()=>row())),async()=>{throw Error('network');}])await assert.rejects(getHostedDiscovery({env,fetcher}));
 });
+
+test('public content preview queries only the exact published content ID',async()=>{const data=await getHostedDiscovery({env,contentId:id(1),fetcher:async(url)=>{assert.equal(url.searchParams.get('id'),'eq.'+id(1));return Response.json([row(1),row(2),{...row(1),status:'draft'}]);}});assert.deepEqual(data.items.map(p=>p.id),[id(1)]);await assert.rejects(getHostedDiscovery({env,contentId:'bad'}),/INVALID_DISCOVERY_FILTER/);});
