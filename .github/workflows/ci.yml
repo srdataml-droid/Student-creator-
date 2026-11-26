@@ -24,7 +24,7 @@ jobs:
       - name: Build dedicated worker image and verify embedded ClamAV engine
         run: |
           docker build -f infra/worker/Dockerfile -t student-creators-worker:ci .
-          docker run --rm --entrypoint /bin/bash student-creators-worker:ci -c 'test "$(id -u)" != 0 && bash -n infra/worker/entrypoint.sh && node --check scripts/run-hosted-workers.mjs && bash scripts/test-clamd-engine.sh'
+          docker run --rm --entrypoint /bin/bash student-creators-worker:ci -c 'test "$(id -u)" != 0 && bash -n infra/worker/entrypoint.sh && node --check scripts/run-hosted-workers.mjs && bash scripts/test-clamd-engine.sh && node --test packages/hosted-core/test/worker-heartbeat.test.mjs && test -w /run/student-creators && ! node scripts/check-worker-health.mjs'
       - name: Verify source artefacts do not contain development secrets
         run: |
           if git ls-files | grep -E '(^|/)(\.env(\..*)?|.*\.pem|.*\.key)$' | grep -vE '\.env\.example$'; then

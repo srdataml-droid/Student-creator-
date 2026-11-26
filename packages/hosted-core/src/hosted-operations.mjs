@@ -22,18 +22,18 @@ export async function runHostedOperations({jobs,clock=()=>Date.now(),budgetMs=20
  }
  return results;
 }
-export function buildHostedOperationsJobs(env=process.env,fetcher=fetch,{muxFactory=createMuxWorker}={}){
+export function buildHostedOperationsJobs(env=process.env,fetcher=fetch,{muxFactory=createMuxWorker,paymentFactory=createLivePaystackRuntime,learningFactory=createHostedLearningRuntime,eager=false}={}){
  const jobs=[];
  if(env.STUDENT_CREATORS_PAYMENT_WORKER_ENABLED==='true'){
-  let runtime;const get=()=>runtime??=createLivePaystackRuntime({env,fetcher});
+  let runtime=eager?paymentFactory({env,fetcher}):undefined;const get=()=>runtime??=paymentFactory({env,fetcher});
   jobs.push({name:'charges',run:()=>processHostedPaystackCharge(get())},{name:'reversals',run:()=>processLiveReversal(get())});
  }
  if(env.STUDENT_CREATORS_LEARNING_CLEANUP_WORKER_ENABLED==='true'){
-  let runtime;const get=()=>runtime??=createHostedLearningRuntime({env,fetcher});
+  let runtime=eager?learningFactory({env,fetcher}):undefined;const get=()=>runtime??=learningFactory({env,fetcher});
   jobs.push({name:'classCleanup',run:()=>processHostedLearningCleanup(get())});
  }
  if(env.STUDENT_CREATORS_MUX_WORKER_ENABLED==='true'){
-  let run; jobs.push({name:'muxEvents',run:()=>{run??=muxFactory({env,fetcher});return run();}});
+  let run=eager?muxFactory({env,fetcher}):undefined; jobs.push({name:'muxEvents',run:()=>{run??=muxFactory({env,fetcher});return run();}});
  }
  return jobs;
 }

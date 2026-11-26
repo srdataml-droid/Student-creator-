@@ -8,7 +8,7 @@ import {buildPayoutTransferWorker} from './payout-transfer-worker.mjs';
 const unavailable=()=>new Error('DEDICATED_WORKER_CONFIGURATION_UNAVAILABLE');
 export function buildDedicatedWorkerJobs(env=process.env,fetcher=fetch,{operationsFactory=buildHostedOperationsJobs,providerFactory=createPrivateIdentityProvider,scannerFactory=createClamdIdentityScanner,scan=processNextIdentityScan}={}){
  if(env.STUDENT_CREATORS_BACKGROUND_WORKER_ENABLED!=='true'||env.STUDENT_CREATORS_DEDICATED_WORKER_ENABLED!=='true')throw unavailable();
- const jobs=operationsFactory(env,fetcher);
+ const jobs=operationsFactory(env,fetcher,{eager:true});
  if(env.STUDENT_CREATORS_IDENTITY_SCANNER_ENABLED==='true'){
   if(env.STUDENT_CREATORS_IDENTITY_DATA_POLICY_APPROVED!=='true'||env.STUDENT_CREATORS_PRIVATE_IDENTITY_BUCKET!=='student-creators-private-identity')throw unavailable();
   const cfg=readDedicatedSupabaseRuntimeConfig(env,{server:true});
@@ -26,7 +26,7 @@ export function buildDedicatedWorkerJobs(env=process.env,fetcher=fetch,{operatio
  }
  if(env.STUDENT_CREATORS_MEDIA_SOURCE_WORKER_ENABLED==='true'){const run=buildMediaSourceWorker({env,fetcher});jobs.push({name:'mediaSource',run});}
  if(env.STUDENT_CREATORS_PAYOUT_TRANSFER_WORKER_ENABLED==='true'){const run=buildPayoutTransferWorker({env,fetcher});jobs.push({name:'payoutTransfers',run});}
- if(!jobs.length)throw unavailable();
+ if(!jobs.length||jobs.length>8||jobs.some(j=>!j||typeof j.run!=='function'||typeof j.name!=='string'||!/^[A-Za-z][A-Za-z0-9]{0,31}$/.test(j.name)||['constructor','prototype'].includes(j.name))||new Set(jobs.map(j=>j.name)).size!==jobs.length)throw unavailable();
  return jobs;
 }
 export async function runDedicatedWorker({jobs,signal,intervalMs=15000,maxDelayMs=60000,sleep=wait,run=runHostedOperations,report=()=>{}}={}){
@@ -40,7 +40,7 @@ export async function runDedicatedWorker({jobs,signal,intervalMs=15000,maxDelayM
   let result,failed;
   try{
    result=await run({jobs:ordered,budgetMs:45000,maxRounds:2});
-   failed=Object.values(result).some(x=>!x.attempted||x.errors||x.retry);
+   failed=!result||ordered.some(j=>!Object.hasOwn(result,j.name)||result[j.name]?.attempted!==true||result[j.name]?.errors||result[j.name]?.retry);
   }catch{result={};failed=true;}
   failures=failed?Math.min(failures+1,8):0;
   report({state:failed?'degraded':'tick_complete',queues:result});
