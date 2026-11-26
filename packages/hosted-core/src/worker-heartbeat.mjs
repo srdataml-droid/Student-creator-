@@ -1,6 +1,10 @@
 import {readFileSync,writeFileSync,renameSync,unlinkSync,statSync} from 'node:fs';
 import {randomUUID} from 'node:crypto';
 export const WORKER_HEARTBEAT_PATH='/run/student-creators/heartbeat.json';
+// One admitted media job can outlast the scheduler's admission budget:
+// scanner version, storage read, scan, Mux RPC/PUT, DB completion and backoff.
+// Keep the stale limit above the full bounded tick, not the 45s admission budget.
+export const WORKER_HEARTBEAT_MAX_AGE_MS=480000;
 const states=new Set(['starting','tick_complete','degraded']);
 export function clearWorkerHeartbeat(path=WORKER_HEARTBEAT_PATH){
  try{unlinkSync(path);}catch(e){if(e.code!=='ENOENT')throw e;}
@@ -13,7 +17,7 @@ export function writeWorkerHeartbeat(path,state,now=Date.now()){
   renameSync(temp,path);
  }finally{clearWorkerHeartbeat(temp);}
 }
-export function readWorkerHealth(path=WORKER_HEARTBEAT_PATH,{now=Date.now(),maxAgeMs=240000}={}){
+export function readWorkerHealth(path=WORKER_HEARTBEAT_PATH,{now=Date.now(),maxAgeMs=WORKER_HEARTBEAT_MAX_AGE_MS}={}){
  const unavailable={live:false,ready:false,state:'unavailable'};
  try{
   if(!Number.isSafeInteger(now)||!Number.isSafeInteger(maxAgeMs)||maxAgeMs<1)return unavailable;
