@@ -66,7 +66,7 @@ export default function AppShell({children}){
  return <>
   <header className="creator-nav modern-header"><div className="nav-inner">
    <Link href="/" className="creator-logo" aria-label="Student Creators home"><span className="reference-wordmark">Worthkind<small>Student Creators</small></span></Link>
-   <ShellSearch hosted={Boolean(hostedAccount)} actor={signedIn?session.userId:null}/><div className="nav-auth">{hostedAccount&&<Link className="header-icon" href="/notifications" aria-label="Notifications"><Icon name="bell"/></Link>}{signedIn?<Link className="nav-join" href={hostedAccount?'/account-security':session.role==='admin'?'/manage':'/studio'} prefetch={false}>{hostedAccount?'Account':session.role==='admin'?'Staff console':'My studio'}</Link>:session.state==='checking'?<span className="shell-session-check" role="status">Checking account…</span>:<><Link className="nav-signin" href="/sign-in">Log in</Link><Link className="nav-join" href="/join">Join</Link></>}
+   <ShellSearch hosted={Boolean(hostedAccount)} actor={signedIn?session.userId:null}/><div className="nav-auth">{hostedAccount&&<Link className="header-icon" href="/notifications" aria-label="Notifications"><Icon name="bell"/></Link>}{signedIn?<Link className="nav-join" href={hostedAccount?'/account-security':session.role==='admin'?'/manage':'/studio'} prefetch={false}>{hostedAccount?'Account':session.role==='admin'?'Staff console':'My studio'}</Link>:<><Link className="nav-signin" href="/sign-in">Log in</Link><Link className="nav-join" href="/join">Join</Link></>}
     <div className="shell-menu" ref={menu}>
      <button type="button" className="shell-menu-toggle" aria-label="Account and navigation menu" aria-expanded={open} aria-controls="shell-account-menu" onClick={()=>setOpen(v=>!v)}><Icon name="menu"/></button>
      {open&&<nav id="shell-account-menu" className="shell-menu-panel" aria-label="Account menu">
@@ -86,7 +86,7 @@ export default function AppShell({children}){
     <nav className="side-nav" aria-label="Account navigation">{account.map(item=><NavItem key={item.href} item={item} path={path}/>)}</nav>
     <div className="side-foot">Student Creators by Worthkind<br/>Original work. Real community.</div>
    </aside>
-   <div className="app-content">{hostedAccount?.notice&&<p className="status" role="status">{hostedAccount.notice}</p>}{children}<nav className="mobile-creator-tabs" aria-label="Mobile navigation">{primary.filter(item=>item.mobile).map(item=><NavItem key={item.href} item={item} path={path} mobile/>)}</nav><footer className="creator-footer"><span>© Student Creators by Worthkind</span><Link href="/verification">Student membership</Link></footer></div>
+   <div className="app-content">{hostedAccount?.notice&&<p className="status" role="status">{hostedAccount.notice}</p>}{children}<nav className="mobile-creator-tabs" aria-label="Mobile navigation">{primary.filter(item=>item.mobile).map(item=><NavItem key={item.href} item={item} path={path} mobile/>)}</nav>{!hostedAccount&&<footer className="creator-footer"><span>© Student Creators by Worthkind</span><Link href="/verification">Student membership</Link></footer>}</div>
   </div>
  </>;
 }
