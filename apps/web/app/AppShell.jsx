@@ -55,6 +55,7 @@ export default function AppShell({children}){
   return()=>{active=false;document.removeEventListener('visibilitychange',onVisible);};
  },[Boolean(hostedAccount)]);
  const signedIn=session.state==='signed-in';
+ const visibleAccount=account.filter(item=>signedIn||item.href==='/account-security');
  const primary=hostedAccount?basePrimary.map(item=>item.href==='/studio'?{...item,href:'/create',label:'Create'}:item.href==='/search'?{...item,href:'/shorts',label:'Shorts',mobile:'Shorts',icon:'shorts'}:item):basePrimary;
  useEffect(()=>{setOpen(false)},[path]);
  useEffect(()=>{
@@ -70,7 +71,7 @@ export default function AppShell({children}){
     <div className="shell-menu" ref={menu}>
      <button type="button" className="shell-menu-toggle" aria-label="Account and navigation menu" aria-expanded={open} aria-controls="shell-account-menu" onClick={()=>setOpen(v=>!v)}><Icon name="menu"/></button>
      {open&&<nav id="shell-account-menu" className="shell-menu-panel" aria-label="Account menu">
-       {[...(!signedIn?[{href:'/sign-in',label:'Log in',icon:'user'},{href:'/join',label:'Join Student Creators',icon:'user'}]:[]),...primary,...account,...(hostedAccount?[{href:'/notifications',label:'Notifications',icon:'messages'}]:[]),...(session.role==='admin'?[{href:'/manage',label:'Staff console',icon:'shield'}]:[])].map(item=><Link key={item.href} href={item.href} prefetch={false} onClick={()=>setOpen(false)} aria-current={isCurrent(path,item.href)?'page':undefined}><Icon name={item.icon}/>{item.label}</Link>)}
+       {[...(!signedIn?[{href:'/sign-in',label:'Log in',icon:'user'},{href:'/join',label:'Join Student Creators',icon:'user'}]:[]),...primary,...visibleAccount,...(hostedAccount?[{href:'/notifications',label:'Notifications',icon:'messages'}]:[]),...(session.role==='admin'?[{href:'/manage',label:'Staff console',icon:'shield'}]:[])].map(item=><Link key={item.href} href={item.href} prefetch={false} onClick={()=>setOpen(false)} aria-current={isCurrent(path,item.href)?'page':undefined}><Icon name={item.icon}/>{item.label}</Link>)}
      </nav>}
     </div>
    </div>
@@ -83,7 +84,7 @@ export default function AppShell({children}){
     <nav className="side-nav" aria-label="Your workspace">{[...primary.slice(2),...(hostedAccount?[{href:'/notifications',label:'Notifications',icon:'messages'}]:[])].map(item=><NavItem key={item.href} item={item} path={path}/>)}</nav>
     <div className="sidebar-divider"/>
     <div className="side-section-label">Account</div>
-    <nav className="side-nav" aria-label="Account navigation">{account.map(item=><NavItem key={item.href} item={item} path={path}/>)}</nav>
+    <nav className="side-nav" aria-label="Account navigation">{visibleAccount.map(item=><NavItem key={item.href} item={item} path={path}/>)}</nav>
     <div className="side-foot">Student Creators by Worthkind<br/>Original work. Real community.</div>
    </aside>
    <div className="app-content">{hostedAccount?.notice&&<p className="status" role="status">{hostedAccount.notice}</p>}{children}<nav className="mobile-creator-tabs" aria-label="Mobile navigation">{primary.filter(item=>item.mobile).map(item=><NavItem key={item.href} item={item} path={path} mobile/>)}</nav>{!hostedAccount&&<footer className="creator-footer"><span>© Student Creators by Worthkind</span><Link href="/verification">Student membership</Link></footer>}</div>
