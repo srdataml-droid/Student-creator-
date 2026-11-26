@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import {getHostedDiscovery} from '../../../lib/hosted-discovery.mjs';
 import {HostedLesson} from '../../HostedSocialWorkspace.jsx';
 import {checkoutSettings} from '../../../lib/checkout-ui-settings.mjs';
 import {notFound} from 'next/navigation';
@@ -11,7 +12,7 @@ import PurchasePanel from './PurchasePanel.jsx';
 export const dynamic='force-dynamic';
 export default async function LessonPage({params}){
  const {lessonId}=await params;
- if(!isLocalMode()){const checkout=checkoutSettings();return <HostedLesson lessonId={lessonId} checkoutMode={checkout.mode} terms={checkout.terms}/>;}
+ if(!isLocalMode()){const checkout=checkoutSettings();let preview=null;try{preview=(await getHostedDiscovery({contentId:lessonId})).items[0]??null;}catch{}return <HostedLesson lessonId={lessonId} preview={preview} checkoutMode={checkout.mode} terms={checkout.terms}/>;}
  let lesson;try{lesson=await getLocalViewablePublishedLesson(lessonId);}catch(error){
    if(error?.status===404)return notFound();
    if(error?.status===402){
