@@ -8,6 +8,7 @@ import {useHostedAccount} from './HostedAccountProvider.jsx';
 
 const paths={
  home:<><path d="M3 10.5 12 3l9 7.5V21h-6v-7H9v7H3z"/></>,
+ shorts:<><rect x="6" y="3" width="12" height="18" rx="4"/><path d="m10 8 5 4-5 4z"/></>,
  search:<><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></>,
  create:<><rect x="3" y="3" width="18" height="18" rx="5"/><path d="M12 7v10M7 12h10"/></>,
  community:<><circle cx="9" cy="8" r="3"/><path d="M2 20v-2a7 7 0 0 1 14 0v2M17 5a3 3 0 0 1 0 6M18 14a6 6 0 0 1 4 6"/></>,
@@ -54,7 +55,7 @@ export default function AppShell({children}){
   return()=>{active=false;document.removeEventListener('visibilitychange',onVisible);};
  },[Boolean(hostedAccount)]);
  const signedIn=session.state==='signed-in';
- const primary=hostedAccount?basePrimary.map(item=>item.href==='/studio'?{...item,href:'/create',label:'Create'}:item):basePrimary;
+ const primary=hostedAccount?basePrimary.map(item=>item.href==='/studio'?{...item,href:'/create',label:'Create'}:item.href==='/search'?{...item,href:'/shorts',label:'Shorts',mobile:'Shorts',icon:'shorts'}:item):basePrimary;
  useEffect(()=>{setOpen(false)},[path]);
  useEffect(()=>{
   if(!open)return;
