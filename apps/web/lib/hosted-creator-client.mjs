@@ -39,7 +39,7 @@ export function hostedCreatorRequest(operation,input={}){
  case 'submitReview':return {path:'/api/lessons/'+id(input.lessonId)+'/submit',method:'POST',headers:{}};
  case 'moderate':return json('/api/lessons/'+id(input.lessonId)+'/moderate',{decision:choice(input.decision,['approve','reject']),reason:bounded(input.reason,5,1000)});
  case 'playback':return {path:'/api/lessons/'+id(input.lessonId)+'/mux-playback',method:'GET',headers:{}};
- case 'feed':{const q=bounded(input.q??'',0,80);if(q.length===1)throw Error('INVALID_TEXT');return json('/api/social/feed',{mode:choice(input.mode??'all',['all','following']),q,limit:60});}
+ case 'feed':{const q=bounded(input.q??'',0,80);if(q.length===1)throw Error('INVALID_TEXT');return json('/api/social/feed',{mode:choice(input.mode??'all',['all','following']),q,limit:60,...(input.institutionId?{institutionId:id(input.institutionId)}:{})});}
  case 'follow':case 'unfollow':return json('/api/social/'+operation,{creatorId:id(input.creatorId)});
  case 'myLikes':return json('/api/social/myLikes',{});
  case 'like':case 'unlike':return json('/api/social/'+operation,{contentId:id(input.contentId)});
