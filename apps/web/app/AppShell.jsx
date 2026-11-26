@@ -21,7 +21,7 @@ const paths={
  arrow:<path d="m9 18 6-6-6-6"/>,
  };
 function Icon({name}){return <svg aria-hidden="true" width="21" height="21" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.65" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;}
-const primary=[
+const basePrimary=[
  {href:'/',label:'Home',mobile:'Home',icon:'home'},
  {href:'/search',label:'Explore',mobile:'Explore',icon:'search'},
  {href:'/studio',label:'Creator studio',mobile:'Create',icon:'create'},
@@ -54,6 +54,7 @@ export default function AppShell({children}){
   return()=>{active=false;document.removeEventListener('visibilitychange',onVisible);};
  },[Boolean(hostedAccount)]);
  const signedIn=session.state==='signed-in';
+ const primary=hostedAccount?basePrimary.map(item=>item.href==='/studio'?{...item,href:'/create',label:'Create'}:item):basePrimary;
  useEffect(()=>{setOpen(false)},[path]);
  useEffect(()=>{
   if(!open)return;
