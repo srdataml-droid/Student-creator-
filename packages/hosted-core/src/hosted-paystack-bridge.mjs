@@ -13,7 +13,7 @@ function checkoutUrl(value){if(typeof value!=='string'||/[\\\s]/.test(value))thr
 async function readRaw(request,cap){
  const reader=request.body?.getReader();if(!reader)throw unavailable();
  let size=0;const chunks=[];
- try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>cap){await reader.cancel();throw unavailable();}chunks.push(Buffer.from(value));}}finally{reader.releaseLock();}
+ try{while(true){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>cap){void reader.cancel().catch(()=>{});throw unavailable();}chunks.push(Buffer.from(value));}}finally{reader.releaseLock();}
  return Buffer.concat(chunks,size);
 }
 export function createHostedCheckoutHandler({auth,store,gateway,origin,domain='test',checkoutEnabled=domain==='test'}){
@@ -36,11 +36,28 @@ export function createHostedCheckoutHandler({auth,store,gateway,origin,domain='t
    }
    if(o.create!==true)return json(o.status==='paid'?200:202,{orderId:o.orderId,status:o.status});
    if(o.domain!==domain||!refPattern(domain).test(o.reference??'')||!Number.isSafeInteger(o.amountKobo)||o.amountKobo<20000)throw unavailable();
-   let result;
-   try{result=await gateway.initialize(o);}catch{await store.finish(o.orderId,null);return json(503,{error:'CHECKOUT_RECONCILIATION_REQUIRED'});}
-   if(result.reference!==o.reference||await store.finish(o.orderId,checkoutUrl(result.authorizationUrl))!==true)throw unavailable();
+   let url;
+   try{
+    const result=await gateway.initialize(o);
+    if(result?.reference!==o.reference)throw unavailable();
+    url=checkoutUrl(result.authorizationUrl);
+    if(new URL(url).pathname==='/')throw unavailable();
+   }catch{
+    // A provider POST may have succeeded even if its response was lost or
+    // unusable. Mark the existing reservation uncertain, never initialize again.
+    try{await store.finish(o.orderId,null);}catch{/* preserve durable claim */}
+    return json(503,{error:'CHECKOUT_RECONCILIATION_REQUIRED'});
+   }
+   try{
+    if(await store.finish(o.orderId,url)!==true)throw unavailable();
+   }catch{
+    // If the ready transition committed but its response was lost, the
+    // conditional uncertain update cannot overwrite it.
+    try{await store.finish(o.orderId,null);}catch{/* preserve durable claim */}
+    return json(503,{error:'CHECKOUT_RECONCILIATION_REQUIRED'});
+   }
    if(domain==='live'&&((await auth.getUser(token))?.id!==user.id||await store.canReturn(user.id,o.reference,terms)!==true))return json(409,{error:'CHECKOUT_REVIEW_REQUIRED'});
-   return json(201,{orderId:o.orderId,authorizationUrl:checkoutUrl(result.authorizationUrl)});
+   return json(201,{orderId:o.orderId,authorizationUrl:url});
   }catch{return json(503,{error:'CHECKOUT_UNAVAILABLE'});}
  };
 }
