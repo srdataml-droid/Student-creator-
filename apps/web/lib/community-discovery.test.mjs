@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {communityTab,availableNightClasses,sessionHref,publicCommunityPreview,isSessionId} from './community-discovery.mjs';
+import {communityTab,availableNightClasses,sessionHref,currentNightClass,publicCommunityPreview,isSessionId} from './community-discovery.mjs';
 const now=Date.parse('2026-11-26T12:00:00Z');
 const item=(n,patch={})=>({id:'11111111-1111-4111-8111-'+String(n).padStart(12,'0'),title:'Test class',starts_at:'2026-11-26T21:00:00Z',ends_at:'2026-11-26T22:00:00Z',status:'scheduled',price_kobo:0,currency:'NGN',...patch});
 test('live before upcoming, expired and cancelled excluded',()=>{const rows=[item(1),item(2,{status:'room_open'}),item(3,{status:'cancelled'}),item(4,{ends_at:'2026-11-26T11:00:00Z'}),item(5,{price_kobo:-1}),item(6,{starts_at:'2026-11-26T20:00:00Z'})];assert.deepEqual(availableNightClasses(rows,now).map(x=>x.id),[item(2).id,item(6).id,item(1).id]);});
 test('show at most three real communities; empty does not invent activity',()=>{assert.deepEqual(publicCommunityPreview([1,2,3,4]),[1,2,3]);assert.deepEqual(publicCommunityPreview([]),[]);assert.equal(communityTab('night'),'night');assert.equal(communityTab('bad'),'discover');});
 test('session links only accept validated IDs',()=>{assert.equal(sessionHref(item(1).id),'/communities?tab=night&session='+item(1).id);assert.equal(isSessionId('../bad'),false);assert.throws(()=>sessionHref('../bad'));});
+
+test('home announcement requires an open, ongoing night session in Lagos',()=>{const night=Date.parse('2026-11-26T20:00:00Z');const active=item(1,{starts_at:'2026-11-26T19:00:00Z',ends_at:'2026-11-26T22:00:00Z',status:'room_open'});assert.equal(currentNightClass([active],night)?.id,active.id);assert.equal(currentNightClass([{...active,status:'scheduled'}],night),null);assert.equal(currentNightClass([{...active,starts_at:'2026-11-26T21:00:00Z'}],night),null);assert.equal(currentNightClass([],night),null);const day=Date.parse('2026-11-26T12:00:00Z');assert.equal(currentNightClass([{...active,starts_at:'2026-11-26T11:00:00Z',ends_at:'2026-11-26T13:00:00Z'}],day),null);});
