@@ -76,10 +76,15 @@ export function HostedLesson({lessonId,preview,checkoutMode,terms}){
  </main>;
 }
 export function HostedInbox(){
- const account=useHostedAccount(),job=useJob();const [rows,setRows]=useState(null),[before,setBefore]=useState(null);
- function load(append=false){job.run(async()=>{const r=await account.creatorRequest('inbox',{before:append?before:null});if(!Array.isArray(r.inbox))throw Error('INVALID_INBOX');setRows(old=>append?[...new Map([...(old||[]),...r.inbox].map(x=>[x.peerId,x])).values()]:r.inbox);setBefore(r.nextBefore||null);});}
- useEffect(()=>{if(account.session.state==='signed-in')load();},[account.session.state]);
- return <HostedGate title="Messages"><section className="panel"><button type="button" className="secondary-link" disabled={job.busy} onClick={()=>load()}>Refresh inbox</button>{rows?.length===0&&<p>No conversations.</p>}<ul className="inbox-list">{rows?.map(x=><li key={x.peerId}><Link className="inbox-row" href={'/messages/'+x.peerId}><span>Student {x.peerId.slice(0,8)}</span><span>{x.unreadCount||0} unread</span></Link></li>)}</ul>{before&&<button type="button" disabled={job.busy} onClick={()=>load(true)}>Older conversations</button>}<Feedback job={job}/></section><Link href="/notifications">Notifications</Link></HostedGate>;
+ const account=useHostedAccount(),job=useJob();const [rows,setRows]=useState(null),[before,setBefore]=useState(null),[query,setQuery]=useState('');
+ const signedIn=account?.session.state==='signed-in';
+ function load(append=false){if(!signedIn)return;job.run(async()=>{const r=await account.creatorRequest('inbox',{before:append?before:null});if(!Array.isArray(r.inbox))throw Error('INVALID_INBOX');setRows(old=>append?[...new Map([...(old||[]),...r.inbox].map(x=>[x.peerId,x])).values()]:r.inbox);setBefore(r.nextBefore||null);});}
+ useEffect(()=>{if(signedIn)load();},[signedIn]);
+ const label=x=>x.displayName||x.handle||('Student '+x.peerId.slice(0,8));
+ const shown=(rows||[]).filter(x=>label(x).toLowerCase().includes(query.trim().toLowerCase()));
+ return <main id="main" className="main watch-section-page watch-inbox"><h1>Inbox</h1><p className="hint">Your personal messages.</p><section aria-label="Conversations"><div className="watch-inbox-toolbar"><label className="visually-hidden" htmlFor="inbox-search">Search conversations</label><input id="inbox-search" type="search" placeholder="Search conversations" value={query} onChange={e=>setQuery(e.target.value)} disabled={!signedIn||!rows}/>{signedIn&&<button type="button" className="quiet-button" disabled={job.busy} onClick={()=>load()}>Refresh inbox</button>}</div>
+ {!signedIn?<div className="watch-access-note"><h2>Sign in to see your messages</h2><p className="hint">Private conversations belong to your account.</p><Link className="primary-link" href="/sign-in">Sign in</Link></div>:job.busy&&rows===null?<p role="status">Loading messages…</p>:rows?.length===0?<div className="watch-access-note"><h2>No conversations yet</h2><p className="hint">Find student creators and start an eligible conversation.</p><Link className="secondary-link" href="/">Discover content</Link></div>:<ul className="community-preview-list">{shown.map(x=><li key={x.peerId}><Link className="community-preview-item" href={'/messages/'+x.peerId}><span className="watch-avatar" aria-hidden="true">{label(x).charAt(0).toUpperCase()}</span><span className="community-preview-copy"><strong>{label(x)}</strong>{x.lastMessageAt&&<small>{new Date(x.lastMessageAt).toLocaleString()}</small>}</span><span>{x.unreadCount>0?x.unreadCount+' unread':'›'}</span></Link></li>)}</ul>}
+ {rows?.length>0&&!shown.length&&<p className="hint">No matching conversations.</p>}{before&&signedIn&&<button type="button" className="quiet-button" disabled={job.busy} onClick={()=>load(true)}>Older conversations</button>}<Feedback job={job}/></section></main>;
 }
 export function HostedConversation(){
  const {creatorId:peer}=useParams(),account=useHostedAccount();
