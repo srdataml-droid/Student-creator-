@@ -2,7 +2,7 @@
 import Link from 'next/link';
 import {useEffect,useRef,useState} from 'react';
 import {useHostedAccount} from './HostedAccountProvider.jsx';
-import {availableNightClasses,sessionHref} from '../lib/community-discovery.mjs';
+import {availableNightClasses,sessionHref,currentNightClass} from '../lib/community-discovery.mjs';
 const dateLabel=v=>new Date(v).toLocaleString('en-NG',{timeZone:'Africa/Lagos',weekday:'short',hour:'numeric',minute:'2-digit',month:'short',day:'numeric'})+' WAT';
 function useScopedRead(operation,input,enabled){
  const account=useHostedAccount(),request=useRef(account?.creatorRequest),generation=useRef(0),[result,setResult]=useState({state:'loading',rows:[]});
@@ -52,7 +52,8 @@ export function HomeNightAnnouncement(){
 }
 function Announcement({actor}){
  const result=useScopedRead('availableClasses',{},true),[dismissed,setDismissed]=useState(null);
- const item=availableNightClasses(result.rows).find(c=>{const now=new Date();const hour=Number(new Intl.DateTimeFormat('en-GB',{timeZone:'Africa/Lagos',hour:'2-digit',hourCycle:'h23'}).format(now));return c.status==='room_open'&&Date.parse(c.starts_at)<=now.getTime()&&(hour>=18||hour<6);}),id=item?.id;
+ const [now,setNow]=useState(Date.now);useEffect(()=>{const timer=setInterval(()=>setNow(Date.now()),15000);return()=>clearInterval(timer);},[]);
+ const item=currentNightClass(result.rows,now),id=item?.id;
  useEffect(()=>{if(!id)return;try{setDismissed(sessionStorage.getItem('night-class:'+actor+':'+id)==='1'?id:null);}catch{setDismissed(null);}},[actor,id]);
  if(result.state!=='ready'||!item||dismissed===id)return null;
  function close(){setDismissed(id);try{sessionStorage.setItem('night-class:'+actor+':'+id,'1');}catch{}}
