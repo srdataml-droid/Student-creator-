@@ -80,7 +80,7 @@ export function CommunityNightDirectory({session,checkoutMode,terms}){
  const account=useHostedAccount();
  if(!account)return <p className="hint">Night classes are not configured in local mode.</p>;
  if(account.session.state==='checking')return <p role="status">Checking your account…</p>;
- if(account.session.state==='unavailable')return <p role="alert">Account connection unavailable.</p>;
+ if(account.session.state==='unavailable')return <p>Sign in to access night classes. <Link href="/sign-in">Sign in</Link></p>;
  if(account.session.state!=='signed-in')return <p>Sign in to discover available sessions. <Link href="/sign-in">Sign in</Link></p>;
  return <ClassDirectory key={account.session.userId+':'+(session||'all')} checkoutMode={checkoutMode} terms={terms} availableOnly session={session}/>;
 }
