@@ -1,0 +1,16 @@
+**
+!package.json
+!packages/
+!packages/**
+!scripts/
+!scripts/**
+!infra/
+!infra/worker/
+!infra/worker/clamd.conf
+!infra/worker/freshclam.conf
+!infra/worker/entrypoint.sh
+**/.env
+**/.env.*
+**/*.pem
+**/*.key
+**/node_modules

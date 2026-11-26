@@ -1,3 +1,4 @@
+import {createCurrentSupabaseAuth} from '../../hosted-core/src/supabase-current-auth.mjs';
 import {supabaseServerHeaders} from './supabase-runtime-config.mjs';
 import { prepareModerationDecision, ContentRuleError } from './content.mjs';
 
@@ -95,12 +96,7 @@ export function createSupabaseModerationDependencies({url,publicKey,serverKey,fe
   }
   async function one(table,params){ const rows=await request(`/rest/v1/${table}`,{params:{select:'*',limit:'1',...params}});return rows?.[0]??null; }
   return {
-    auth:{async getUser(token){
-      const res=await fetcher(new URL('/auth/v1/user',base),{headers:{apikey:publicKey,authorization:`Bearer ${token}`},redirect:'error'});
-      if([401,403].includes(res.status))return null;
-      if(!res.ok)throw new Error('Authentication provider unavailable');
-      const user=await res.json();return UUID.test(user?.id??'')?{id:user.id}:null;
-    }},
+    auth:createCurrentSupabaseAuth({url,publicKey,serverKey,fetcher}),
     store:{
       async getStaff(userId){const r=await one('platform_staff',{user_id:`eq.${userId}`});return r?{active:r.active,role:r.role}:null;},
       async getContent(id){const r=await one('content_items',{id:`eq.${id}`});return r?{id:r.id,creatorId:r.creator_id,status:r.status,reviewerId:r.reviewer_id,reviewReason:r.review_reason}:null;},

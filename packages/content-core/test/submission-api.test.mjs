@@ -51,7 +51,8 @@ test('staging RPC uses server-only key and sends required CAS parameters',async(
  const requests=[];
  const fetcher=async(u,opts)=>{
   requests.push({url:String(u),opts});
-  if(String(u).includes('/auth/v1/user'))return Response.json({id:user});
+  if(String(u).includes('/auth/v1/user'))return Response.json({id:user,email:'synthetic@example.invalid',email_confirmed_at:'2026-01-01T00:00:00Z'});
+  if(String(u).includes('/student_creators_session_active')||String(u).includes('/affiliation_eligible'))return Response.json(true);
   if(String(u).includes('student_profiles'))return Response.json([{institution_id:school,verified_at:'2026-11-19',suspended:false}]);
   if(String(u).includes('content_items'))return Response.json([{id:lesson,creator_id:user,institution_id:school,status:'draft'}]);
   if(String(u).includes('content_assets'))return Response.json([{content_id:lesson,private_object_key:'private/a.pdf',processing_status:'ready',scan_verdict:'clean'}]);
@@ -59,7 +60,7 @@ test('staging RPC uses server-only key and sends required CAS parameters',async(
   throw Error('Unexpected provider request');
  };
  const d=createSupabaseSubmissionDependencies({url:'https://test.supabase.co',publicKey:'public',serverKey:'service',fetcher});
- assert.equal((await d.auth.getUser('token')).id,user);assert.equal((await d.store.getProfile(user)).institutionId,school);
+ assert.equal((await d.auth.getUser('e30.'+Buffer.from(JSON.stringify({sub:user,session_id:lesson,role:'authenticated',exp:Math.floor(Date.now()/1000)+600})).toString('base64url')+'.signature')).id,user);assert.equal((await d.store.getProfile(user)).institutionId,school);
  assert.equal((await d.store.getContent(lesson)).status,'draft');assert.equal((await d.store.getAssets(lesson)).length,1);
  assert.equal(await d.store.submitIfReady({lessonId:lesson,creatorId:user,expectedStatus:'draft'}),true);
  assert.equal(requests[0].opts.headers.apikey,'public');assert.equal(requests.at(-1).opts.headers.apikey,'service');

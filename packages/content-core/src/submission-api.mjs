@@ -1,3 +1,4 @@
+import {createCurrentSupabaseAuth} from '../../hosted-core/src/supabase-current-auth.mjs';
 import {supabaseServerHeaders} from './supabase-runtime-config.mjs';
 import {prepareReviewSubmission,ContentRuleError} from './content.mjs';
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
@@ -51,7 +52,7 @@ export function createSupabaseSubmissionDependencies({url,publicKey,serverKey,fe
   if(!r.ok)throw Error('Database unavailable');return r.json();
  };
  return {
-  auth:{async getUser(token){const r=await fetcher(new URL('/auth/v1/user',base),{headers:{apikey:publicKey,authorization:`Bearer ${token}`},redirect:'error'});if([401,403].includes(r.status))return null;if(!r.ok)throw Error('Auth unavailable');let u=await r.json();return UUID.test(u?.id??'')?{id:u.id}:null;}},
+  auth:createCurrentSupabaseAuth({url,publicKey,serverKey,fetcher,requireStudent:true}),
   store:{
    async getProfile(id){const r=(await db('student_profiles',{user_id:`eq.${id}`,select:'institution_id,verified_at,suspended',limit:'1'}))[0];return r?{institutionId:r.institution_id,verifiedAt:r.verified_at,suspended:r.suspended}:null;},
    async getContent(id){const r=(await db('content_items',{id:`eq.${id}`,select:'id,creator_id,institution_id,status',limit:'1'}))[0];return r?{id:r.id,creatorId:r.creator_id,institutionId:r.institution_id,status:r.status}:null;},

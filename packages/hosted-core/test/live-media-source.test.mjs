@@ -1,0 +1,26 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import {createHash} from 'node:crypto';
+import {processLiveMediaSource,readExactMediaBytes,createMediaSourceHandler} from '../src/live-media-source.mjs';
+import {buildMuxVideoRoute} from '../src/mux-video-api.mjs';
+const creatorId='11111111-1111-4111-8111-111111111111',contentId='22222222-2222-4222-8222-222222222222',id='33333333-3333-4333-8333-333333333333',leaseId='44444444-4444-4444-8444-444444444444',reservationId='55555555-5555-4555-8555-555555555555';
+const bytes=Buffer.from('0000ftyp0000'),digest=createHash('sha256').update(bytes).digest('hex'),objectKey='private/media/'+creatorId+'/'+contentId+'/'+id+'.mp4';
+const job={id,creatorId,contentId,leaseId,mime:'video/mp4',bytes:bytes.length,digest,objectKey};
+function fixture({verdict='clean',data=bytes,putStatus=200}={}){
+ const events=[];
+ const store={claim:async()=>job,begin:async()=>{events.push('begin');return {reservationId};},finish:async()=>{events.push('finish');return true;},fail:async x=>{events.push(x.verdict);return true;}};
+ return {events,store,storage:{read:async()=>data},scanner:{version:async()=>'ClamAV fixture',scan:async b=>{assert.deepEqual(b,bytes);events.push('scan');return verdict;}},mux:{testAsset:false,create:async()=>{events.push('create');return {id:'fixture_upload',test:false,status:'waiting',url:'https://storage.googleapis.com/fixture?sig=x',new_asset_settings:{passthrough:reservationId,playback_policies:['signed'],test:false}};}},muxStore:{apply:async()=>({id:reservationId,state:'waiting'})},fetcher:async(u,o)=>{events.push('put');assert.equal(o.method,'PUT');assert.deepEqual(o.body,bytes);return new Response(null,{status:putStatus});}};
+}
+test('only scanned exact bytes reach the signed provider upload',async()=>{const f=fixture();assert.deepEqual(await processLiveMediaSource(f),{state:'processed'});assert.deepEqual(f.events,['scan','begin','create','put','finish']);});
+test('tamper, malware and uncertain scanner results never dispatch',async()=>{for(const [opts,events] of [[{data:Buffer.from('0000ftyp1111')},['review']],[{verdict:'malicious'},['scan','malicious']],[{verdict:'inconclusive'},['scan','inconclusive']]]){const f=fixture(opts);await processLiveMediaSource(f);assert.deepEqual(f.events,events);}});
+test('uncertain PUT is held for review, not marked dispatched',async()=>{const f=fixture({putStatus:503});assert.deepEqual(await processLiveMediaSource(f),{state:'review'});assert.deepEqual(f.events,['scan','begin','create','put','review']);});
+test('bounded media reader rejects both truncated and extra data',async()=>{assert.deepEqual(await readExactMediaBytes(new Response(bytes),12),bytes);await assert.rejects(readExactMediaBytes(new Response(bytes.subarray(0,11)),12));await assert.rejects(readExactMediaBytes(new Response(Buffer.concat([bytes,bytes])),12));});
+test('live direct Mux upload blocked before provider contact',async()=>{const h=buildMuxVideoRoute({getEnv:()=>({STUDENT_CREATORS_ENVIRONMENT:'production',STUDENT_CREATORS_MUX_LIVE_VIDEO_ENABLED:'true'}),fetcher:async()=>{throw new Error('unexpected provider');}});const res=await h(new Request('https://app.example.invalid',{method:'POST'}),{lessonId:contentId});assert.equal(res.status,409);});
+test('reservation rejects supplied foreign identity and invalid object binding',async()=>{const h=createMediaSourceHandler({auth:{getUser:async()=>({id:creatorId})},store:{reserve:async()=>({id,state:'reserved',objectKey:'wrong'})},storage:{signedUpload:async()=>{throw new Error('unexpected signer');}},origin:'https://app.example.invalid'});const request=b=>new Request('https://app.example.invalid',{method:'POST',headers:{authorization:'Bearer fixture','content-type':'application/json'},body:JSON.stringify(b)});const input={action:'reserve',mime:job.mime,bytes:job.bytes,digest};assert.equal((await h(request({...input,creatorId}),{lessonId:contentId})).status,422);assert.equal((await h(request(input),{lessonId:contentId})).status,503);});
+
+test('restart is authenticated and bound to the original creator/content; no storage deletion',async()=>{
+ let called=0;const h=createMediaSourceHandler({auth:{getUser:async()=>({id:creatorId})},store:{restart:async x=>{called++;assert.deepEqual(x,{creatorId,contentId,id});return called===1;}},storage:{},origin:'https://app.example.invalid'});
+ const send=body=>h(new Request('https://app.example.invalid',{method:'POST',headers:{authorization:'Bearer fixture','content-type':'application/json'},body:JSON.stringify(body)}),{lessonId:contentId});
+ assert.equal((await send({action:'restart',id,creatorId})).status,422);assert.equal(called,0);
+ assert.equal((await send({action:'restart',id})).status,200);assert.equal((await send({action:'restart',id})).status,409);
+});
