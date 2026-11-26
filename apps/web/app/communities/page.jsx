@@ -1,4 +1,8 @@
 import Link from 'next/link';
+import {communityTab,publicCommunityPreview,isSessionId} from '../../lib/community-discovery.mjs';
+import {NightClassPreview,MyCommunityList} from '../CommunityDiscovery.jsx';
+import {CommunityNightDirectory} from '../HostedLearningWorkspace.jsx';
+import {checkoutSettings} from '../../lib/checkout-ui-settings.mjs';
 import {getLocalPublicCourses,getLocalPublicInstitutions,isLocalMode} from '../../lib/local-public.mjs';
 import {getPublicCourses} from '../../lib/public-courses.mjs';
 
@@ -9,6 +13,7 @@ export default async function Communities({searchParams}){
  const q=typeof params.q==='string'?params.q.trim().slice(0,80):'';
  const campus=typeof params.campus==='string'?params.campus.slice(0,128):'';
  const local=isLocalMode();
+ const tab=communityTab(params.tab);const session=isSessionId(params.session)?params.session:null;const checkout=checkoutSettings();
  let courses=[],schools=[],state='ready';
  try{
   if(local){courses=getLocalPublicCourses();schools=getLocalPublicInstitutions();}
@@ -16,17 +21,17 @@ export default async function Communities({searchParams}){
  }catch{state='unavailable';}
  const names=new Map(schools.map(s=>[s.id,s.name]));
  const filtered=courses.filter(c=>(!campus||c.institutionId===campus)&&[c.code,c.title,names.get(c.institutionId)||''].join(' ').toLowerCase().includes(q.toLowerCase()));
- return <main id="main" className="main community-directory">
-  <section className="hero compact"><h1>Communities</h1><p className="intro">Find a course discussion and study with your classmates.</p></section>
-  <form className="directory-filters form-stack" action="/communities" method="GET">
-   <div><label htmlFor="community-query">Find a course</label><input id="community-query" name="q" type="search" placeholder="Course name or code" maxLength={80} defaultValue={q}/></div>
-   {schools.length>0&&<div><label htmlFor="community-campus">Institution</label><select id="community-campus" name="campus" defaultValue={campus}><option value="">All institutions</option>{schools.map(s=><option value={s.id} key={s.id}>{s.name}</option>)}</select></div>}
-   <button className="primary-link" type="submit">Find communities</button>
-  </form>
-  {state==='unavailable'?<section className="panel" role="status"><h2>Directory unavailable</h2><p className="hint">The course directory could not be loaded.</p><Link className="secondary-link" href="/communities" prefetch={false}>Try again</Link></section>:<>
-   
-   <div className="directory-heading"><h2>Course communities</h2><p className="hint">{filtered.length} course{filtered.length===1?'':'s'}</p></div>
-   {filtered.length===0?<section className="panel"><h3>{q||campus?'No matching courses':'No courses available yet'}</h3><p className="hint">{q||campus?'Try a different search or institution.':'Courses appear when the campus catalog is configured.'}</p>{(q||campus)&&<Link className="secondary-link" href="/communities">Clear filters</Link>}</section>:<ul className="directory-list">{filtered.map(c=><li key={c.id}><div><span className="directory-code">{c.code}</span><h3>{c.title}</h3>{names.has(c.institutionId)&&<p className="hint">{names.get(c.institutionId)}</p>}</div><div className="directory-actions">{local?<><Link className="primary-link" href={'/communities/'+c.id} prefetch={false}>Discussion</Link><Link className="secondary-link" href={'/study/'+c.id} prefetch={false}>Study rounds</Link></>:<><Link className="primary-link" href={'/communities/'+c.id} prefetch={false}>Discussion</Link><Link className="secondary-link" href={'/courses/'+c.id} prefetch={false}>View course</Link></>}</div></li>)}</ul>}
-  </>}
+ const featured=tab==='discover'?publicCommunityPreview(filtered):filtered;
+ return <main id="main" className="main community-directory content-community">
+  <h1>Community</h1>
+  <nav className="community-switch" aria-label="Community sections">{[['discover','Discover'],['mine','My communities'],['night','Night classes']].map(([key,label])=><Link key={key} href={'/communities?tab='+key} aria-current={tab===key||(key==='discover'&&tab==='public')?'page':undefined}>{label}</Link>)}</nav>
+  {(tab==='discover'||tab==='public')&&<section className="community-section" aria-labelledby="public-communities">
+   <div className="community-section-heading"><h2 id="public-communities">Public communities</h2>{tab==='discover'?<Link href="/communities?tab=public">View all</Link>:<Link href="/communities">Back to discover</Link>}</div>
+   {tab==='public'&&<form className="directory-filters form-stack" action="/communities" method="GET"><input type="hidden" name="tab" value="public"/><label htmlFor="community-query">Find a community</label><input id="community-query" name="q" type="search" placeholder="Search communities" maxLength={80} defaultValue={q}/>{schools.length>0&&<><label htmlFor="community-campus">Institution</label><select id="community-campus" name="campus" defaultValue={campus}><option value="">All institutions</option>{schools.map(s=><option value={s.id} key={s.id}>{s.name}</option>)}</select></>}<button className="primary-link" type="submit">Search</button></form>}
+   {state==='unavailable'?<div className="community-empty" role="status"><p>Could not load communities.</p><Link href={'/communities?tab='+tab}>Try again</Link></div>:featured.length===0?<p className="hint">{q||campus?'No matching communities.':'No public course communities yet.'}</p>:<ul className="community-preview-list">{featured.map(c=><li key={c.id}><Link href={'/communities/'+c.id} className="community-preview-item" prefetch={false}><span className="community-preview-symbol" aria-hidden="true">#</span><span className="community-preview-copy"><strong>{c.title}</strong><small>{c.code}{names.has(c.institutionId)?' · '+names.get(c.institutionId):''}</small></span><span aria-hidden="true">›</span></Link></li>)}</ul>}
+  </section>}
+  {tab==='discover'&&<section className="community-section" aria-labelledby="night-preview"><div className="community-section-heading"><h2 id="night-preview">Night classes</h2><Link href="/communities?tab=night">View all</Link></div><NightClassPreview/></section>}
+  {tab==='mine'&&<section className="community-section" aria-labelledby="my-communities"><h2 id="my-communities">My communities</h2><MyCommunityList/></section>}
+  {tab==='night'&&<section className="community-section" aria-label="Night classes">{session&&<Link href="/communities?tab=night">All night classes</Link>}<CommunityNightDirectory session={session} checkoutMode={checkout.mode} terms={checkout.terms}/></section>}
  </main>;
 }
