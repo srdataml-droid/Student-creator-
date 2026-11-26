@@ -630,3 +630,10 @@ html[data-appearance] .creator-body :is(.discovery-card,.discovery-copy,.hosted-
  .watch-comment.reply{padding-left:16px}
 }
 @media(min-width:761px) and (max-width:1050px){.creator-body .hosted-home .watch-feed-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Immersive Shorts: retain app navigation and keep native playback controls reachable. */
+.creator-body .main.immersive-shorts{padding:0;max-width:none;margin:0;display:flex;justify-content:center;align-items:stretch;background:#101010;min-height:calc(100dvh - 68px)}
+.shorts-stage{position:relative;isolation:isolate;background:#101010;color:#fff;width:min(100%,calc((100dvh - 68px)*9/16));min-height:calc(100dvh - 68px);overflow:hidden;display:flex;align-items:center;justify-content:center}
+.shorts-stage video{width:100%;height:calc(100dvh - 68px);object-fit:contain;display:block;background:#101010}
+.shorts-caption{position:absolute;bottom:68px;left:16px;right:16px;pointer-events:none;text-shadow:0 1px 4px #000;color:#fff}.shorts-caption p{margin:4px 0;font-size:.85rem}
+@media(max-width:760px){.creator-body .main.immersive-shorts{min-height:calc(100dvh - 60px - 72px - env(safe-area-inset-bottom));padding:0}.shorts-stage{width:100%;min-height:calc(100dvh - 60px - 72px - env(safe-area-inset-bottom))}.shorts-stage video{height:calc(100dvh - 60px - 72px - env(safe-area-inset-bottom))}}
