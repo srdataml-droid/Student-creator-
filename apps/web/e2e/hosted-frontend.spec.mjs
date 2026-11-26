@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 const BASE='http://localhost:3000',actor='11111111-1111-4111-8111-111111111111',course='22222222-2222-4222-8222-222222222222',lesson='33333333-3333-4333-8333-333333333333',order='44444444-4444-4444-8444-444444444444';
 test('isolated hosted frontend exercises community, checkout, history and responsive failure states',async({browser})=>{
  const context=await browser.newContext({baseURL:BASE,viewport:{width:390,height:844}});
- const page=await context.newPage();let joined=false,posts=[],checkoutCalls=0,saved=false,enrolled=false;
+ const page=await context.newPage();let joined=false,posts=[],checkoutCalls=0,saved=false,enrolled=false,commentReply=null;
  const now=Date.parse('2026-11-26T20:00:00Z'),sessions=Array.from({length:4},(_,i)=>({id:'55555555-5555-4555-8555-'+String(i+1).padStart(12,'0'),host_id:order,title:'Isolated night class '+(i+1),description:'Test fixture only',starts_at:new Date(now+3600000*(i===0?-1:i+1)).toISOString(),ends_at:new Date(now+3600000*(i===0?1:i+2)).toISOString(),status:i===0?'room_open':'scheduled',price_kobo:0,currency:'NGN'}));
  try{
  await page.clock.setFixedTime(new Date(now));
@@ -12,6 +12,9 @@ test('isolated hosted frontend exercises community, checkout, history and respon
  await page.route('**/api/social/**',async r=>{
   const op=new URL(r.request().url()).pathname.split('/').pop();
   const body=r.request().postDataJSON();
+  if(op==='comments')return r.fulfill({json:[{id:order,content_id:lesson,author_id:course,parent_id:null,body:'Original fixture comment',created_at:'2026-11-25T10:00:00Z'}]});
+  if(op==='myLikes')return r.fulfill({json:[]});
+  if(op==='comment'){commentReply=body.replyTo;return r.fulfill({json:{id:lesson,replayed:false}});}
   if(op==='feed'){if(body.institutionId)expect(body.institutionId).toBe(course);return r.fulfill({json:[{id:lesson,creatorId:order,title:'Isolated original content',displayName:'Test creator',institutionName:'Test campus',courseCode:'MTH101',previewText:'Fixture only',following:false}]});}
   if(op==='bookmarks')return r.fulfill({json:saved?[{content_id:lesson,created_at:'2026-11-25T10:00:00Z'}]:[]});
   if(op==='bookmark'||op==='unbookmark'){saved=op==='bookmark';return r.fulfill({json:{bookmarked:saved,replayed:false}});}
@@ -71,6 +74,13 @@ test('isolated hosted frontend exercises community, checkout, history and respon
  await expect(page.getByRole('button',{name:'Join discussion'})).toBeVisible();
  await expect(page.getByText('Original isolated question',{exact:true})).toHaveCount(0);
  await page.goto('/lessons/'+lesson);
+ await expect(page.getByRole('region',{name:'Video player'})).toBeVisible();
+ await page.getByRole('button',{name:'Load discussion and likes'}).click();
+ await page.getByRole('button',{name:'Reply',exact:true}).click();
+ await page.getByLabel('Your reply',{exact:true}).fill('Reply from browser acceptance');
+ await page.getByRole('button',{name:'Post comment'}).click();
+ await expect(page.getByText('Comment accepted.')).toBeVisible();
+ expect(commentReply).toBe(order);
  await expect(page.getByRole('button',{name:'Request test checkout'})).toBeDisabled();
  await page.getByRole('button',{name:'Check current access price'}).click();
  await expect(page.getByRole('button',{name:'Request test checkout'})).toBeEnabled();
