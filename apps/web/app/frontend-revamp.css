@@ -637,3 +637,46 @@ html[data-appearance] .creator-body :is(.discovery-card,.discovery-copy,.hosted-
 .shorts-stage video{width:100%;height:calc(100dvh - 68px);object-fit:contain;display:block;background:#101010}
 .shorts-caption{position:absolute;bottom:68px;left:16px;right:16px;pointer-events:none;text-shadow:0 1px 4px #000;color:#fff}.shorts-caption p{margin:4px 0;font-size:.85rem}
 @media(max-width:760px){.creator-body .main.immersive-shorts{min-height:calc(100dvh - 60px - 72px - env(safe-area-inset-bottom));padding:0}.shorts-stage{width:100%;min-height:calc(100dvh - 60px - 72px - env(safe-area-inset-bottom))}.shorts-stage video{height:calc(100dvh - 60px - 72px - env(safe-area-inset-bottom))}}
+
+/* Watch canvas: media first, 16:9 artwork, creator identity below the media. */
+.creator-body .hosted-home{padding-block-start:10px}
+.creator-body .hosted-home .feed-tabs{gap:6px;margin-bottom:12px;padding-block:4px}
+.creator-body .hosted-home .feed-tabs :is(a,button){height:32px;min-height:32px;border-radius:8px;padding:0 12px;line-height:1.2}
+.creator-body .hosted-home .reference-feed-heading{margin:8px 0 12px}
+.creator-body .hosted-home .reference-feed-heading h2,.creator-body .hosted-home .feed-title{font-size:19px;line-height:1.25;font-weight:650;letter-spacing:-.018em}
+.creator-body .hosted-home .watch-catalog{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,320px),1fr));gap:28px 18px}
+.creator-body .watch-card{min-width:0;margin:0;padding:0;background:none;border:0;box-shadow:none}
+.creator-body .watch-poster{position:relative;display:block;overflow:hidden;width:100%;aspect-ratio:16/9;background:var(--surface-2);border-radius:10px;color:var(--text);text-decoration:none}
+.creator-body .watch-poster video{display:block;width:100%;height:100%;aspect-ratio:16/9;object-fit:contain;background:#171717;border-radius:inherit}
+.watch-poster-title{position:absolute;inset:24% 8% auto;font-size:clamp(1.2rem,3vw,1.85rem);font-weight:700;line-height:1.22;overflow:hidden;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow-wrap:anywhere}
+.watch-poster-context{position:absolute;top:9%;left:8%;font-size:.73rem;font-weight:650;color:var(--muted);max-width:78%;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.watch-poster-play,.watch-play-overlay{display:grid;place-items:center;position:absolute;right:12px;bottom:12px;width:40px;height:40px;border-radius:50%;border:0;background:#fff;color:#161616}
+.watch-play-overlay{left:50%;top:50%;right:auto;bottom:auto;transform:translate(-50%,-50%);width:52px;height:52px;cursor:pointer;box-shadow:0 3px 18px #0005}
+.watch-duration{position:absolute;right:9px;bottom:9px;background:#141414;color:#fff;padding:3px 6px;border-radius:4px;font-size:11px;line-height:1.2}
+.watch-card-info{display:flex;gap:12px;align-items:flex-start;padding:13px 0 2px;min-width:0}
+.watch-avatar{width:36px;height:36px;flex:0 0 36px;display:grid;place-items:center;border-radius:50%;background:var(--surface-2);color:var(--text);font-size:14px;font-weight:650}
+.watch-card-copy{min-width:0;flex:1}
+.creator-body .watch-card-copy h3{font-size:16px;font-weight:650;line-height:1.3;letter-spacing:-.01em;margin:0 0 5px;overflow-wrap:anywhere}
+.creator-body .watch-card-copy h3 a{color:inherit;text-decoration:none}
+.watch-card-copy>p{font-size:12px;line-height:1.4;color:var(--muted);margin:0;overflow-wrap:anywhere}
+.watch-card-copy>p a{color:inherit;text-decoration:none}
+.watch-card-actions{display:flex;align-items:center;flex-wrap:wrap;gap:6px;margin-top:8px}
+.watch-card-actions .watch-action{min-height:36px;font-size:12px;padding:6px 10px}
+.watch-card-actions .content-share{margin:0}
+.creator-body .hosted-home .platform-intro{max-width:none;margin:0}
+html[data-appearance] .creator-body .modern-frame .mobile-creator-tabs a.current{background:transparent;color:var(--text)}
+html[data-appearance] .creator-body .modern-frame .mobile-creator-tabs a:not(.current){color:var(--muted);background:transparent}
+@media(max-width:760px){
+ .creator-body .hosted-home{padding:10px 0 28px}
+ .creator-body .hosted-home .feed-tabs{padding-inline:16px;margin-inline:0}
+ .creator-body .hosted-home .reference-feed-heading,.creator-body .hosted-home .feed-title{padding-inline:16px;margin-block:8px 12px}
+ .creator-body .hosted-home .watch-catalog{grid-template-columns:minmax(0,1fr);gap:22px}
+ .creator-body .hosted-home .watch-poster{border-radius:0}
+ .creator-body .hosted-home .watch-card-info{padding-inline:16px}
+ .creator-body .hosted-home .watch-resume,.creator-body .hosted-home .feed-area>.hint,.creator-body .hosted-home .feed-area>[role=status],.creator-body .hosted-home .feed-area>[role=alert]{margin-inline:16px}
+ .creator-body .hosted-home .night-announcement{margin-inline:16px}
+ .creator-body .modern-frame .mobile-creator-tabs{padding-inline:2px;min-height:64px}
+ .creator-body .modern-frame .mobile-creator-tabs a span{font-size:11px}
+}
+@media(max-width:340px){.creator-body .modern-frame .mobile-creator-tabs a span{font-size:10px}}
+@media(min-width:761px) and (max-width:1100px){.creator-body .hosted-home .watch-catalog{grid-template-columns:repeat(2,minmax(0,1fr))}}
