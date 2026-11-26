@@ -198,6 +198,7 @@ jobs:
           psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-settlement-audit.sql
           psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-payout-reservations.sql
           psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-payout-liability-report.sql
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-payout-transfers.sql
           psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-payout-reservations.test.sql
           psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-finance-report.test.sql
           psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-copyright-review.sql
@@ -245,8 +246,17 @@ jobs:
           psql -1 -v ON_ERROR_STOP=1 -f db/production/0010_catalog_and_finance_indexes.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/catalog_and_finance_indexes.sql
           psql -1 -v ON_ERROR_STOP=1 -f db/production/0011_media_source_quarantine.sql
+          psql -1 -v ON_ERROR_STOP=1 -f db/production/0015_media_quarantine_recovery.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/media_source_quarantine.sql
           psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-bookmarks.test.sql
+          psql -1 -v ON_ERROR_STOP=1 -f db/production/0016_activity_dashboard.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/activity_dashboard.sql
+          psql -1 -v ON_ERROR_STOP=1 -f db/production/0017_watch_progress.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/watch_progress.sql
+          psql -1 -v ON_ERROR_STOP=1 -f db/production/0018_coverage_and_weekly_comparison.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/watch_coverage.sql
+          psql -1 -v ON_ERROR_STOP=1 -f db/production/0019_creator_retention_and_watch_export.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/creator_retention_and_watch_export.sql
 
       - name: Restore disposable PostgreSQL backup into isolated database
         env:

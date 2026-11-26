@@ -80,3 +80,12 @@ test('live playback fails closed on missing expiry and caps to fresh entitlement
  const granted=await handler(req('GET'),{lessonId});assert.equal(granted.status,200);assert.equal((await granted.json()).expiresAt,expiry);
  current={...lesson,entitlementExpiresAt:null};assert.equal((await handler(req('GET'),{lessonId})).status,200);
 });
+
+test('live signed grant optionally registers bounded provider duration without making analytics a playback dependency',async()=>{
+ const {privateKey}=generateKeyPairSync('rsa',{modulusLength:2048});const sessionId=reservation;
+ const token='e30.'+Buffer.from(JSON.stringify({sub:creator,session_id:sessionId})).toString('base64url')+'.fixture';
+ const lesson={id:lessonId,viewerId:creator,status:'published',videoStatus:'ready',playbackPolicy:'signed',assetId,playbackId,reservationId:reservation,uploadId,entitlementExpiresAt:null};let input;
+ const deps={auth:{getUser:async()=>({id:creator})},store:{authorizedPlayback:async()=>lesson,registerWatchGrant:async v=>{input=v;return {id:reservation,nextSequence:1,durationMs:12345,resumePositionMs:5000,expiresAt:v.expiresAt};}},mux:{testAsset:false,getAsset:async()=>({...asset,test:false,duration:12.345})},signingKeyId:'key_fixture',privateKeyBase64:Buffer.from(privateKey.export({type:'pkcs8',format:'pem'})).toString('base64')};
+ let response=await createMuxPlaybackHandler(deps)(req('GET',token),{lessonId});assert.equal(response.status,200);assert.equal((await response.json()).watchSession.resumePositionMs,5000);assert.equal(input.durationMs,12345);assert.equal(input.sessionId,sessionId);
+ deps.store.registerWatchGrant=async()=>{throw Error('telemetry offline');};response=await createMuxPlaybackHandler(deps)(req('GET',token),{lessonId});assert.equal(response.status,200);assert.equal(Object.hasOwn(await response.json(),'watchSession'),false);
+});

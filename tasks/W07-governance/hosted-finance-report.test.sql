@@ -103,4 +103,42 @@ END $$;
 SELECT set_config('request.jwt.claim.sub','9b000000-0000-4000-8000-000000000002',true),set_config('request.jwt.claims','{"sub":"9b000000-0000-4000-8000-000000000002","role":"authenticated","session_id":"9b000000-0000-4000-8000-000000000002"}',true);
 DO $$ BEGIN IF jsonb_array_length(public.creator_payout_request('list')->'items')<>0 OR public.creator_payout_request('list')->'balance'->>'availableKobo'<>'0' THEN RAISE EXCEPTION 'Cross-creator payout disclosure'; END IF; END $$;
 RESET ROLE;
+
+-- Isolated provider observations only, no external transfer.
+UPDATE live_finance.payout_recipient_evidence SET recipient_reference='RCP_fixture1234' WHERE creator_id='9b000000-0000-4000-8000-000000000001';
+SELECT set_config('request.jwt.claim.sub','9b000000-0000-4000-8000-000000000001',true),set_config('request.jwt.claims','{"sub":"9b000000-0000-4000-8000-000000000001","role":"authenticated","session_id":"9b000000-0000-4000-8000-000000000001"}',true);
+SET LOCAL ROLE authenticated;
+SELECT public.creator_payout_request('request',10000,'fixture-payout-transfer-1');
+RESET ROLE;
+DO $$ DECLARE r uuid;q jsonb;lease uuid;ref text;c uuid:='9b000000-0000-4000-8000-000000000001';a uuid:='f1910000-0000-4000-8000-000000000003';b uuid:='f1910000-0000-4000-8000-000000000004'; BEGIN
+ SELECT id INTO r FROM live_finance.payout_requests WHERE request_key='fixture-payout-transfer-1';
+ PERFORM public.week7_review_payout(a,r,'reserve','Synthetic finance review');
+ BEGIN PERFORM public.week7_manage_payout_transfer(b,r,'authorize');RAISE EXCEPTION 'Transfer gate bypass';EXCEPTION WHEN insufficient_privilege THEN NULL;END;
+ IF has_table_privilege('service_role','live_finance.payout_transfer_gate','UPDATE') OR has_table_privilege('service_role','live_finance.payout_transfers','INSERT') OR has_function_privilege('authenticated','public.claim_payout_transfer(boolean)','EXECUTE') THEN RAISE EXCEPTION 'Transfer privilege bypass';END IF;
+ UPDATE live_finance.payout_transfer_gate SET enabled=true,version='synthetic-transfer-policy',fee_bearer='platform',approved_at=now() WHERE singleton;
+ BEGIN PERFORM public.week7_manage_payout_transfer(a,r,'authorize');RAISE EXCEPTION 'Self approval';EXCEPTION WHEN insufficient_privilege THEN NULL;END;
+ PERFORM public.week7_manage_payout_transfer(b,r,'authorize');
+ IF public.claim_payout_transfer(false) IS NOT NULL THEN RAISE EXCEPTION 'Dispatch gate bypass';END IF;
+ q:=public.claim_payout_transfer(true);lease:=(q->>'lease')::uuid;ref:=q->>'reference';
+ IF q->>'dispatch' IS DISTINCT FROM 'true' OR (q->>'id')::uuid IS DISTINCT FROM r OR lease IS NULL OR public.claim_payout_transfer(true) IS NOT NULL THEN RAISE EXCEPTION 'Transfer lease invalid';END IF;
+ IF jsonb_array_length(public.week7_payout_transfer_queue(a,10)->'items')<1 THEN RAISE EXCEPTION 'Transfer missing from review queue';END IF;
+ IF public.enqueue_payout_transfer_event(ref,'transfer.success',repeat('c',64))<>'accepted' THEN RAISE EXCEPTION 'Transfer wakeup not recorded';END IF;
+ IF public.record_payout_transfer_observation(r,gen_random_uuid(),'success','TRF_fixture1234',100) OR NOT public.record_payout_transfer_observation(r,lease,'unknown',NULL,NULL) THEN RAISE EXCEPTION 'Transfer observation invalid';END IF;
+ PERFORM public.week7_manage_payout_transfer(a,r,'recheck');
+ q:=public.claim_payout_transfer(true);
+ IF q->>'dispatch' IS DISTINCT FROM 'false' OR q->>'reference' IS DISTINCT FROM ref THEN RAISE EXCEPTION 'Transfer duplicated';END IF;
+ IF NOT public.record_payout_transfer_observation(r,(q->>'lease')::uuid,'success','TRF_fixture1234',100) THEN RAISE EXCEPTION 'Transfer verification failed';END IF;
+ IF live_finance.payout_balance(c)->>'reservedKobo'<>'10000' THEN RAISE EXCEPTION 'Provider response released funds';END IF;
+ BEGIN PERFORM public.week7_manage_payout_transfer(b,r,'confirm_paid','fixture-bank-confirmation');RAISE EXCEPTION 'Bank self-confirmation';EXCEPTION WHEN insufficient_privilege THEN NULL;END;
+ PERFORM public.week7_manage_payout_transfer(a,r,'confirm_paid','fixture-bank-confirmation');
+ q:=live_finance.payout_balance(c);
+ IF q->>'paidKobo'<>'10000' OR q->>'reservedKobo'<>'0' OR q->>'availableKobo'<>'17000' THEN RAISE EXCEPTION 'Paid reconciliation mismatch';END IF;
+ IF public.enqueue_payout_transfer_event(ref,'transfer.reversed',repeat('a',64))<>'accepted' OR public.enqueue_payout_transfer_event(ref,'transfer.reversed',repeat('b',64))<>'duplicate' THEN RAISE EXCEPTION 'Transfer event replay invalid';END IF;
+ q:=public.claim_payout_transfer(false);
+ IF NOT public.record_payout_transfer_observation(r,(q->>'lease')::uuid,'reversed','TRF_fixture1234',100) THEN RAISE EXCEPTION 'Late reversal not recorded';END IF;
+ IF live_finance.payout_balance(c)->>'availableKobo'<>'17000' THEN RAISE EXCEPTION 'Unconfirmed return released funds';END IF;
+ PERFORM public.week7_manage_payout_transfer(a,r,'confirm_returned','fixture-bank-return');
+ IF live_finance.payout_balance(c)->>'availableKobo'<>'27000' THEN RAISE EXCEPTION 'Confirmed return mismatch';END IF;
+END $$;
+
 ROLLBACK;

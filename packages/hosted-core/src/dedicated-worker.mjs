@@ -4,6 +4,7 @@ import {readDedicatedSupabaseRuntimeConfig} from '../../content-core/src/supabas
 import {createPrivateIdentityProvider} from './private-identity-api.mjs';
 import {createClamdIdentityScanner,processNextIdentityScan} from './private-identity-scanner.mjs';
 import {buildMediaSourceWorker} from './live-media-source.mjs';
+import {buildPayoutTransferWorker} from './payout-transfer-worker.mjs';
 const unavailable=()=>new Error('DEDICATED_WORKER_CONFIGURATION_UNAVAILABLE');
 export function buildDedicatedWorkerJobs(env=process.env,fetcher=fetch,{operationsFactory=buildHostedOperationsJobs,providerFactory=createPrivateIdentityProvider,scannerFactory=createClamdIdentityScanner,scan=processNextIdentityScan}={}){
  if(env.STUDENT_CREATORS_BACKGROUND_WORKER_ENABLED!=='true'||env.STUDENT_CREATORS_DEDICATED_WORKER_ENABLED!=='true')throw unavailable();
@@ -24,6 +25,7 @@ export function buildDedicatedWorkerJobs(env=process.env,fetcher=fetch,{operatio
   }});
  }
  if(env.STUDENT_CREATORS_MEDIA_SOURCE_WORKER_ENABLED==='true'){const run=buildMediaSourceWorker({env,fetcher});jobs.push({name:'mediaSource',run});}
+ if(env.STUDENT_CREATORS_PAYOUT_TRANSFER_WORKER_ENABLED==='true'){const run=buildPayoutTransferWorker({env,fetcher});jobs.push({name:'payoutTransfers',run});}
  if(!jobs.length)throw unavailable();
  return jobs;
 }

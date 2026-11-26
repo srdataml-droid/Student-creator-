@@ -31,3 +31,11 @@ test('checkout runtime fails before provider access when webhook signing is not 
 });
 
 test('test bridge rejects live keys and privileged public credentials before I/O',()=>{const env={APP_DATA_MODE:'hosted',STUDENT_CREATORS_PROJECT_REF:'jnkqmlbkkvccnxrgkpno',STUDENT_CREATORS_STAGING_APPROVED:'true',STUDENT_CREATORS_PUBLIC_REGISTRATION:'false',STUDENT_CREATORS_REAL_PAYMENT_ENABLED:'false',STUDENT_CREATORS_PAYSTACK_TEST_ENABLED:'true',STUDENT_CREATORS_DISTRIBUTION_CHANNEL:'independent_web',supabase_url:'https://jnkqmlbkkvccnxrgkpno.supabase.co',supabase_publishable_key:'sb_publishable_fixture_only_123',supabase_secret_key:'sb_secret_fixture_only_123',PAYSTACK_TEST_SECRET_KEY:'sk_test_fixture',STUDENT_CREATORS_PAYSTACK_ORIGIN:origin,PAYSTACK_WEBHOOK_KEY_ID:'whk_fixture',PAYSTACK_WEBHOOK_SIGNING_SECRET:'whsec_fixture_secret'};for(const patch of [{PAYSTACK_TEST_SECRET_KEY:'sk_live_fixture'},{supabase_publishable_key:'sb_secret_fixture_only_123'},{STUDENT_CREATORS_REAL_PAYMENT_ENABLED:'true'}])assert.throws(()=>createHostedPaystackRuntime({env:{...env,...patch},fetcher:()=>{throw Error('unexpected network')}}));});
+
+test('signed transfer notifications only enqueue reference verification; never settle or trust payload amounts',async()=>{
+ const secret='whsec_fixture_secret',kid='whk_fixture',ref='pt_'+'a'.repeat(32);let calls=[];
+ const h=createHostedPaystackWebhook({domain:'live',signingSecrets:[{id:kid,secret}],store:{recordTransferEvent:async(...a)=>{calls.push(a);return 'accepted';}}});
+ const send=async(event,domain='live',reference=ref,good=true)=>{const raw=JSON.stringify({event,data:{domain,reference,amount:1}}),ts=Math.floor(Date.now()/1000),sig=createHmac('sha512',secret).update(ts+'.'+raw).digest('hex');return h(new Request(origin,{method:'POST',body:good?raw:raw+' ',headers:{'paystack-signature':'t='+ts+',v1='+kid+':'+sig}}));};
+ assert.equal((await send('transfer.reversed')).status,200);assert.equal(calls.length,1);assert.deepEqual(calls[0].slice(0,2),[ref,'transfer.reversed']);assert.match(calls[0][2],/^[a-f0-9]{64}$/);
+ assert.equal((await send('transfer.success','test')).status,400);assert.equal((await send('transfer.success','live','manual_transfer')).status,200);assert.equal((await send('transfer.failed','live',ref,false)).status,401);assert.equal(calls.length,1);
+});

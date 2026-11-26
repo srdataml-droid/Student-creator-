@@ -18,7 +18,7 @@ const key=v=>{if(typeof v!=='string'||!/^[A-Za-z0-9_-]{16,128}$/.test(v))throw f
 const rpc=(name,args)=>({path:'rpc/'+name,method:'POST',body:args});
 const select=(name,fields,filters={})=>({path:name+'?'+new URLSearchParams({select:fields,...filters}),method:'GET'});
 const readIds=v=>{if(!Array.isArray(v)||v.length<1||v.length>100||new Set(v).size!==v.length)throw fault('INVALID_INPUT',422);return v.map(id);};
-const accountOperations=new Set(['myPayouts','cancelPayout','myCopyrightCases','copyrightClaim','copyrightAppeal','myCreatorFinance','institutionAppeals','submitInstitutionAppeal','privacyRequests','submitPrivacyRequest']);
+const accountOperations=new Set(['myPayouts','cancelPayout','myCopyrightCases','copyrightClaim','copyrightAppeal','myCreatorFinance','institutionAppeals','submitInstitutionAppeal','privacyRequests','submitPrivacyRequest','myWatchExport']);
 const adminOperations=new Set(['setCommunityModerator','reportQueue','reviewReport']);
 const rateMessages=new Set(['MESSAGE_RATE_LIMIT','POST_RATE_LIMIT','COMMENT_RATE_LIMIT','FOLLOW_RATE_LIMIT','REPORT_RATE_LIMIT','RESTRICTION_RATE_LIMIT','LIKE_RATE_LIMIT']);
 function mapError(status,data){
@@ -40,6 +40,13 @@ function operation(name,input,actor){
  case 'submitPrivacyRequest':{const b=shape(input,['kind','reason']);return rpc('submit_privacy_request',{_kind:choice(b.kind,['access','correction','erasure','restriction','portability']),_reason:string(b.reason,20,1000)});}
  case 'draftPrice':{const b=shape(input,['contentId']);return rpc('get_draft_price',{_content:id(b.contentId)});}
  case 'setDraftPrice':{const b=shape(input,['contentId','amountKobo']);if(!Number.isSafeInteger(b.amountKobo)||b.amountKobo<0||b.amountKobo>1000000000||(b.amountKobo>0&&b.amountKobo<20000))throw fault('INVALID_INPUT',422);return rpc('set_draft_price',{_content:id(b.contentId),_amount:b.amountKobo});}
+ case 'creatorVideoRetention':{const b=shape(input,['contentId']);return rpc('creator_video_retention',{_content:id(b.contentId)});}
+ case 'myRecommendations':{const b=shape(input,['limit']);return rpc('my_recommendations',{_limit:integer(b.limit,50,20)});}
+ case 'myWatchExport':{const b=shape(input,['kind','afterContentId','afterDay','limit']);const kind=choice(b.kind,['progress','daily','coverage']);const afterContent=optionalId(b.afterContentId);const day=b.afterDay??null;if(day!==null&&(typeof day!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(day)||!Number.isFinite(Date.parse(day+'T00:00:00Z'))||new Date(day+'T00:00:00Z').toISOString().slice(0,10)!==day))throw fault('INVALID_INPUT',422);if(kind==='daily'?((afterContent===null)!==(day===null)):day!==null)throw fault('INVALID_INPUT',422);return rpc('my_watch_export',{_kind:kind,_after_content:afterContent,_after_day:day,_limit:integer(b.limit,100,25)});}
+ case 'getWatchPreference':shape(input,[]);return rpc('watch_preference',{});
+ case 'setWatchPreference':{const b=shape(input,['enabled']);return rpc('watch_preference',{_enabled:bool(b.enabled)});}
+ case 'recordWatchProgress':{const b=shape(input,['watchSessionId','sequence','positionMs','playing','continuous']);if(!Number.isInteger(b.sequence)||b.sequence<1||b.sequence>2147483646||!Number.isInteger(b.positionMs)||b.positionMs<0||b.positionMs>43200000)throw fault('INVALID_INPUT',422);return rpc('record_watch_progress',{_id:id(b.watchSessionId),_seq:b.sequence,_position_ms:b.positionMs,_playing:bool(b.playing),_continuous:bool(b.continuous)});}
+ case 'myActivityDashboard':{const b=shape(input,['days']);const days=b.days??7;if(![7,28].includes(days))throw fault('INVALID_INPUT',422);return rpc('my_activity_dashboard',{_days:days});}
  case 'myPayouts':shape(input,[]);return rpc('creator_payout_request',{_action:'list'});
  case 'requestPayout':{const b=shape(input,['amountKobo','requestKey']);if(!Number.isSafeInteger(b.amountKobo)||b.amountKobo<1)throw fault('INVALID_INPUT',422);return rpc('creator_payout_request',{_action:'request',_amount:b.amountKobo,_key:key(b.requestKey)});}
  case 'cancelPayout':{const b=shape(input,['requestId']);return rpc('creator_payout_request',{_action:'cancel',_id:id(b.requestId)});}

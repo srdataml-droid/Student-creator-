@@ -11,7 +11,7 @@ INSERT INTO public.student_profiles(user_id,institution_id,display_name,verified
 INSERT INTO public.content_items(id,creator_id,institution_id,course_id,title,rights_attested_at,creation_key,creation_hash,status,reviewer_id,review_reason,reviewed_at,published_at) VALUES('fa150000-0000-4000-8000-000000000001','fa110000-0000-4000-8000-000000000001','fa120000-0000-4000-8000-000000000001','fa140000-0000-4000-8000-000000000001','Synthetic payment lesson',now(),'fixture-media-source',repeat('a',64),'draft',NULL,NULL,NULL,NULL);
 
 DO $$
-DECLARE creator uuid:='fa110000-0000-4000-8000-000000000001'; other_user uuid:='fa110000-0000-4000-8000-000000000002'; content uuid:='fa150000-0000-4000-8000-000000000001'; source uuid; lease uuid; reservation uuid; a jsonb; b jsonb;
+DECLARE creator uuid:='fa110000-0000-4000-8000-000000000001'; other_user uuid:='fa110000-0000-4000-8000-000000000002'; content uuid:='fa150000-0000-4000-8000-000000000001'; source uuid; old_source uuid; lease uuid; reservation uuid; a jsonb; b jsonb;
 BEGIN
  a:=public.reserve_live_media_source(creator,content,'video/mp4',100,repeat('a',64));
  source:=(a->>'id')::uuid;
@@ -19,6 +19,10 @@ BEGIN
  IF public.reserve_live_media_source(other_user,content,'video/mp4',100,repeat('a',64)) IS NOT NULL THEN RAISE EXCEPTION 'Foreign reservation'; END IF;
  IF public.reserve_live_media_source(creator,content,'video/mp4',100,repeat('a',64))->>'id' IS DISTINCT FROM source::text THEN RAISE EXCEPTION 'Reservation replay'; END IF;
  IF public.reserve_live_media_source(creator,content,'video/mp4',101,repeat('a',64))->>'conflict' IS DISTINCT FROM 'true' THEN RAISE EXCEPTION 'Metadata changed'; END IF;
+ old_source:=source;
+ IF public.restart_live_media_source(other_user,content,source) OR NOT public.restart_live_media_source(creator,content,source) OR public.queue_live_media_source(creator,content,source) THEN RAISE EXCEPTION 'Media restart ownership or stale source failure';END IF;
+ a:=public.reserve_live_media_source(creator,content,'video/mp4',100,repeat('a',64));source:=(a->>'id')::uuid;
+ IF source IS NULL OR source=old_source OR NOT EXISTS(SELECT 1 FROM public.media_source_uploads WHERE id=old_source AND superseded_at IS NOT NULL) OR public.get_live_media_source(creator,content)->>'id' IS DISTINCT FROM source::text THEN RAISE EXCEPTION 'Superseded source not isolated';END IF;
  IF public.queue_live_media_source(other_user,content,source) OR NOT public.queue_live_media_source(creator,content,source) THEN RAISE EXCEPTION 'Queue ownership'; END IF;
  a:=public.claim_live_media_source();lease:=(a->>'leaseId')::uuid;
  IF a->>'id' IS DISTINCT FROM source::text OR lease IS NULL THEN RAISE EXCEPTION 'Claim failed'; END IF;
@@ -30,6 +34,7 @@ BEGIN
  a:=public.begin_live_media_dispatch(source,lease,repeat('a',64),'ClamAV fixture');
  reservation:=(a->>'reservationId')::uuid;
  IF reservation IS NULL THEN RAISE EXCEPTION 'Dispatch denied'; END IF;
+ IF public.restart_live_media_source(creator,content,source) THEN RAISE EXCEPTION 'Dispatching upload could be superseded';END IF;
  PERFORM public.apply_mux_live_snapshot(reservation,'fixture_media_upload',NULL,NULL,'waiting');
  PERFORM public.apply_mux_live_snapshot(reservation,'fixture_media_upload','fixture_media_asset','fixture_media_playback','ready');
  IF EXISTS(SELECT 1 FROM public.content_assets WHERE content_id=content) THEN RAISE EXCEPTION 'Premature clean release'; END IF;
