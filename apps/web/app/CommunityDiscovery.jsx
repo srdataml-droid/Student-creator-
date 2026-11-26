@@ -19,7 +19,7 @@ function useScopedRead(operation,input,enabled){
 function AccessState({account,children}){
  if(!account)return <p className="hint">Live community services are unavailable in this local environment.</p>;
  if(account.session.state==='checking')return <p role="status" className="hint">Checking your account…</p>;
- if(account.session.state==='unavailable')return <p role="alert">Account connection unavailable. Refresh to reconnect.</p>;
+ if(account.session.state==='unavailable')return <p className="hint">Sign in to access your community activity. <Link href="/sign-in">Sign in</Link></p>;
  if(account.session.state!=='signed-in')return <div className="community-empty"><p>Sign in to see night classes and communities available to your campus.</p><Link className="secondary-link" href="/sign-in">Sign in</Link></div>;
  return children;
 }
@@ -52,7 +52,7 @@ export function HomeNightAnnouncement(){
 }
 function Announcement({actor}){
  const result=useScopedRead('availableClasses',{},true),[dismissed,setDismissed]=useState(null);
- const item=availableNightClasses(result.rows)[0],id=item?.id;
+ const item=availableNightClasses(result.rows).find(c=>{const now=new Date();const hour=Number(new Intl.DateTimeFormat('en-GB',{timeZone:'Africa/Lagos',hour:'2-digit',hourCycle:'h23'}).format(now));return c.status==='room_open'&&Date.parse(c.starts_at)<=now.getTime()&&(hour>=18||hour<6);}),id=item?.id;
  useEffect(()=>{if(!id)return;try{setDismissed(sessionStorage.getItem('night-class:'+actor+':'+id)==='1'?id:null);}catch{setDismissed(null);}},[actor,id]);
  if(result.state!=='ready'||!item||dismissed===id)return null;
  function close(){setDismissed(id);try{sessionStorage.setItem('night-class:'+actor+':'+id,'1');}catch{}}
