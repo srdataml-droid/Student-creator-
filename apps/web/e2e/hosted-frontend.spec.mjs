@@ -117,3 +117,19 @@ test('isolated hosted frontend exercises community, checkout, history and respon
 });
 
 test('public home retains content layout when account refresh is unavailable',async({browser})=>{const context=await browser.newContext({baseURL:BASE,viewport:{width:390,height:844}});try{const page=await context.newPage();await page.route('**/api/hosted-auth/refresh',r=>r.fulfill({status:503,json:{error:'HOSTED_AUTH_UNAVAILABLE'}}));await page.goto('/');await expect(page.getByRole('heading',{name:'Recommended for you'})).toBeVisible();await expect(page.getByRole('region',{name:'Empty content spaces'})).toHaveCount(0);await expect(page.getByRole('complementary',{name:'Available night class'})).toHaveCount(0);await expect(page.getByRole('link',{name:'Shorts',exact:true}).first()).toBeVisible();await expect(page.locator('video[src="/api/platform-intro"]')).toBeVisible();const media=await page.request.get('/api/platform-intro');expect(media.ok()).toBeTruthy();expect(media.headers()['content-type']).toBe('video/mp4');expect((await media.body()).length).toBe(1648);await page.getByRole('navigation',{name:'Mobile navigation'}).getByRole('link',{name:'Shorts'}).click();await expect(page.getByRole('heading',{name:'Shorts',exact:true})).toBeAttached();await expect(page.getByRole('region',{name:'Short video'}).locator('video')).toBeVisible();await expect(page.getByRole('link',{name:'Explore videos'})).toHaveCount(0);await expect.poll(()=>page.locator('.shorts-stage').evaluate(e=>e.getBoundingClientRect().height)).toBeGreaterThan(650);await page.goto('/account-security');await expect(page.getByRole('heading',{name:'Settings'})).toBeVisible();await page.getByRole('button',{name:'Light',exact:true}).click();await expect(page.locator('html')).toHaveAttribute('data-appearance','light');await page.reload();await expect(page.locator('html')).toHaveAttribute('data-appearance','light');await page.getByRole('button',{name:'Dark',exact:true}).click();await expect(page.locator('html')).toHaveAttribute('data-appearance','dark');await page.goto('/communities?tab=assignments');await expect(page.getByRole('heading',{name:'Assignments'})).toBeVisible();}finally{await context.close();}});
+
+test('guest community overview exposes public metadata without private discussion requests',async({browser})=>{
+ const context=await browser.newContext({baseURL:BASE,viewport:{width:390,height:844}});
+ try{
+  const page=await context.newPage();let privateCalls=0;
+  await page.route('**/api/hosted-auth/refresh',r=>r.fulfill({status:503,json:{error:'HOSTED_AUTH_UNAVAILABLE'}}));
+  await page.route('**/api/social/**',r=>{privateCalls++;return r.fulfill({status:401,json:{error:'UNAUTHORIZED'}});});
+  await page.route('**/api/public-communities/'+course,r=>r.fulfill({json:{id:course,title:'Public calculus community',code:'MTH101'}}));
+  await page.goto('/communities/'+course);
+  await expect(page.getByRole('heading',{name:'Public calculus community'})).toBeVisible();
+  await expect(page.getByRole('link',{name:'Sign in to join'})).toHaveAttribute('href','/sign-in');
+  await expect(page.getByRole('link',{name:'Browse course videos'})).toHaveAttribute('href','/courses/'+course);
+  await expect(page.getByRole('button',{name:'Post to class'})).toHaveCount(0);
+  expect(privateCalls).toBe(0);
+ }finally{await context.close();}
+});

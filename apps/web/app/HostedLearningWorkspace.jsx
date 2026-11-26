@@ -3,6 +3,7 @@ import Link from 'next/link';
 import {useEffect,useRef,useState} from 'react';
 import {useParams} from 'next/navigation';
 import HostedGate from './HostedGate.jsx';
+import PublicCommunityOverview from './PublicCommunityOverview.jsx';
 import {useHostedAccount} from './HostedAccountProvider.jsx';
 import {availableNightClasses,sessionHref} from '../lib/community-discovery.mjs';
 import {makeDraftKey} from '../lib/studio-workflow.mjs';
@@ -15,7 +16,8 @@ function useJob(){
 function Feedback({job}){return <>{job.error&&<p role="alert" className="form-error">{job.error}</p>}{job.notice&&<p role="status" className="form-success">{job.notice}</p>}</>;}
 export function HostedCommunity(){
  const {courseId}=useParams(),account=useHostedAccount();
- return <HostedGate title="Course discussion"><Community key={(account?.session.userId||'guest')+courseId} courseId={courseId}/></HostedGate>;
+ if(account?.session.state==='signed-in')return <HostedGate title="Course discussion"><Community key={account.session.userId+courseId} courseId={courseId}/></HostedGate>;
+ return <PublicCommunityOverview key={courseId} courseId={courseId} checking={account?.session.state==='checking'}/>;
 }
 function Community({courseId}){
  const account=useHostedAccount(),job=useJob(),key=useRef(''),composer=useRef(null);
