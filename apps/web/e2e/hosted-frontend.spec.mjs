@@ -6,11 +6,12 @@ test('isolated hosted frontend exercises community, checkout, history and respon
  const now=Date.now(),sessions=Array.from({length:4},(_,i)=>({id:'55555555-5555-4555-8555-'+String(i+1).padStart(12,'0'),host_id:order,title:'Isolated night class '+(i+1),description:'Test fixture only',starts_at:new Date(now+3600000*(i+1)).toISOString(),ends_at:new Date(now+3600000*(i+2)).toISOString(),status:'scheduled',price_kobo:0,currency:'NGN'}));
  try{
  await page.route('**/api/hosted-auth/refresh',r=>r.fulfill({json:{accessToken:'one.two.three',userId:actor,expiresIn:3600}}));
- await page.route('**/api/account/state',r=>r.fulfill({json:{userId:actor,student:true,admin:false,profile:{displayName:'Synthetic learner'},requests:[],drafts:[]}}));
+ await page.route('**/api/account/state',r=>r.fulfill({json:{userId:actor,student:true,admin:false,profile:{displayName:'Synthetic learner',institutionId:course},requests:[],drafts:[]}}));
  // Browser-side contract fixtures only. Never reach a real provider or persist test data.
  await page.route('**/api/social/**',async r=>{
   const op=new URL(r.request().url()).pathname.split('/').pop();
   const body=r.request().postDataJSON();
+  if(op==='feed'){if(body.institutionId)expect(body.institutionId).toBe(course);return r.fulfill({json:[{id:lesson,creatorId:order,title:'Isolated original content',displayName:'Test creator',institutionName:'Test campus',courseCode:'MTH101',previewText:'Fixture only',following:false}]});}
   if(op==='bookmarks')return r.fulfill({json:saved?[{content_id:lesson,created_at:'2026-11-25T10:00:00Z'}]:[]});
   if(op==='bookmark'||op==='unbookmark'){saved=op==='bookmark';return r.fulfill({json:{bookmarked:saved,replayed:false}});}
   if(op==='availableClasses')return r.fulfill({json:body.classId?sessions.filter(c=>c.id===body.classId):sessions});
@@ -27,6 +28,17 @@ test('isolated hosted frontend exercises community, checkout, history and respon
  await page.route('**/api/account/purchases',r=>r.fulfill({json:{orders:[{id:order,contentId:lesson,amountKobo:20000,currency:'NGN',environment:'test',status:'pending',createdAt:'2026-11-25T10:00:00Z',accessRecorded:false}],truncated:false}}));
  await page.route('**/api/account/checkout-quote/**',r=>r.fulfill({json:{priceKobo:20000,currency:'NGN'}}));
  await page.route('**/api/lessons/**/hosted-checkout',r=>{checkoutCalls++;expect(r.request().headers()['idempotency-key']).toMatch(/^[A-Za-z0-9_-]{16,128}$/);expect(r.request().postData()).toBeNull();return r.fulfill({json:{orderId:order,authorizationUrl:'https://checkout.paystack.com/isolated-browser-fixture'}});});
+ await page.addInitScript(({actor,lesson})=>{localStorage.setItem('student-creators:resume:'+actor+':'+lesson,'65');Object.defineProperty(navigator,'share',{value:undefined,configurable:true});},{actor,lesson});
+ await page.goto('/');
+ await expect(page.getByRole('region',{name:'Continue watching'}).getByRole('link')).toContainText('Resume at 1:05');
+ await page.getByRole('button',{name:'Your campus',exact:true}).click();
+ await expect(page.getByRole('button',{name:'Your campus',exact:true})).toHaveAttribute('aria-pressed','true');
+ await expect(page.getByRole('link',{name:'Isolated original content',exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Share',exact:true}).click();
+ await expect(page.getByRole('textbox',{name:'Content page link'})).toHaveValue(BASE+'/lessons/'+lesson);
+ await page.goto('/create');
+ await expect(page.getByRole('link',{name:/Upload a video/})).toHaveAttribute('href','/studio#studio-create');
+ await expect(page.getByRole('link',{name:/Go live/})).toHaveAttribute('href','/communities?tab=night');
  await page.goto('/');
  await page.getByRole('button',{name:'Search Student Creators',exact:true}).click();
  await expect(page.getByRole('dialog',{name:'Search Student Creators'})).toBeVisible();
@@ -85,7 +97,7 @@ test('isolated hosted frontend exercises community, checkout, history and respon
  await expect(page.getByText('Live classes require the verified SDK integrity configuration.')).toBeVisible();
  for(const width of [320,360,390,768,1280]){
   await page.setViewportSize({width,height:844});
-  for(const path of ['/classes','/purchases','/saved','/communities','/communities?tab=night','/communities/'+course,'/lessons/'+lesson]){
+  for(const path of ['/create','/classes','/purchases','/saved','/communities','/communities?tab=night','/communities/'+course,'/lessons/'+lesson]){
    await page.goto(path);await expect(page.locator('main h1')).toBeVisible();
    await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth-window.innerWidth),{message:'Overflow at '+width+' on '+path}).toBeLessThanOrEqual(1);
   }
