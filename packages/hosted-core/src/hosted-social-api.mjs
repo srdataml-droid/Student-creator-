@@ -32,6 +32,7 @@ function mapError(status,data){
 }
 function operation(name,input,actor){
  switch(name){
+ case 'recordWatchProgress':{const b=shape(input,['watchSessionId','sequence','positionMs','playing','continuous']);if(!Number.isInteger(b.sequence)||b.sequence<1||b.sequence>2147483646||!Number.isInteger(b.positionMs)||b.positionMs<0||b.positionMs>43200000)throw fault('INVALID_INPUT',422);return rpc('record_watch_progress',{_id:id(b.watchSessionId),_seq:b.sequence,_position_ms:b.positionMs,_playing:bool(b.playing),_continuous:bool(b.continuous)});}
  case 'myActivityDashboard':{const b=shape(input,['days']);const days=b.days??7;if(![7,28].includes(days))throw fault('INVALID_INPUT',422);return rpc('my_activity_dashboard',{_days:days});}
  case 'myPayouts':shape(input,[]);return rpc('creator_payout_request',{_action:'list'});
  case 'requestPayout':{const b=shape(input,['amountKobo','requestKey']);if(!Number.isSafeInteger(b.amountKobo)||b.amountKobo<1)throw fault('INVALID_INPUT',422);return rpc('creator_payout_request',{_action:'request',_amount:b.amountKobo,_key:key(b.requestKey)});}
