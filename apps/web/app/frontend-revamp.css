@@ -680,3 +680,16 @@ html[data-appearance] .creator-body .modern-frame .mobile-creator-tabs a:not(.cu
 }
 @media(max-width:340px){.creator-body .modern-frame .mobile-creator-tabs a span{font-size:10px}}
 @media(min-width:761px) and (max-width:1100px){.creator-body .hosted-home .watch-catalog{grid-template-columns:repeat(2,minmax(0,1fr))}}
+
+/* Main navigation workspaces follow the same quiet Watch typography. */
+.creator-body .watch-section-page{width:100%;max-width:740px;margin-inline:auto;padding:20px 20px 40px;min-width:0}
+.creator-body .watch-section-page h1{font-size:24px;letter-spacing:-.025em;line-height:1.25;margin:0 0 6px}
+.creator-body .watch-section-page>.hint{margin:0 0 20px}
+.watch-section-page .community-preview-list{margin:0;padding:0}
+.watch-section-page .community-preview-item{min-height:76px}
+.watch-access-note{padding:22px 0;margin-block:18px;border-top:1px solid var(--line)}
+.watch-access-note h2{font-size:17px;line-height:1.4;margin:0 0 6px}
+.watch-access-note p{margin:0 0 14px}
+.watch-inbox-toolbar{display:flex;align-items:center;gap:8px;margin-bottom:18px}
+.watch-inbox-toolbar input{min-width:0;flex:1;border-radius:22px;padding:12px 16px}
+@media(max-width:760px){.creator-body .watch-section-page{padding:20px 16px 32px}.creator-body .watch-section-page .community-preview-copy{min-width:0}.watch-inbox-toolbar{flex-wrap:wrap}}
