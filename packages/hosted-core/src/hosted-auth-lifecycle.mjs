@@ -168,7 +168,7 @@ export function hostedAuthDependencies(env,fetcher=fetch){
  return {provider,store,currentAuth,origin,pilotEmail,adminEmail,inviteSecret,pepper};
 }
 export function buildHostedAuthRoute({getEnv=()=>process.env,fetcher=fetch}={}){
- return async(request,context)=>{try{return await createHostedAuthHandler(hostedAuthDependencies(getEnv(),fetcher))(request,context);}
+ return async(request,context)=>{if(request.method==='POST'&&context?.action==='refresh'&&!readRefresh(request)){const origin=request.headers.get('origin');if(origin!==new URL(request.url).origin)return json(403,{error:'ORIGIN_FORBIDDEN'});return json(401,{error:'AUTH_REQUIRED'});}try{return await createHostedAuthHandler(hostedAuthDependencies(getEnv(),fetcher))(request,context);}
  catch{return json(503,{error:'HOSTED_AUTH_UNAVAILABLE'});}};
 }
 export async function processHostedRecovery({provider,store,pilotEmail,pepper}){
