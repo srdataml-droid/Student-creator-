@@ -15,6 +15,16 @@ jobs:
           node-version: '22'
       - name: Run tests (no dependencies required)
         run: npm test
+      - name: Install disposable ClamAV engine (no production signatures or credentials)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends clamav-daemon
+      - name: Verify real clamd engine and worker integration on harmless synthetic signature
+        run: bash scripts/test-clamd-engine.sh
+      - name: Build dedicated worker image and verify embedded ClamAV engine
+        run: |
+          docker build -f infra/worker/Dockerfile -t student-creators-worker:ci .
+          docker run --rm --entrypoint /bin/bash student-creators-worker:ci -c 'test "$(id -u)" != 0 && bash -n infra/worker/entrypoint.sh && node --check scripts/run-hosted-workers.mjs && bash scripts/test-clamd-engine.sh'
       - name: Verify source artefacts do not contain development secrets
         run: |
           if git ls-files | grep -E '(^|/)(\.env(\..*)?|.*\.pem|.*\.key)$' | grep -vE '\.env\.example$'; then
@@ -30,8 +40,15 @@ jobs:
       - name: Install from committed lockfile
         working-directory: apps/web
         run: npm ci --no-audit --no-fund
-      - name: Build Next.js app without production credentials
+      - name: Build Next.js with synthetic server-only credential canaries
         working-directory: apps/web
+        env:
+          APP_DATA_MODE: local
+          SUPABASE_SECRET_KEY: synthetic_ci_supabase_secret_canary_20261125
+          MUX_PLAYBACK_PRIVATE_KEY_BASE64: synthetic_ci_mux_secret_canary_20261125
+          LIVEKIT_API_SECRET: synthetic_ci_livekit_secret_canary_20261125
+          RESEND_API_KEY: synthetic_ci_resend_secret_canary_20261125
+          PAYSTACK_TEST_SECRET_KEY: synthetic_ci_paystack_secret_canary_20261125
         run: npm run build
 
   database-contract:
@@ -74,6 +91,9 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/migrations/0006_institution_identity_contract.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/0007_mux_webhook_idempotency.sql
           psql -v ON_ERROR_STOP=1 -f db/migrations/0008_hosted_rls_read_grants.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0009_restrict_content_metadata_columns.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0021_week01_runtime_privileges.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/runtime_privileges.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/smoke.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/creator_public_profiles.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/creator_restrictions.sql
@@ -82,6 +102,185 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/tests/institution_identity.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/mux_webhook_inbox.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/hosted_rls_isolation.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0010_week01_current_session_guard.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/current_session_guard.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0012_week01_mux_webhook_delivery.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/mux_webhook_delivery.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0014_week01_mux_video.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/mux_video.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0017_week01_mux_event_worker.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/mux_event_worker.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0013_week01_private_identity_api.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/private_identity_api.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0015_week01_auth_email_delivery.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/auth_email_delivery.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0016_week01_hosted_auth_lifecycle.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/hosted_auth_lifecycle.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0018_week01_session_aware_rls.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/session_aware_rls.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0015_week05_hosted_test_commerce.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/week05_test_commerce.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0016_week05_charge_inbox.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/week05_charge_inbox.sql
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0019_week01_paystack_hosted_bridge.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/paystack_hosted_bridge.sql
+
+      - name: Verify isolated production live payment schema (no provider calls)
+        run: |
+          set -euo pipefail
+          createdb campus_ci_live
+          (
+            export PGDATABASE=campus_ci_live
+            sed '/^create role /d' db/tests/bootstrap.sql | psql -v ON_ERROR_STOP=1
+            for f in db/migrations/0001_proposed_core.sql db/migrations/0002_creator_comments.sql db/migrations/0003_creator_public_profiles.sql db/migrations/0004_creator_restrictions.sql db/migrations/0005_paid_access_security.sql db/migrations/0006_institution_identity_contract.sql db/migrations/0007_mux_webhook_idempotency.sql db/migrations/0008_hosted_rls_read_grants.sql db/migrations/0009_restrict_content_metadata_columns.sql db/migrations/0010_week01_current_session_guard.sql db/migrations/0018_week01_session_aware_rls.sql db/migrations/0015_week05_hosted_test_commerce.sql db/migrations/0016_week05_charge_inbox.sql db/production/0001_live_commerce.sql db/production/0002_live_charge_inbox.sql db/production/0003_live_paystack_bridge.sql db/production/0004_live_reversal_inbox.sql db/production/0005_live_refund_reference.sql db/migrations/0012_week01_mux_webhook_delivery.sql db/production/0006_live_mux_video.sql db/production/0007_live_mux_event_worker.sql db/production/0012_live_playback_expiry.sql db/tests/live_payment_contract.sql; do
+              if [[ "$f" == db/production/* ]]; then
+                psql -1 -v ON_ERROR_STOP=1 -f "$f"
+              else
+                psql -v ON_ERROR_STOP=1 -f "$f"
+              fi
+            done
+          )
+
+      - name: Verify hosted social contracts on disposable database
+        run: |
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-messaging.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-messaging.test.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-communities.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-communities.test.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-discovery.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-discovery.test.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-comments.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-comments.test.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-notifications.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-notifications.test.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-reports.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-reports.test.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-message-pages.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-message-pages.test.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-restrictions.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-restrictions.test.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-session-rls.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-session-rls.test.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-likes.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-likes.test.sql
+
+      - name: Verify hosted interactive classes and free learning contracts
+        run: |
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W06-interactive-classes-and-learning-services/hosted-live-learning.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W06-interactive-classes-and-learning-services/hosted-live-learning.test.sql
+
+      - name: Verify hosted governance and bookmarks
+        run: |
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-governance.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-governance.test.sql
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-bookmarks.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-bookmarks.test.sql
+
+      - name: Verify scoped social moderation and learning notifications
+        run: |
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-scoped-moderation.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-scoped-moderation.test.sql
+
+      - name: Verify production paid learning contracts (disposable live database)
+        run: |
+          export PGDATABASE=campus_ci_live
+          psql -v ON_ERROR_STOP=1 -f db/migrations/0021_week01_runtime_privileges.sql
+          for n in messaging communities discovery comments notifications reports message-pages restrictions session-rls likes; do
+            psql -v ON_ERROR_STOP=1 -f "tasks/W04-social/hosted-${n}.sql"
+          done
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W06-interactive-classes-and-learning-services/hosted-live-learning.sql
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W06-interactive-classes-and-learning-services/hosted-live-learning-commerce.sql
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-governance.sql
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-learning-review.sql
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-learning-refund-reopen.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-learning-review.test.sql
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-finance-report.sql
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-settlement-audit.sql
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-payout-reservations.sql
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-payout-liability-report.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-payout-reservations.test.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-finance-report.test.sql
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-copyright-review.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-copyright-review.test.sql
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-paid-access-review.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-paid-access-review.test.sql
+
+      - name: Verify hosted institutional appeals
+        run: |
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-institution-appeals.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-institution-appeals.test.sql
+
+      - name: Verify scoped identity evidence and revalidation queues
+        run: |
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-identity-review.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-identity-review.test.sql
+
+      - name: Verify privacy request isolation and review-only decisions
+        run: |
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-privacy-requests.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-privacy-requests.test.sql
+
+      - name: Verify manual identity decision and expiry controls
+        run: |
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-manual-identity.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-manual-identity.test.sql
+
+      - name: Verify independent privacy fulfilment and retention recommendations
+        run: |
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-privacy-fulfilment.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-privacy-fulfilment.test.sql
+
+      - name: Verify exposed catalog RPC privilege boundaries (disposable live database)
+        run: |
+          export PGDATABASE=campus_ci_live
+          psql -1 -v ON_ERROR_STOP=1 -f db/production/0008_catalog_rpc_boundaries.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/catalog_rpc_boundaries.sql
+          psql -1 -v ON_ERROR_STOP=1 -f db/production/0013_creator_draft_price.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/creator_draft_price.sql
+          psql -1 -v ON_ERROR_STOP=1 -f db/production/0014_creator_workspace_edits.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/creator_workspace_edits.sql
+          psql -1 -v ON_ERROR_STOP=1 -f db/production/0009_client_table_privileges.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/client_table_privileges.sql
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-bookmarks.sql
+          psql -1 -v ON_ERROR_STOP=1 -f db/production/0010_catalog_and_finance_indexes.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/catalog_and_finance_indexes.sql
+          psql -1 -v ON_ERROR_STOP=1 -f db/production/0011_media_source_quarantine.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/media_source_quarantine.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-bookmarks.test.sql
+
+      - name: Restore disposable PostgreSQL backup into isolated database
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          test "$PGDATABASE" = campus_ci
+          test -n "$PG_CONTAINER"
+          umask 077
+          dump="$RUNNER_TEMP/student-creators-disposable.dump"
+          trap 'rm -f "$dump"' EXIT
+          psql -v ON_ERROR_STOP=1 -f db/tests/backup_restore_fixture.sql
+          docker exec "$PG_CONTAINER" pg_dump -U postgres -d campus_ci --format=custom > "$dump"
+          test -s "$dump"
+          docker exec "$PG_CONTAINER" createdb -U postgres campus_ci_restore
+          docker exec -i "$PG_CONTAINER" pg_restore -U postgres --dbname=campus_ci_restore --exit-on-error < "$dump"
+          docker exec -i "$PG_CONTAINER" psql -U postgres -d campus_ci_restore -v ON_ERROR_STOP=1 < db/tests/backup_restore_assert.sql
+
+      - name: Restore production-shaped financial database into isolated CI target
+        env:
+          PG_CONTAINER: ${{ job.services.postgres.id }}
+        run: |
+          set -euo pipefail
+          export PGDATABASE=campus_ci_live
+          test -n "$PG_CONTAINER"
+          umask 077
+          dump="$RUNNER_TEMP/student-creators-live-schema.dump"
+          trap 'rm -f "$dump"' EXIT
+          psql -v ON_ERROR_STOP=1 -f db/tests/backup_restore_live_fixture.sql
+          docker exec "$PG_CONTAINER" pg_dump -U postgres -d campus_ci_live --format=custom > "$dump"
+          test -s "$dump"
+          docker exec "$PG_CONTAINER" createdb -U postgres campus_ci_live_restore
+          docker exec -i "$PG_CONTAINER" pg_restore -U postgres --dbname=campus_ci_live_restore --exit-on-error < "$dump"
+          docker exec -i "$PG_CONTAINER" psql -U postgres -d campus_ci_live_restore -v ON_ERROR_STOP=1 < db/tests/backup_restore_live_assert.sql
 
   browser-alpha:
     runs-on: ubuntu-24.04
@@ -157,3 +356,82 @@ jobs:
           done
           curl -fsS http://localhost:3000/api/local/health >/dev/null
           (cd apps/web && npx playwright test --config=playwright.payment.config.mjs --workers=1 --reporter=line)
+
+  browser-hosted-frontend:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install locked frontend and disposable Chromium
+        working-directory: apps/web
+        run: |
+          npm ci --no-audit --no-fund
+          npm install --no-save --no-package-lock --no-audit --no-fund @playwright/test@1.56.1
+          npx playwright install --with-deps chromium
+      - name: Hosted UI contract test without provider credentials
+        env:
+          APP_DATA_MODE: hosted
+          STUDENT_CREATORS_STAGING_APPROVED: 'true'
+          STUDENT_CREATORS_DISTRIBUTION_CHANNEL: independent_web
+          STUDENT_CREATORS_PAYSTACK_TEST_ENABLED: 'true'
+          STUDENT_CREATORS_REAL_PAYMENT_ENABLED: 'false'
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: |
+          set -euo pipefail
+          npm run build --prefix apps/web
+          npm run start --prefix apps/web -- -p 3000 > "$RUNNER_TEMP/hosted-ui-browser.log" 2>&1 &
+          server_pid=$!
+          trap 'kill "$server_pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 45); do
+            if curl -fsS http://localhost:3000/sign-in >/dev/null 2>&1; then break; fi
+            if ! kill -0 "$server_pid" 2>/dev/null; then cat "$RUNNER_TEMP/hosted-ui-browser.log"; exit 1; fi
+            sleep 1
+          done
+          curl -fsS http://localhost:3000/sign-in >/dev/null
+          (cd apps/web && npx playwright test e2e/hosted-frontend.spec.mjs --workers=1 --reporter=line --trace=retain-on-failure)
+
+  browser-hosted-playback:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Install pinned browser and media fixture tooling
+        working-directory: apps/web
+        run: |
+          npm ci --no-audit --no-fund
+          npm install --no-save --no-package-lock --no-audit --no-fund @playwright/test@1.56.1
+          npx playwright install --with-deps ${{ matrix.browser }}
+          if [ '${{ matrix.browser }}' = chromium ]; then npx playwright install chrome; fi
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg
+      - name: Test actual local HLS segments, not real provider media
+        env:
+          APP_DATA_MODE: hosted
+          NEXT_TELEMETRY_DISABLED: '1'
+        run: |
+          set -euo pipefail
+          if [ '${{ matrix.browser }}' = chromium ]; then export PLAYWRIGHT_CHROME=1; fi
+          export HLS_FIXTURE_DIR="$RUNNER_TEMP/hls-fixture"
+          mkdir -p "$HLS_FIXTURE_DIR"
+          ffmpeg -hide_banner -loglevel error -f lavfi -i color=c=blue:s=320x180:r=24 -t 6 -c:v libx264 -pix_fmt yuv420p -profile:v baseline -g 48 -sc_threshold 0 -f hls -hls_time 2 -hls_list_size 0 -hls_segment_filename "$HLS_FIXTURE_DIR/segment%03d.ts" "$HLS_FIXTURE_DIR/index.m3u8"
+          npm run build --prefix apps/web
+          npm run start --prefix apps/web -- -p 3000 > "$RUNNER_TEMP/hosted-playback.log" 2>&1 &
+          pid=$!
+          trap 'kill "$pid" 2>/dev/null || true' EXIT
+          for i in $(seq 1 45); do
+            if curl -fsS http://localhost:3000/sign-in >/dev/null 2>&1; then break; fi
+            if ! kill -0 "$pid" 2>/dev/null; then cat "$RUNNER_TEMP/hosted-playback.log"; exit 1; fi
+            sleep 1
+          done
+          curl -fsS http://localhost:3000/sign-in >/dev/null
+          (cd apps/web && npx playwright test e2e/hosted-playback.spec.mjs --browser=${{ matrix.browser }} --workers=1 --reporter=line)

@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import {getHostedPublicCreator} from '../../../lib/hosted-public-creator.mjs';
+import HostedCreatorActions from '../../HostedCreatorActions.jsx';
 import {notFound} from 'next/navigation';
 import FollowButton from './FollowButton.jsx';
 import {getLocalPublicCreator,getLocalPublicCourses,getLocalCourseLessons,isLocalMode} from '../../../lib/local-public.mjs';
@@ -9,7 +11,7 @@ export async function generateMetadata({params}){
 }
 export default async function CreatorProfile({params}){
  const {creatorId}=await params;
- if(!isLocalMode())return notFound();
+ if(!isLocalMode()){let data;try{data=await getHostedPublicCreator({creatorId});}catch{return <main id="main" className="main"><p role="status">Creator profile unavailable.</p><Link href="/">Back to discovery</Link></main>;}if(!data)return notFound();const {creator,posts}=data;return <main id="main" className="main creator-profile-shell"><Link href="/">Back to discovery</Link><section className="public-creator-header"><div className="public-creator-cover"/><div className="public-creator-details"><div className="public-creator-avatar" aria-hidden="true">{creator.displayName.slice(0,1).toUpperCase()}</div><div><h1>{creator.displayName}</h1><p>@{creator.handle}</p><p>{creator.bio}</p></div></div><HostedCreatorActions creatorId={creatorId}/></section><section className="creator-profile-posts"><h2>Published posts</h2>{posts.length?<ul className="lesson-list">{posts.map(p=><li key={p.id}><p className="hint">{p.courseCode}</p><h3><Link href={'/lessons/'+p.id}>{p.title}</Link></h3><p>{p.previewText}</p></li>)}</ul>:<p>No published posts.</p>}</section></main>;}
  let creator,posts;
  try{
   creator=getLocalPublicCreator(creatorId);

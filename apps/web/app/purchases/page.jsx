@@ -1,8 +1,10 @@
 'use client';
+import {useHostedAccount} from '../HostedAccountProvider.jsx';
+import {HostedPurchaseHistory} from '../HostedLearningWorkspace.jsx';
 import Link from 'next/link';
 import {useEffect,useState} from 'react';
 import {api,friendlyError} from '../../lib/local-client.js';
-export default function PurchaseHistory(){
+function LocalPurchaseHistory(){
  const [cases,setCases]=useState([]);
  const [orders,setOrders]=useState([]),[state,setState]=useState('loading'),[error,setError]=useState('');
  useEffect(()=>{
@@ -35,3 +37,5 @@ export default function PurchaseHistory(){
   </section>}
  </main>;
 }
+
+export default function PurchaseHistory(){const a=useHostedAccount();return a?<HostedPurchaseHistory key={a.session.userId||a.session.state}/>:<LocalPurchaseHistory/>;}

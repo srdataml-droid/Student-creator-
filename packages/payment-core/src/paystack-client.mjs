@@ -1,3 +1,4 @@
+import { canInitializePaystackCheckout } from './checkout-distribution.mjs';
 import { readBoundedGatewayResponse } from './bounded-response.mjs';
 import { PaymentValidationError, validateVerifiedCharge } from './payments.mjs';
 
@@ -27,7 +28,7 @@ function assertOrder(order) {
   }
 }
 
-export function createPaystackClient({ secretKey, environment, fetchImpl = fetch, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
+export function createPaystackClient({ secretKey, environment, livePaymentsApproved = false, fetchImpl = fetch, timeoutMs = DEFAULT_TIMEOUT_MS } = {}) {
   if (typeof secretKey !== 'string' || !/^sk_(test|live)_[A-Za-z0-9]+$/.test(secretKey)) {
     throw new PaystackGatewayError('BAD_CONFIGURATION', 'Missing or invalid Paystack server secret');
   }
@@ -80,6 +81,14 @@ export function createPaystackClient({ secretKey, environment, fetchImpl = fetch
     async initialize(order) {
       assertOrder(order);
       if (order.domain !== environment) throw new PaystackGatewayError('BAD_ORDER', 'Order is in the wrong environment');
+      // Both inputs are trusted server configuration; never derive approval from request data.
+      // Verification stays available when this gate closes so prior charges can reconcile.
+      if (environment === 'live' && (livePaymentsApproved !== true || process.env.PAYSTACK_LIVE_PAYMENTS_ENABLED !== '1')) {
+        throw new PaystackGatewayError('LIVE_PAYMENTS_DISABLED', 'Live payment initialization is not approved');
+      }
+      if (!canInitializePaystackCheckout({environment,channel:process.env.STUDENT_CREATORS_DISTRIBUTION_CHANNEL,nodeEnv:process.env.NODE_ENV})) {
+        throw new PaystackGatewayError('CHECKOUT_DISTRIBUTION_DISABLED', 'Checkout is not approved for this distribution channel');
+      }
       const response = await request('/transaction/initialize', {
         method: 'POST',
         body: {

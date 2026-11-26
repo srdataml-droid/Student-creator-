@@ -1,0 +1,2 @@
+import {createHostedLearningRuntime,processHostedLearningCleanup} from '../packages/hosted-core/src/hosted-livekit-class.mjs';
+try{const runtime=createHostedLearningRuntime();for(let i=0;i<25;i++){const result=await processHostedLearningCleanup(runtime);if(result.state==='empty')break;if(result.state==='retry')process.exitCode=2;}}catch{console.error('Hosted learning cleanup unavailable');process.exitCode=1;}

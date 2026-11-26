@@ -33,6 +33,63 @@ async function readJson(response){
   return response.json();
 }
 
+
+// Responsive shell: no enrollment, purchases, external services, or fake feed content.
+test('frontend revamp supports active navigation, search and compact mobile access',async({browser})=>{
+ const context=await browser.newContext({baseURL:BASE,viewport:{width:1280,height:900}});
+ try{
+  const page=await context.newPage();
+  await page.goto('/');
+  await expect(page.getByRole('heading',{name:'Discover',exact:true})).toBeVisible();
+  const primary=page.getByRole('navigation',{name:'Primary navigation'});
+  await expect(primary.getByRole('link',{name:'For you'})).toHaveAttribute('aria-current','page');
+  await page.getByRole('searchbox',{name:'Search Student Creators'}).fill('Calculus');
+  await page.getByRole('button',{name:'Submit search'}).click();
+  await expect(page).toHaveURL(/\/search\?q=Calculus/);
+  await expect(primary.getByRole('link',{name:'Explore'})).toHaveAttribute('aria-current','page');
+  for(const width of [320,360,390,768,1280]){
+   await page.setViewportSize({width,height:850});
+   await page.goto('/');
+   const overflow=await page.evaluate(()=>document.documentElement.scrollWidth-window.innerWidth);
+   expect(overflow,'Home horizontal overflow at '+width).toBeLessThanOrEqual(1);
+   await expect(page.getByRole('heading',{name:'Discover',exact:true})).toBeVisible();
+   const mobile=page.getByRole('navigation',{name:'Mobile navigation'});
+   if(width<=760){
+    await expect(mobile).toBeVisible();
+    await expect(mobile.getByRole('link',{name:'Home',exact:true})).toHaveAttribute('aria-current','page');
+    await mobile.getByRole('link',{name:'Explore',exact:true}).click();
+    await expect(page).toHaveURL(/\/search$/);
+    await expect(mobile.getByRole('link',{name:'Explore',exact:true})).toHaveAttribute('aria-current','page');
+    const menu=page.getByRole('button',{name:'Account and navigation menu'});
+    await menu.click();
+    const panel=page.getByRole('navigation',{name:'Account menu'});
+    await expect(panel.getByRole('link',{name:'Saved posts',exact:true})).toBeVisible();
+    await expect(panel.getByRole('link',{name:'Account security',exact:true})).toBeVisible();
+    await expect(panel.getByRole('link',{name:'Staff console',exact:true})).toHaveCount(0);
+    await expect(panel.getByRole('link',{name:'My access',exact:true})).toBeVisible();
+    await page.keyboard.press('Escape');
+    await expect(menu).toHaveAttribute('aria-expanded','false');
+    await expect(menu).toBeFocused();
+    await mobile.getByRole('link',{name:'Community',exact:true}).click();
+    await expect(page).toHaveURL(/\/communities$/);
+    await expect(page.getByRole('heading',{name:'Communities',exact:true})).toBeVisible();
+    await expect(mobile.getByRole('link',{name:'Community',exact:true})).toHaveAttribute('aria-current','page');
+    await page.locator('#community-query').fill('impossible-course-code-xyzz');
+    await page.getByRole('button',{name:'Find communities'}).click();
+    await expect(page.getByRole('heading',{name:'No matching courses'})).toBeVisible();
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width+1);
+    await menu.click();
+    await panel.getByRole('link',{name:'Log in',exact:true}).click();
+    await expect(page).toHaveURL(/\/sign-in$/);
+    await expect(page.locator('#email')).toBeVisible();
+    await expect(page.locator('#password')).toBeVisible();
+    const formOverflow=await page.evaluate(()=>document.documentElement.scrollWidth-window.innerWidth);
+    expect(formOverflow,'Login horizontal overflow at '+width).toBeLessThanOrEqual(1);
+   }else{await expect(primary).toBeVisible();await expect(mobile).toBeHidden();}
+  }
+ }finally{await context.close();}
+});
+
 test('synthetic creator, moderator and viewer journey keeps media access server-enforced',async({browser,request})=>{
   // Includes two independently moderated videos and a paid buyer path in CI.
   test.setTimeout(300_000);
@@ -53,6 +110,7 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     const adminPage=await admin.newPage();
     await login(adminPage,adminEmail,adminPassword);
     await expect(adminPage.getByRole('heading',{name:'Protect the learning community.'})).toBeVisible();
+    await expect(adminPage.locator('.nav-auth').getByRole('link',{name:'Staff console',exact:true})).toBeVisible();
 
     await adminPage.locator('#schoolName').fill(schoolName);
     await adminPage.getByRole('button',{name:'Add campus'}).click();
@@ -69,12 +127,20 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     const {courses}=await readJson(await admin.request.get('/api/local/courses'));
     const courseId=courses.find(x=>x.institutionId===schoolId&&x.code==='ALP 101')?.id;
     expect(courseId).toBeTruthy();
+    await adminPage.goto('/communities?q=ALP+101');
+    const directoryCourse=adminPage.getByRole('listitem').filter({hasText:schoolName});
+    await expect(directoryCourse.getByRole('link',{name:'Discussion',exact:true})).toHaveAttribute('href','/communities/'+courseId);
+    await expect(directoryCourse.getByRole('link',{name:'Study rounds',exact:true})).toHaveAttribute('href','/study/'+courseId);
 
     const creatorPage=await creator.newPage();
     const viewerPage=await viewer.newPage();
     await join(creatorPage,schoolId,creatorEmail,password);
     await join(viewerPage,schoolId,viewerEmail,password);
     await login(creatorPage,creatorEmail,password);
+    await expect(creatorPage.locator('.nav-auth').getByRole('link',{name:'My studio',exact:true})).toBeVisible();
+    await creatorPage.getByRole('button',{name:'Account and navigation menu'}).click();
+    await expect(creatorPage.getByRole('navigation',{name:'Account menu'}).getByRole('link',{name:'Staff console',exact:true})).toHaveCount(0);
+    await creatorPage.keyboard.press('Escape');
     await expect(creatorPage.getByText('Your campus membership is waiting for an administrator', {exact:false})).toBeVisible();
     await login(viewerPage,viewerEmail,password);
     // An unverified account may sign in, but cannot create content, follow or review identities.
@@ -112,6 +178,30 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     const lessonId=lessons.find(x=>x.title===title)?.id;
     expect(lessonId).toBeTruthy();
 
+    const draftRow=creatorPage.getByRole('listitem').filter({hasText:title});
+    await draftRow.getByRole('button',{name:'Edit',exact:true}).click();
+    await expect(creatorPage.locator('#course')).toBeDisabled();
+    await expect(creatorPage.locator('#topic')).toBeDisabled();
+    await expect(draftRow.getByRole('button',{name:'Submit for review'})).toBeDisabled();
+    await creatorPage.getByRole('button',{name:'Cancel editing'}).click();
+    await expect(draftRow.getByRole('button',{name:'Submit for review'})).toBeEnabled();
+    const price=creatorPage.locator('#price-'+lessonId);
+    await price.fill('');
+    await expect(draftRow.getByRole('button',{name:'Submit for review'})).toBeDisabled();
+    await draftRow.getByRole('button',{name:'Save access price'}).click();
+    await expect(creatorPage.getByRole('alert').filter({hasText:'Choose ₦0'})).toBeVisible();
+    await price.fill('0');
+    await expect(draftRow.getByRole('button',{name:'Submit for review'})).toBeEnabled();
+    const videoInput=creatorPage.locator('#video-'+lessonId);
+    await videoInput.setInputFiles({name:'empty.mp4',mimeType:'video/mp4',buffer:Buffer.alloc(0)});
+    await expect(draftRow.getByRole('button',{name:'Submit for review'})).toBeDisabled();
+    await draftRow.getByRole('button',{name:'Upload video'}).click();
+    await expect(creatorPage.getByRole('alert').filter({hasText:'nonempty MP4'})).toBeVisible();
+    await draftRow.getByRole('button',{name:'Remove selected video'}).click();
+    await expect(videoInput).toHaveValue('');
+    await expect(draftRow.getByRole('button',{name:'Submit for review'})).toBeEnabled();
+    console.log('browser-alpha: studio edit, explicit price and selected media guard passed');
+
     // Draft video must be invisible to other viewers, including anonymous users.
     expect((await request.get(`${BASE}/api/local/lessons/${lessonId}/video`)).status()).toBe(404);
     await creatorPage.locator(`#video-${lessonId}`).setInputFiles({
@@ -119,11 +209,13 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     });
     await creatorPage.getByRole('button',{name:'Upload video'}).click();
     await expect(creatorPage.getByText('Video saved privately.',{exact:false})).toBeVisible();
+    await expect(videoInput).toHaveValue('');
     await creatorPage.locator('#captions-'+lessonId).setInputFiles({
       name:'synthetic.vtt',mimeType:'text/vtt',buffer:Buffer.from(syntheticCaptions),
     });
     await creatorPage.getByRole('button',{name:'Upload captions'}).click();
     await expect(creatorPage.getByText('English captions saved privately.',{exact:false})).toBeVisible();
+    await expect(creatorPage.locator('#captions-'+lessonId)).toHaveValue('');
     expect((await request.get(`${BASE}/api/local/lessons/${lessonId}/video`)).status()).toBe(404);
     await creatorPage.getByRole('button',{name:'Submit for review'}).click();
     await expect(creatorPage.getByText('Lesson submitted.',{exact:false})).toBeVisible();
@@ -137,6 +229,19 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
 
     await viewerPage.goto('/');
     await expect(viewerPage.getByRole('heading',{name:title})).toBeVisible();
+    // Reference-driven discovery: compact media tile, no video bytes loaded in feed.
+    const feedCard=viewerPage.getByRole('article',{name:title,exact:true});
+    await expect(feedCard.locator('.discovery-media')).toBeVisible();
+    await expect(feedCard.locator('video')).toHaveCount(0);
+    await viewerPage.setViewportSize({width:360,height:780});
+    const bounds=await feedCard.locator('.discovery-media').boundingBox();
+    expect(bounds.width).toBeLessThanOrEqual(360);
+    expect(Math.abs(bounds.width/bounds.height-16/9)).toBeLessThan(0.03);
+    expect(await viewerPage.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(361);
+    await expect(viewerPage.getByRole('button',{name:'Free',exact:true})).toBeVisible();
+    await viewerPage.getByRole('button',{name:'Free',exact:true}).click();
+    await expect(feedCard).toBeVisible();
+    await viewerPage.setViewportSize({width:1280,height:800});
     await viewerPage.goto(`/lessons/${lessonId}`);
     await expect(viewerPage.getByRole('heading',{name:title})).toBeVisible();
     await expect(viewerPage.getByRole('button',{name:'Enable playback'})).toBeVisible();
@@ -164,6 +269,12 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     await viewerPage.goto('/watch/'+lessonId);
     await expect(viewerPage.getByRole('heading',{name:title}).first()).toBeVisible();
     await expect(viewerPage.getByRole('navigation',{name:'Mobile navigation'})).toBeVisible();
+    await expect(viewerPage.getByRole('heading',{name:title,exact:true})).toHaveCount(1);
+    await expect(viewerPage.getByRole('region',{name:'Lesson discussion'})).toBeVisible();
+    await expect(viewerPage.getByRole('complementary',{name:'More from this course'})).toBeVisible();
+    await viewerPage.setViewportSize({width:320,height:720});
+    expect(await viewerPage.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(321);
+    await viewerPage.setViewportSize({width:360,height:780});
     const watchViewport=await viewerPage.evaluate(()=>({width:window.innerWidth,scrollWidth:document.documentElement.scrollWidth}));
     expect(watchViewport.scrollWidth,'Protected Android-width viewer overflows horizontally').toBeLessThanOrEqual(watchViewport.width+1);
     const playButton=viewerPage.getByRole('button',{name:'Enable playback'});

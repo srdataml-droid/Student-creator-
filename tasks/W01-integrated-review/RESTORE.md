@@ -1,0 +1,2 @@
+# Disposable backup/restore evidence
+The database-contract job uses PostgreSQL 17's own pg_dump and pg_restore binaries in its disposable service container. It restores the synthetic application database to a separate database, tests persisted profile/event data, RLS and service-only RPC grants. No hosted source credentials, student identity bytes or real money. This does not establish recovery of the real Supabase project, its Auth managed state or Storage object bytes. A separately approved isolated hosted recovery target and secure backup/export path are still required.

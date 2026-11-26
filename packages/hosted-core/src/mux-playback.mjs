@@ -1,5 +1,5 @@
 /**
- * Server-only Mux signed-playback grant. NOT a wired hosted endpoint.
+ * Server-only Mux signed-playback grant.
  * Caller must provide a current authenticated viewer, database-owned lesson,
  * and authoritative entitlement/verification check on EVERY grant.
  */
@@ -36,7 +36,10 @@ export async function issueAuthorizedMuxPlayback({viewer,lessonId,loadLesson,aut
   if(privateKey.asymmetricKeyType!=='rsa'||(privateKey.asymmetricKeyDetails?.modulusLength??0)<2048)
    throw Error('weak or non-RSA signing key');
  }catch{throw reject('MUX_SIGNING_UNAVAILABLE',503);}
- const expiresAt=nowSeconds+ttlSeconds;
+ const entitlementExpiry=lesson.entitlementExpiresAt;
+ if(entitlementExpiry!==undefined&&entitlementExpiry!==null&&(!Number.isSafeInteger(entitlementExpiry)||entitlementExpiry<=nowSeconds))
+  throw reject('PLAYBACK_FORBIDDEN',403);
+ const expiresAt=entitlementExpiry==null?nowSeconds+ttlSeconds:Math.min(nowSeconds+ttlSeconds,entitlementExpiry);
  const header={alg:'RS256',typ:'JWT',kid:signingKeyId};
  const claims={sub:lesson.playbackId,aud:'v',exp:expiresAt,kid:signingKeyId};
  const input=[base64url(header),base64url(claims)].join('.');
