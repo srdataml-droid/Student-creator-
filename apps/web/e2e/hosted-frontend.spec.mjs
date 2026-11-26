@@ -3,8 +3,9 @@ const BASE='http://localhost:3000',actor='11111111-1111-4111-8111-111111111111',
 test('isolated hosted frontend exercises community, checkout, history and responsive failure states',async({browser})=>{
  const context=await browser.newContext({baseURL:BASE,viewport:{width:390,height:844}});
  const page=await context.newPage();let joined=false,posts=[],checkoutCalls=0,saved=false,enrolled=false;
- const now=Date.now(),sessions=Array.from({length:4},(_,i)=>({id:'55555555-5555-4555-8555-'+String(i+1).padStart(12,'0'),host_id:order,title:'Isolated night class '+(i+1),description:'Test fixture only',starts_at:new Date(now+3600000*(i+1)).toISOString(),ends_at:new Date(now+3600000*(i+2)).toISOString(),status:'scheduled',price_kobo:0,currency:'NGN'}));
+ const now=Date.parse('2026-11-26T20:00:00Z'),sessions=Array.from({length:4},(_,i)=>({id:'55555555-5555-4555-8555-'+String(i+1).padStart(12,'0'),host_id:order,title:'Isolated night class '+(i+1),description:'Test fixture only',starts_at:new Date(now+3600000*(i===0?-1:i+1)).toISOString(),ends_at:new Date(now+3600000*(i===0?1:i+2)).toISOString(),status:i===0?'room_open':'scheduled',price_kobo:0,currency:'NGN'}));
  try{
+ await page.clock.setFixedTime(new Date(now));
  await page.route('**/api/hosted-auth/refresh',r=>r.fulfill({json:{accessToken:'one.two.three',userId:actor,expiresIn:3600}}));
  await page.route('**/api/account/state',r=>r.fulfill({json:{userId:actor,student:true,admin:false,profile:{displayName:'Synthetic learner',institutionId:course},requests:[],drafts:[]}}));
  // Browser-side contract fixtures only. Never reach a real provider or persist test data.
@@ -104,3 +105,5 @@ test('isolated hosted frontend exercises community, checkout, history and respon
  }
  }finally{await context.close();}
 });
+
+test('public home retains content layout when account refresh is unavailable',async({browser})=>{const context=await browser.newContext({baseURL:BASE,viewport:{width:390,height:844}});try{const page=await context.newPage();await page.route('**/api/hosted-auth/refresh',r=>r.fulfill({status:503,json:{error:'HOSTED_AUTH_UNAVAILABLE'}}));await page.goto('/');await expect(page.getByRole('heading',{name:'Recommended for you'})).toBeVisible();await expect(page.getByRole('region',{name:'Empty content spaces'})).toBeVisible();await expect(page.getByRole('complementary',{name:'Available night class'})).toHaveCount(0);await expect(page.getByRole('link',{name:'Shorts',exact:true}).first()).toBeVisible();await expect(page.locator('video[src="/api/platform-intro"]')).toBeVisible();const media=await page.request.get('/api/platform-intro');expect(media.ok()).toBeTruthy();expect(media.headers()['content-type']).toBe('video/mp4');expect((await media.body()).length).toBe(1648);await page.getByRole('navigation',{name:'Mobile navigation'}).getByRole('link',{name:'Shorts'}).click();await expect(page.getByRole('heading',{name:'Shorts',exact:true})).toBeVisible();await page.goto('/communities?tab=assignments');await expect(page.getByRole('heading',{name:'Assignments'})).toBeVisible();}finally{await context.close();}});
