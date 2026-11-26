@@ -28,6 +28,10 @@ test('isolated hosted frontend exercises community, checkout, history and respon
  await page.route('**/api/account/checkout-quote/**',r=>r.fulfill({json:{priceKobo:20000,currency:'NGN'}}));
  await page.route('**/api/lessons/**/hosted-checkout',r=>{checkoutCalls++;expect(r.request().headers()['idempotency-key']).toMatch(/^[A-Za-z0-9_-]{16,128}$/);expect(r.request().postData()).toBeNull();return r.fulfill({json:{orderId:order,authorizationUrl:'https://checkout.paystack.com/isolated-browser-fixture'}});});
  await page.goto('/');
+ await page.getByRole('button',{name:'Search Student Creators',exact:true}).click();
+ await expect(page.getByRole('dialog',{name:'Search Student Creators'})).toBeVisible();
+ await page.keyboard.press('Escape');
+ await expect(page.getByRole('dialog',{name:'Search Student Creators'})).toBeHidden();
  await expect(page.getByRole('complementary',{name:'Available night class'})).toContainText(sessions[0].title);
  await page.getByRole('button',{name:'Dismiss night class announcement'}).click();
  await expect(page.getByRole('complementary',{name:'Available night class'})).toHaveCount(0);
@@ -83,7 +87,7 @@ test('isolated hosted frontend exercises community, checkout, history and respon
   await page.setViewportSize({width,height:844});
   for(const path of ['/classes','/purchases','/saved','/communities','/communities?tab=night','/communities/'+course,'/lessons/'+lesson]){
    await page.goto(path);await expect(page.locator('main h1')).toBeVisible();
-   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth-window.innerWidth)).toBeLessThanOrEqual(1);
+   await expect.poll(()=>page.evaluate(()=>document.documentElement.scrollWidth-window.innerWidth),{message:'Overflow at '+width+' on '+path}).toBeLessThanOrEqual(1);
   }
  }
  }finally{await context.close();}
