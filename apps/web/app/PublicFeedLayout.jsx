@@ -1,0 +1,17 @@
+'use client';
+import {useEffect,useRef,useState} from 'react';
+import Link from 'next/link';
+import {ShareContent} from './WatchActions.jsx';
+export function FeedEmptyLayout({message='More original student videos will appear here as they are published.',count=3}){
+ return <section className="feed-empty-layout" aria-label="Empty content spaces"><p className="hint">{message}</p><div className="watch-feed-grid">{Array.from({length:count},(_,i)=><div key={i} className="empty-media-slot" aria-hidden="true"><div className="watch-media-space"><svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="currentColor" strokeWidth="1.2"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="m10 8 6 4-6 4z"/></svg></div><div className="empty-media-lines"><span/><span/></div></div>)}</div></section>;
+}
+export function PlatformIntro(){return <article className="platform-intro"><video controls muted playsInline preload="none" poster="/platform-intro.svg" aria-label="Silent Worthkind introduction" src="/api/platform-intro"/><h3>Welcome to Student Creators</h3><p className="hint">Worthkind · Official platform introduction · 0:03</p></article>;}
+export default function PublicFeedLayout({initial,query='',courseId='',showIntro=false}){
+ const [items,setItems]=useState(initial.items),[page,setPage]=useState(initial.page),[more,setMore]=useState(initial.hasNext),[busy,setBusy]=useState(false),[error,setError]=useState('');const lock=useRef(false),sentinel=useRef(null),abort=useRef(null);
+ useEffect(()=>()=>abort.current?.abort(),[]);
+ async function next(){if(lock.current||!more)return;lock.current=true;setBusy(true);setError('');const controller=new AbortController();abort.current=controller;
+ try{const params=new URLSearchParams({page:String(page+1),q:query,courseId});const r=await fetch('/api/discovery?'+params,{cache:'no-store',credentials:'same-origin',signal:controller.signal});const out=await r.json();if(!r.ok||!Array.isArray(out.items)||out.page!==page+1||typeof out.hasNext!=='boolean')throw Error('UNAVAILABLE');setItems(old=>[...new Map([...old,...out.items].map(p=>[p.id,p])).values()]);setPage(out.page);setMore(out.hasNext);}catch(e){if(e.name!=='AbortError')setError('More content could not be loaded.');}finally{lock.current=false;setBusy(false);}}
+ useEffect(()=>{if(!more||busy||error||!sentinel.current||typeof IntersectionObserver==='undefined')return;const observer=new IntersectionObserver(entries=>{if(entries.some(e=>e.isIntersecting))void next();},{rootMargin:'160px'});observer.observe(sentinel.current);return()=>observer.disconnect();},[page,more,busy,error,query,courseId]);
+ return <>{showIntro&&items.length===0&&<PlatformIntro/>}{items.length?<div className="watch-feed-grid">{items.map(post=><article className="public-watch-card" key={post.id}><Link href={'/lessons/'+post.id} className="watch-media-space" aria-label={'Open '+post.title}><span aria-hidden="true">▶</span></Link><h3><Link href={'/lessons/'+post.id}>{post.title}</Link></h3><p className="hint">{post.institutionName} · {post.courseCode}</p>{post.previewText&&<p>{post.previewText}</p>}<ShareContent contentId={post.id} title={post.title}/></article>)}</div>:<FeedEmptyLayout message={query?'No matching published content. Try another search.':undefined}/>}
+ {more&&<div ref={sentinel}><button className="quiet-button" type="button" disabled={busy} onClick={next}>{busy?'Loading…':'Load more videos'}</button>{error&&<p role="alert">{error}</p>}</div>}{!more&&items.length>0&&<p className="hint">You’ve reached the end.</p>}</>;
+}
