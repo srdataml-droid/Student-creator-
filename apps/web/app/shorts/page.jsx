@@ -1,0 +1,3 @@
+import Link from 'next/link';
+export const metadata={title:'Shorts | Student Creators'};
+export default function Shorts(){return <main id="main" className="main shorts-page"><h1>Shorts</h1><div className="shorts-empty" aria-hidden="true"><svg viewBox="0 0 24 24" width="50" height="50" fill="none" stroke="currentColor" strokeWidth="1.2"><rect x="6" y="3" width="12" height="18" rx="4"/><path d="m10 8 5 4-5 4z"/></svg></div><p className="hint">Short videos will appear when the publishing workflow is available. No Shorts have been published here yet.</p><Link className="secondary-link" href="/">Explore videos</Link></main>;}
