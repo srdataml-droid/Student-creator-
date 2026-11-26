@@ -23,6 +23,21 @@ export function createLivePaystackRuntime({env=process.env,fetcher=fetch}={}){
   if(!r.ok)throw unavailable();
   return JSON.parse(await readBoundedGatewayResponse(r,65536,unavailable));
  }
+ // Alternate the first claim across lesson and learning inboxes. A busy or
+ // temporarily unavailable inbox cannot permanently starve the other.
+ let learningFirst=false;
+ async function claimCharge(){
+  const order=learningFirst?['claim_live_learning_charge','claim_live_paystack_charge']:['claim_live_paystack_charge','claim_live_learning_charge'];
+  learningFirst=!learningFirst;
+  let firstError;
+  for(const name of order){
+   try{const event=await rpc(name,{});if(event!==null)return event;}
+   catch(e){firstError??=e;}
+  }
+  // An unavailable inbox must not be reported as an empty healthy queue.
+  if(firstError)throw unavailable();
+  return null;
+ }
  const store={
   recordTransferEvent:(reference,event,digest)=>rpc('enqueue_payout_transfer_event',{_reference:reference,_event:event,_digest:digest}),
   recordReversal:(event,id,digest)=>rpc('enqueue_live_reversal_event',{_event:event,_id:id,_digest:digest}),
@@ -34,7 +49,7 @@ export function createLivePaystackRuntime({env=process.env,fetcher=fetch}={}){
   finish:(order,url)=>rpc('finish_live_paystack_checkout',{_order:order,_url:url}),
   canReturn:(buyer,reference,terms)=>rpc('live_paystack_can_return',{_buyer:buyer,_reference:reference,_terms:terms}),
   record:(reference,tx,digest)=>rpc(reference.startsWith('ll_')?'record_live_learning_charge':'record_live_paystack_charge',{_reference:reference,_tx:tx,_digest:digest}),
-  claim:async()=>await rpc('claim_live_paystack_charge',{})??await rpc('claim_live_learning_charge',{}),snapshot:reference=>rpc(reference.startsWith('ll_')?'live_learning_order_snapshot':'live_paystack_order_snapshot',{_reference:reference}),
+  claim:claimCharge,snapshot:reference=>rpc(reference.startsWith('ll_')?'live_learning_order_snapshot':'live_paystack_order_snapshot',{_reference:reference}),
   settle:(k,lease,c)=>k.startsWith('ll:')?(k.slice(3)===c.providerTransactionId?rpc('settle_live_learning_charge',{_tx:c.providerTransactionId,_lease:lease,_amount:c.amountKobo,_fee:c.providerFeeKobo}):Promise.resolve(false)):rpc('settle_live_paystack_charge',{_key:k,_lease:lease,_tx:c.providerTransactionId,_amount:c.amountKobo,_fee:c.providerFeeKobo}),
   retry:(k,lease)=>k.startsWith('ll:')?rpc('retry_live_learning_charge',{_tx:k.slice(3),_lease:lease}):rpc('retry_live_paystack_charge',{_key:k,_lease:lease})
  };
