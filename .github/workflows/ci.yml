@@ -248,6 +248,8 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/tests/activity_dashboard.sql
           psql -1 -v ON_ERROR_STOP=1 -f db/production/0015_watch_progress.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/watch_progress.sql
+          psql -1 -v ON_ERROR_STOP=1 -f db/production/0016_coverage_and_weekly_comparison.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/watch_coverage.sql
           psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-bookmarks.test.sql
 
       - name: Restore disposable PostgreSQL backup into isolated database
