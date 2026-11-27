@@ -3,12 +3,13 @@ import FeedExperience from './FeedExperience.jsx';
 import {toFeedPreview} from '../lib/feed-preview.mjs';
 import {getLocalPublicCourses,getLocalCourseLessons,getLocalPublicInstitutions,isLocalMode} from '../lib/local-public.mjs';
 import HostedDiscovery from './HostedDiscovery.jsx';
+import {HomeNightAnnouncement} from './CommunityDiscovery.jsx';
 export const dynamic='force-dynamic';
 export const metadata={title:'Home | Student Creators'};
 export default async function Home({searchParams}){
  let courses=[],institutions=[],posts=[],ready=true;
  const local=isLocalMode();
- if(!local)return <main id="main" className="creator-main modern-home hosted-home"><div className="feed-column"><h1 className="visually-hidden">Discover student creators</h1><HostedDiscovery params={(await searchParams)||{}}/></div></main>;
+ if(!local)return <main id="main" className="creator-main modern-home hosted-home"><div className="feed-column"><h1 className="visually-hidden">Discover student creators</h1><HomeNightAnnouncement/><HostedDiscovery params={(await searchParams)||{}}/></div></main>;
  try{
   if(local){
    courses=getLocalPublicCourses().slice(0,80);

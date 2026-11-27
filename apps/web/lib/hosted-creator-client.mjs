@@ -39,7 +39,7 @@ export function hostedCreatorRequest(operation,input={}){
  case 'submitReview':return {path:'/api/lessons/'+id(input.lessonId)+'/submit',method:'POST',headers:{}};
  case 'moderate':return json('/api/lessons/'+id(input.lessonId)+'/moderate',{decision:choice(input.decision,['approve','reject']),reason:bounded(input.reason,5,1000)});
  case 'playback':return {path:'/api/lessons/'+id(input.lessonId)+'/mux-playback',method:'GET',headers:{}};
- case 'feed':{const q=bounded(input.q??'',0,80);if(q.length===1)throw Error('INVALID_TEXT');return json('/api/social/feed',{mode:choice(input.mode??'all',['all','following']),q,limit:60});}
+ case 'feed':{const q=bounded(input.q??'',0,80);if(q.length===1)throw Error('INVALID_TEXT');return json('/api/social/feed',{mode:choice(input.mode??'all',['all','following']),q,limit:60,...(input.institutionId?{institutionId:id(input.institutionId)}:{})});}
  case 'follow':case 'unfollow':return json('/api/social/'+operation,{creatorId:id(input.creatorId)});
  case 'myLikes':return json('/api/social/myLikes',{});
  case 'like':case 'unlike':return json('/api/social/'+operation,{contentId:id(input.contentId)});
@@ -67,6 +67,8 @@ export function hostedCreatorRequest(operation,input={}){
  case 'myPayouts':return json('/api/social/myPayouts',{});
  case 'requestPayout':{if(!Number.isSafeInteger(input.amountKobo)||input.amountKobo<1)throw Error('INVALID_AMOUNT');return json('/api/social/requestPayout',{amountKobo:input.amountKobo,requestKey:key(input.requestKey)});}
  case 'cancelPayout':return json('/api/social/cancelPayout',{requestId:id(input.requestId)});
+ case 'myCommunities':return json('/api/social/myCommunities',{});
+ case 'availableClasses':return json('/api/social/availableClasses',{limit:100,...(input.classId?{classId:id(input.classId)}:{})});
  case 'classes':return json('/api/social/classes',{limit:100});
  case 'createClass':{const {startsAt,endsAt,capacity}=input;if(!Number.isFinite(Date.parse(startsAt))||Date.parse(endsAt)<=Date.parse(startsAt)||!Number.isInteger(capacity)||capacity<1||capacity>50)throw Error('INVALID_CLASS');if(input.priceKobo!==undefined&&(!Number.isSafeInteger(input.priceKobo)||input.priceKobo<20000||input.priceKobo>1000000000))throw Error('INVALID_PRICE');return json('/api/social/createClass',{courseId:id(input.courseId),title:bounded(input.title,5,120),description:bounded(input.description??'',0,1200),startsAt,endsAt,capacity,creationKey:key(input.creationKey),...(input.priceKobo===undefined?{}:{priceKobo:input.priceKobo})});}
  case 'enrollClass':case 'withdrawClass':case 'openClass':case 'completeClass':return json('/api/social/'+operation,{classId:id(input.classId)});
@@ -75,6 +77,9 @@ export function hostedCreatorRequest(operation,input={}){
  case 'mediaSourceReserve':{if(!['video/mp4','video/webm'].includes(input.mime)||!Number.isSafeInteger(input.bytes)||input.bytes<12||input.bytes>104857600||! /^[a-f0-9]{64}$/.test(input.digest))throw Error('INVALID_MEDIA');return json('/api/lessons/'+id(input.lessonId)+'/media-source',{action:'reserve',mime:input.mime,bytes:input.bytes,digest:input.digest});}
  case 'mediaSourceComplete':return json('/api/lessons/'+id(input.lessonId)+'/media-source',{action:'complete',id:id(input.sourceId)});
  case 'accountState':return {path:'/api/account/state',method:'GET',headers:{}};
+ case 'draftFormat':return json('/api/social/draftFormat',{contentId:id(input.contentId)});
+ case 'setDraftFormat':return json('/api/social/setDraftFormat',{contentId:id(input.contentId),format:choice(input.format,['video','short'])});
+ case 'isLiked':return json('/api/social/isLiked',{contentId:id(input.contentId)});
  case 'draftPrice':return json('/api/social/draftPrice',{contentId:id(input.contentId)});
  case 'setDraftPrice':{if(!Number.isSafeInteger(input.amountKobo)||input.amountKobo<0||input.amountKobo>1000000000||(input.amountKobo>0&&input.amountKobo<20000))throw Error('INVALID_PRICE');return json('/api/social/setDraftPrice',{contentId:id(input.contentId),amountKobo:input.amountKobo});}
  case 'liveClassCheckout':{if(!/^[A-Za-z0-9._-]{3,128}$/.test(input.termsVersion||''))throw Error('INVALID_TERMS_VERSION');return {path:'/api/classes/'+id(input.classId)+'/live-checkout',method:'POST',headers:{'idempotency-key':key(input.creationKey),'x-student-creators-terms-version':input.termsVersion}};}

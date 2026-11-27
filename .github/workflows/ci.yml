@@ -242,20 +242,22 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/tests/creator_workspace_edits.sql
           psql -1 -v ON_ERROR_STOP=1 -f db/production/0009_client_table_privileges.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/client_table_privileges.sql
+          psql -1 -v ON_ERROR_STOP=1 -f db/production/0015_short_format.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/short_format.sql
           psql -1 -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-bookmarks.sql
           psql -1 -v ON_ERROR_STOP=1 -f db/production/0010_catalog_and_finance_indexes.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/catalog_and_finance_indexes.sql
           psql -1 -v ON_ERROR_STOP=1 -f db/production/0011_media_source_quarantine.sql
-          psql -1 -v ON_ERROR_STOP=1 -f db/production/0015_media_quarantine_recovery.sql
+          psql -1 -v ON_ERROR_STOP=1 -f db/production/0016_media_quarantine_recovery.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/media_source_quarantine.sql
           psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-bookmarks.test.sql
-          psql -1 -v ON_ERROR_STOP=1 -f db/production/0016_activity_dashboard.sql
+          psql -1 -v ON_ERROR_STOP=1 -f db/production/0017_activity_dashboard.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/activity_dashboard.sql
-          psql -1 -v ON_ERROR_STOP=1 -f db/production/0017_watch_progress.sql
+          psql -1 -v ON_ERROR_STOP=1 -f db/production/0018_watch_progress.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/watch_progress.sql
-          psql -1 -v ON_ERROR_STOP=1 -f db/production/0018_coverage_and_weekly_comparison.sql
+          psql -1 -v ON_ERROR_STOP=1 -f db/production/0019_coverage_and_weekly_comparison.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/watch_coverage.sql
-          psql -1 -v ON_ERROR_STOP=1 -f db/production/0019_creator_retention_and_watch_export.sql
+          psql -1 -v ON_ERROR_STOP=1 -f db/production/0020_creator_retention_and_watch_export.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/creator_retention_and_watch_export.sql
 
       - name: Restore disposable PostgreSQL backup into isolated database

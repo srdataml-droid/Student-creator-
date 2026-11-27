@@ -80,3 +80,5 @@ test('unsafe Auth settings deny invite before reservation, sign-in, OTP completi
  // Logout remains available for containment even if the provider settings drift.
  assert.equal((await d.handler(req('logout',null,{authorization:'Bearer '+token}),{action:'logout'})).status,200);
 });
+
+test('anonymous same-origin refresh is signed out even without auth configuration',async()=>{const h=buildHostedAuthRoute({getEnv:()=>{throw Error('not configured');},fetcher:async()=>{throw Error('must not contact provider');}});const r=await h(req('refresh'),{action:'refresh'});assert.equal(r.status,401);assert.deepEqual(await r.json(),{error:'AUTH_REQUIRED'});assert.equal((await h(req('refresh',null,{origin:'https://evil.example'}),{action:'refresh'})).status,403);assert.equal((await h(req('refresh',null,{cookie:'__Secure-wk_refresh='+refreshToken}),{action:'refresh'})).status,503);});
