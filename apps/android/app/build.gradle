@@ -1,0 +1,27 @@
+plugins { id 'com.android.application' }
+def catalogOrigin = providers.gradleProperty('catalogOrigin').orElse('').get()
+if (catalogOrigin && !(catalogOrigin ==~ /https:\/\/[a-zA-Z0-9.-]+/)) {
+    throw new GradleException('catalogOrigin must be an HTTPS origin without paths or credentials')
+}
+android {
+    namespace 'org.worthkind.studentcreators'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'org.worthkind.studentcreators.internal'
+        minSdk 26
+        targetSdk 36
+        testInstrumentationRunner 'org.worthkind.studentcreators.CatalogSmokeInstrumentation'
+        versionCode 1
+        versionName '0.1.0-internal'
+        buildConfigField 'String', 'CATALOG_ORIGIN', '"' + catalogOrigin + '"'
+    }
+    buildFeatures { buildConfig true }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    // Internal package ID is deliberately provisional. Do not create a release variant.
+}
+androidComponents {
+    beforeVariants(selector().withBuildType('release')) { variant -> variant.enable = false }
+}

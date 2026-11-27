@@ -1,0 +1,23 @@
+name: Native Android build and acceptance
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  android-internal:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - name: Verify native transport and session contracts
+        run: bash scripts/test-android-catalog.sh
+      - name: Compile and lint debug and instrumentation APKs
+        timeout-minutes: 10
+        run: bash scripts/build-android-internal.sh
+      - name: Run isolated emulator instrumentation when available
+        timeout-minutes: 12
+        env:
+          WK8_STANDARD_PUBLIC_RUNNER: ${{ github.event.repository.private == false }}
+        run: bash scripts/test-android-emulator.sh
