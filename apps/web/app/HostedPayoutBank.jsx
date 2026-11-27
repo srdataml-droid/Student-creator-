@@ -1,6 +1,7 @@
 'use client';
 import {useEffect,useRef,useState} from 'react';
 import {useHostedAccount} from './HostedAccountProvider.jsx';
+import FinanceWithdrawalConsole from './FinanceWithdrawalConsole.jsx';
 const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const states={pending:'Awaiting ownership review',reviewed:'Awaiting independent registration',processing:'Registration in progress',uncertain:'Registration needs investigation',active:'Registered',rejected:'Rejected',cancelled:'Cancelled'};
 const openStates=['pending','reviewed','processing','uncertain'];
@@ -54,7 +55,7 @@ function CreatorBank(){
 }
 export function FinancePayoutBank(){
  const account=useHostedAccount();
- return account?.session.state==='signed-in'?<FinanceBank key={account.session.userId}/>:null;
+ return account?.session.state==='signed-in'?<><FinanceBank key={account.session.userId}/><FinanceWithdrawalConsole/></>:null;
 }
 function FinanceBank(){
  const account=useHostedAccount(),task=useTask(),[rows,setRows]=useState(null),[details,setDetails]=useState(null),[evidence,setEvidence]=useState(''),[recoveryId,setRecoveryId]=useState(''),[recipientCode,setRecipientCode]=useState('');

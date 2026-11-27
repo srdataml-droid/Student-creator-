@@ -82,6 +82,15 @@ export function hostedCreatorRequest(operation,input={}){
   return json('/api/account/payout-bank-workflow/recover',{id:id(input.id),recipientCode:input.recipientCode});
  }
  case 'payoutBankRegister':return json('/api/account/payout-bank-workflow/register',{id:id(input.id)});
+ case 'financeWithdrawalQueue':return json('/api/governance/finance/payouts',{limit:50});
+ case 'financeTransferQueue':return json('/api/governance/finance/payout-transfers',{limit:50});
+ case 'financeWithdrawalReview':return json('/api/governance/finance/payouts/'+id(input.id)+'/review',{decision:choice(input.decision,['reserve','reject']),note:bounded(input.note,10,500)});
+ case 'financeTransferAction':{
+  const action=choice(input.action,['authorize','recheck','void_before_dispatch','confirm_paid','confirm_returned']);
+  const needsEvidence=['confirm_paid','confirm_returned'].includes(action);
+  if(needsEvidence?(typeof input.evidence!=='string'||!/^[A-Za-z0-9_.:-]{8,128}$/.test(input.evidence)):input.evidence!==undefined)throw Error('INVALID_EVIDENCE');
+  return json('/api/governance/finance/payouts/'+id(input.id)+'/transfer',{action,...(needsEvidence?{evidence:input.evidence}:{})});
+ }
  case 'myPayouts':return json('/api/social/myPayouts',{});
  case 'requestPayout':{if(!Number.isSafeInteger(input.amountKobo)||input.amountKobo<1)throw Error('INVALID_AMOUNT');return json('/api/social/requestPayout',{amountKobo:input.amountKobo,requestKey:key(input.requestKey)});}
  case 'cancelPayout':return json('/api/social/cancelPayout',{requestId:id(input.requestId)});
