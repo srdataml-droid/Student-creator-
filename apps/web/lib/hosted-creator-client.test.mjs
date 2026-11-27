@@ -34,3 +34,18 @@ test('direct Mux transfer never attaches browser session or bearer',async()=>{
  assert.throws(()=>validateVideoFile(new Blob([],{type:'video/mp4'})));
  await assert.rejects(putMuxVideo({url:'https://storage.googleapis.com/path?sig=123',file,fetcher:async()=>new Response('',{status:500})}),/VIDEO_TRANSFER_UNCONFIRMED/);
 });
+
+test('payout browser requests target fixed authenticated routes and exclude injected identity or recipient fields',()=>{
+ const input={bankCode:'058',accountNumber:'0123456789',consent:true,creatorId:'fake',recipientCode:'fake'};
+ const lookup=hostedCreatorRequest('payoutBankResolve',input);
+ assert.equal(lookup.path,'/api/account/payout-bank/resolve');
+ assert.deepEqual(JSON.parse(lookup.body),{bankCode:'058',accountNumber:'0123456789',consent:true});
+ assert.equal(hostedCreatorRequest('payoutBankSubmit',input).path,'/api/account/payout-bank-workflow/submit');
+ assert.equal(hostedCreatorRequest('payoutBankStatus').path,'/api/account/payout-bank-workflow/status');
+ assert.throws(()=>hostedCreatorRequest('payoutBankSubmit',{...input,consent:false}));
+ assert.throws(()=>hostedCreatorRequest('payoutBankResolve',{...input,accountNumber:123}));
+ const id='da130000-0000-4000-8000-000000000001';
+ assert.deepEqual(JSON.parse(hostedCreatorRequest('payoutBankRegister',{id,recipientCode:'fake'}).body),{id});
+ assert.throws(()=>hostedCreatorRequest('payoutBankReview',{id,decision:'approve',evidence:'invalid reference'}));
+ assert.deepEqual(JSON.parse(hostedCreatorRequest('payoutBankReview',{id,decision:'approve',evidence:'verified-ref',reviewer:'fake'}).body),{id,decision:'approve',evidence:'verified-ref'});
+});
