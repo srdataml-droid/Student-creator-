@@ -857,7 +857,7 @@ html[data-appearance=light] .creator-body{--text:#151515;--ink:#151515;--muted:#
 .creator-body .identity-received h3,.creator-body .identity-received p{margin:0}
 
 /* Viewer reference: recording at 00:45 and 01:40, mobile Watch and desktop related rail. */
-.creator-body .watch-detail{max-width:1320px}
+.creator-body .main.watch-detail:not(.admin-console){max-width:1320px}
 .viewer-watch-layout{display:grid;grid-template-columns:minmax(0,1fr);gap:24px;min-width:0}
 .viewer-watch-primary{min-width:0}
 .creator-body .viewer-back{display:flex;align-items:center;gap:10px;color:var(--text);font-size:20px;font-weight:600;min-height:44px;margin-bottom:12px}
@@ -889,7 +889,7 @@ html[data-appearance=light] .creator-body{--text:#151515;--ink:#151515;--muted:#
  .viewer-related ul{gap:22px}
 }
 @media(max-width:760px){
- .creator-body .watch-detail{padding:0 18px 32px}
+ .creator-body .main.watch-detail:not(.admin-console){padding:0 18px 32px}
  .creator-body .viewer-back{font-size:19px;margin-bottom:4px;min-height:48px}
  .creator-body .viewer-watch-primary .watch-player-frame,.creator-body .viewer-watch-primary .watch-guest-player{width:calc(100% + 36px);margin-inline:-18px;border-radius:0;max-width:none}
  .creator-body .viewer-watch-primary .watch-detail-copy{margin:12px 0 16px}
