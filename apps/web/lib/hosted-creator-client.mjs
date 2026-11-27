@@ -62,6 +62,7 @@ export function hostedCreatorRequest(operation,input={}){
  case 'liveCheckout':{if(!/^[A-Za-z0-9._-]{3,128}$/.test(input.termsVersion||''))throw Error('INVALID_TERMS_VERSION');return {path:'/api/lessons/'+id(input.lessonId)+'/live-checkout',method:'POST',headers:{'idempotency-key':key(input.creationKey),'x-student-creators-terms-version':input.termsVersion}};}
  case 'checkoutQuote':return {path:'/api/account/checkout-quote/'+id(input.lessonId),method:'GET',headers:{}};
  case 'purchaseHistory':return {path:'/api/account/purchases',method:'GET',headers:{}};
+ case 'isBookmarked':return json('/api/social/isBookmarked',{contentId:id(input.contentId)});
  case 'bookmarks':return json('/api/social/bookmarks',{limit:100});
  case 'bookmark':case 'unbookmark':return json('/api/social/'+operation,{contentId:id(input.contentId)});
  case 'myPayouts':return json('/api/social/myPayouts',{});
