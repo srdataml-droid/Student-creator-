@@ -3,7 +3,7 @@ import HostedGate from './HostedGate.jsx';
 import AccountRequests from './HostedAccountRequests.jsx';
 import {ReviewSubmission} from './HostedSocialWorkspace.jsx';
 import {HostedEarnings} from './HostedLearningWorkspace.jsx';
-import {useRef,useState} from 'react';
+import {useEffect,useRef,useState} from 'react';
 import {makeDraftKey,parseAccessPrice} from '../lib/studio-workflow.mjs';
 import {uploadMediaSource} from '../lib/hosted-media-source.mjs';
 import {readMuxStatus,putMuxVideo} from '../lib/hosted-creator-client.mjs';
@@ -28,16 +28,18 @@ export function HostedIdentity(){
 }
 export function HostedCreatorStudio({courses=[],catalogAvailable}){
  const account=useHostedAccount(),action=useAction(),draftKey=useRef('');
- const [draft,setDraft]=useState(null),[lessonId,setLessonId]=useState('');
- return <HostedGate title="Creator studio"><section id="studio-create" className="panel"><h2>Create a draft</h2>
- {!catalogAvailable?<p role="alert">The course catalog is unavailable.</p>:!courses.length?<p role="status">No courses are available yet.</p>:<form className="form-stack" onSubmit={e=>{e.preventDefault();const d=new FormData(e.currentTarget);action.run(async notice=>{draftKey.current||=makeDraftKey();const out=await account.creatorRequest('draft',{courseId:d.get('courseId'),title:d.get('title'),description:d.get('description'),previewText:d.get('previewText'),rightsAttested:d.get('rights')==='on',creationKey:draftKey.current});if(!out.draft?.id||typeof out.draft.title!=='string')throw Error('UNCONFIRMED');setDraft(out.draft);setLessonId(out.draft.id);draftKey.current='';notice('Private metadata draft saved.');await account.reloadAccount().catch(()=>{});});}}>
+ const [draft,setDraft]=useState(null),[lessonId,setLessonId]=useState(''),[newFormat,setNewFormat]=useState('video');
+ useEffect(()=>{setNewFormat(new URLSearchParams(window.location.search).get('format')==='short'?'short':'video');},[]);
+ return <HostedGate title="Creator studio"><section id="studio-create" className="panel"><h2>{newFormat==='short'?'Create a short':'Upload a video'}</h2>
+ {!catalogAvailable?<p role="alert">The course catalog is unavailable.</p>:!courses.length?<p role="status">No courses are available yet.</p>:<form className="form-stack" onSubmit={e=>{e.preventDefault();const d=new FormData(e.currentTarget);action.run(async notice=>{draftKey.current||=makeDraftKey();const out=await account.creatorRequest('draft',{courseId:d.get('courseId'),title:d.get('title'),description:d.get('description'),previewText:d.get('previewText'),rightsAttested:d.get('rights')==='on',creationKey:draftKey.current});if(!out.draft?.id||typeof out.draft.title!=='string')throw Error('UNCONFIRMED');setDraft(out.draft);setLessonId(out.draft.id);draftKey.current='';await account.reloadAccount().catch(()=>{});if(newFormat==='short'){const f=await account.creatorRequest('setDraftFormat',{contentId:out.draft.id,format:'short'});if(f.contentId!==out.draft.id||f.format!=='short')throw Error('UNCONFIRMED');}notice('Private draft saved.');});}}>
+ <label htmlFor="new-format">Video format</label><select id="new-format" value={newFormat} disabled={action.busy} onChange={e=>setNewFormat(e.target.value)}><option value="video">Standard video</option><option value="short">Short · portrait video</option></select>
  <label htmlFor="hosted-course">Course</label><select id="hosted-course" name="courseId" required disabled={action.busy}><option value="">Select course</option>{courses.map(c=><option key={c.id} value={c.id}>{c.code} — {c.title}</option>)}</select>
  <label htmlFor="hosted-title">Title</label><input id="hosted-title" name="title" minLength={3} maxLength={160} required disabled={action.busy}/>
  <label htmlFor="hosted-description">Description</label><textarea id="hosted-description" name="description" maxLength={2500} rows={3} disabled={action.busy}/>
  <label htmlFor="hosted-preview">Public preview</label><textarea id="hosted-preview" name="previewText" maxLength={800} rows={3} disabled={action.busy}/>
  <label className="check-line"><input name="rights" type="checkbox" required disabled={action.busy}/>I own or have permission to publish this material.</label>
  <button className="primary-link" disabled={action.busy}>{action.busy?'Saving…':'Save private draft'}</button></form>}
- <Feedback action={action}/>{draft&&<div><h3>{draft.title}</h3><p>Draft ID: <code>{draft.id}</code></p><p className="hint">This draft is private until it passes review.</p></div>}<h3 id="studio-content">Your content</h3><button type="button" disabled={action.busy} onClick={()=>action.run(()=>account.reloadAccount())}>Refresh drafts</button>{account.accountState?.drafts&&<ul className="lesson-list">{account.accountState.drafts.map(x=><li key={x.id}><strong>{x.title}</strong> · {x.status.replaceAll('_',' ')} <button type="button" disabled={action.busy} onClick={()=>setLessonId(x.id)}>Select content</button></li>)}</ul>}</section>
+ <Feedback action={action}/>{draft&&<div><h3>{draft.title}</h3><p className="hint">Saved privately. Check the selected format, upload your media and submit for review.</p><p className="hint">This draft is private until it passes review.</p></div>}<h3 id="studio-content">Your content</h3><button type="button" disabled={action.busy} onClick={()=>action.run(()=>account.reloadAccount())}>Refresh drafts</button>{account.accountState?.drafts&&<ul className="lesson-list">{account.accountState.drafts.map(x=><li key={x.id}><strong>{x.title}</strong> · {x.status.replaceAll('_',' ')} <button type="button" disabled={action.busy} onClick={()=>setLessonId(x.id)}>Select content</button></li>)}</ul>}</section>
  {account.mediaMode==='private'?<PrivateMediaUpload key={'media-'+lessonId} lessonId={lessonId}/>:<MuxUpload key={'test-media-'+lessonId} lessonId={lessonId} setLessonId={setLessonId}/>}<DraftFormat key={'format-'+lessonId} lessonId={lessonId.trim()}/><DraftPrice key={'price-'+lessonId} lessonId={lessonId.trim()}/><ReviewSubmission key={'review-'+lessonId} lessonId={lessonId.trim()}/><CreatorProfileEditor key={account.session.userId} /><DraftMetadataEditor key={'edit-'+lessonId} draft={account.accountState?.drafts?.find(x=>x.id===lessonId)}/><HostedPrivacy/><HostedEarnings/></HostedGate>;
 }
 function MuxUpload({lessonId,setLessonId}){
