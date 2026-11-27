@@ -68,3 +68,5 @@ test('raw webhook verification requires exact signed body, correct issuer, expir
 // The Week 6 local HTTP integration remains on PR #46. This hosted branch
 // does not import its SQLite handlers; hosted attendance integration is tested
 // by hosted-livekit-class.test.mjs and the hosted SQL contract.
+
+test('LiveKit provider rejects oversized, malformed and non-object success bodies',async()=>{const room='wk-class-'+randomUUID();for(const body of ['x'.repeat(262145),'{}x','null','[]','true']){const gateway=withGateway(async()=>new Response(body,{status:200}));await assert.rejects(gateway.getRoom(room),{code:'LIVEKIT_PROVIDER_UNAVAILABLE'});}const gateway=withGateway(async()=>Response.json({rooms:[]}));assert.equal(await gateway.getRoom(room),null);});

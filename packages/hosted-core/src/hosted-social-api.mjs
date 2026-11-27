@@ -11,6 +11,17 @@ const id=v=>{if(typeof v!=='string'||!uuid.test(v))throw fault('INVALID_ID',422)
 const optionalId=v=>v==null?null:id(v);
 const integer=(v,max,def)=>{if(v==null)return def;if(!Number.isInteger(v)||v<1||v>max)throw fault('INVALID_LIMIT',422);return v;};
 const string=(v,min,max)=>{if(typeof v!=='string'||v.trim().length<min||v.trim().length>max||/[\x00-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(v))throw fault('INVALID_INPUT',422);return v.trim();};
+// Require an explicit timezone and an actual calendar date; do not allow
+// Date.parse normalization or a database session timezone to change schedules.
+function scheduleInstant(v){
+ const m=typeof v==='string'&&/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2}):(\d{2})(?:\.\d{1,3})?(Z|[+-]\d{2}:\d{2})$/.exec(v);
+ if(!m||Number(m[2])>23||Number(m[3])>59||Number(m[4])>59)throw fault('INVALID_INPUT',422);
+ const day=new Date(m[1]+'T00:00:00Z');
+ if(!Number.isFinite(day.getTime())||day.toISOString().slice(0,10)!==m[1])throw fault('INVALID_INPUT',422);
+ const ms=Date.parse(v);
+ if(!Number.isFinite(ms))throw fault('INVALID_INPUT',422);
+ return ms;
+}
 const bool=v=>{if(typeof v!=='boolean')throw fault('INVALID_INPUT',422);return v;};
 const choice=(v,options)=>{if(!options.includes(v))throw fault('INVALID_INPUT',422);return v;};
 const shape=(v,keys)=>{if(!v||typeof v!=='object'||Array.isArray(v)||Object.keys(v).some(k=>!keys.includes(k)))throw fault('INVALID_INPUT',422);return v;};
@@ -18,7 +29,7 @@ const key=v=>{if(typeof v!=='string'||!/^[A-Za-z0-9_-]{16,128}$/.test(v))throw f
 const rpc=(name,args)=>({path:'rpc/'+name,method:'POST',body:args});
 const select=(name,fields,filters={})=>({path:name+'?'+new URLSearchParams({select:fields,...filters}),method:'GET'});
 const readIds=v=>{if(!Array.isArray(v)||v.length<1||v.length>100||new Set(v).size!==v.length)throw fault('INVALID_INPUT',422);return v.map(id);};
-const accountOperations=new Set(['myPayouts','cancelPayout','myCopyrightCases','copyrightClaim','copyrightAppeal','myCreatorFinance','institutionAppeals','submitInstitutionAppeal','privacyRequests','submitPrivacyRequest']);
+const accountOperations=new Set(['myPayouts','cancelPayout','myCopyrightCases','copyrightClaim','copyrightAppeal','myCreatorFinance','institutionAppeals','submitInstitutionAppeal','privacyRequests','submitPrivacyRequest','myWatchExport']);
 const adminOperations=new Set(['setCommunityModerator','reportQueue','reviewReport']);
 const rateMessages=new Set(['MESSAGE_RATE_LIMIT','POST_RATE_LIMIT','COMMENT_RATE_LIMIT','FOLLOW_RATE_LIMIT','REPORT_RATE_LIMIT','RESTRICTION_RATE_LIMIT','LIKE_RATE_LIMIT']);
 function mapError(status,data){
@@ -42,6 +53,13 @@ function operation(name,input,actor){
  case 'isLiked':{const b=shape(input,['contentId']);return select('content_likes','content_id',{user_id:'eq.'+actor,content_id:'eq.'+id(b.contentId),limit:'1'});}
  case 'draftPrice':{const b=shape(input,['contentId']);return rpc('get_draft_price',{_content:id(b.contentId)});}
  case 'setDraftPrice':{const b=shape(input,['contentId','amountKobo']);if(!Number.isSafeInteger(b.amountKobo)||b.amountKobo<0||b.amountKobo>1000000000||(b.amountKobo>0&&b.amountKobo<20000))throw fault('INVALID_INPUT',422);return rpc('set_draft_price',{_content:id(b.contentId),_amount:b.amountKobo});}
+ case 'creatorVideoRetention':{const b=shape(input,['contentId']);return rpc('creator_video_retention',{_content:id(b.contentId)});}
+ case 'myRecommendations':{const b=shape(input,['limit']);return rpc('my_recommendations',{_limit:integer(b.limit,50,20)});}
+ case 'myWatchExport':{const b=shape(input,['kind','afterContentId','afterDay','limit']);const kind=choice(b.kind,['progress','daily','coverage']);const afterContent=optionalId(b.afterContentId);const day=b.afterDay??null;if(day!==null&&(typeof day!=='string'||!/^\d{4}-\d{2}-\d{2}$/.test(day)||!Number.isFinite(Date.parse(day+'T00:00:00Z'))||new Date(day+'T00:00:00Z').toISOString().slice(0,10)!==day))throw fault('INVALID_INPUT',422);if(kind==='daily'?((afterContent===null)!==(day===null)):day!==null)throw fault('INVALID_INPUT',422);return rpc('my_watch_export',{_kind:kind,_after_content:afterContent,_after_day:day,_limit:integer(b.limit,100,25)});}
+ case 'getWatchPreference':shape(input,[]);return rpc('watch_preference',{});
+ case 'setWatchPreference':{const b=shape(input,['enabled']);return rpc('watch_preference',{_enabled:bool(b.enabled)});}
+ case 'recordWatchProgress':{const b=shape(input,['watchSessionId','sequence','positionMs','playing','continuous']);if(!Number.isInteger(b.sequence)||b.sequence<1||b.sequence>2147483646||!Number.isInteger(b.positionMs)||b.positionMs<0||b.positionMs>43200000)throw fault('INVALID_INPUT',422);return rpc('record_watch_progress',{_id:id(b.watchSessionId),_seq:b.sequence,_position_ms:b.positionMs,_playing:bool(b.playing),_continuous:bool(b.continuous)});}
+ case 'myActivityDashboard':{const b=shape(input,['days']);const days=b.days??7;if(![7,28].includes(days))throw fault('INVALID_INPUT',422);return rpc('my_activity_dashboard',{_days:days});}
  case 'myPayouts':shape(input,[]);return rpc('creator_payout_request',{_action:'list'});
  case 'requestPayout':{const b=shape(input,['amountKobo','requestKey']);if(!Number.isSafeInteger(b.amountKobo)||b.amountKobo<1)throw fault('INVALID_INPUT',422);return rpc('creator_payout_request',{_action:'request',_amount:b.amountKobo,_key:key(b.requestKey)});}
  case 'cancelPayout':{const b=shape(input,['requestId']);return rpc('creator_payout_request',{_action:'cancel',_id:id(b.requestId)});}
@@ -122,7 +140,9 @@ function operation(name,input,actor){
  case 'createClass':{
   const b=shape(input,['courseId','startsAt','endsAt','capacity','title','description','creationKey','priceKobo']);
   if(b.priceKobo!==undefined&&(!Number.isSafeInteger(b.priceKobo)||b.priceKobo<0||b.priceKobo>1000000000||(b.priceKobo>0&&b.priceKobo<20000)))throw fault('INVALID_INPUT',422);
-  return rpc('hosted_learning_action',{_action:'create_class',_input:{courseId:id(b.courseId),startsAt:string(b.startsAt,20,35),endsAt:string(b.endsAt,20,35),capacity:integer(b.capacity,50,12),title:string(b.title,5,120),description:string(b.description??'',0,1200),creationKey:key(b.creationKey),priceKobo:b.priceKobo??0}});
+  const start=scheduleInstant(b.startsAt),end=scheduleInstant(b.endsAt),capacity=integer(b.capacity,50,12);
+  if(capacity<2||end<=start||end-start>4*3600000)throw fault('INVALID_INPUT',422);
+  return rpc('hosted_learning_action',{_action:'create_class',_input:{courseId:id(b.courseId),startsAt:new Date(start).toISOString(),endsAt:new Date(end).toISOString(),capacity,title:string(b.title,5,120),description:string(b.description??'',0,1200),creationKey:key(b.creationKey),priceKobo:b.priceKobo??0}});
  }
  case 'enrollClass':case 'withdrawClass':case 'openClass':case 'completeClass':{
   const b=shape(input,['classId']);return rpc('hosted_learning_action',{_action:{enrollClass:'enroll',withdrawClass:'withdraw',openClass:'open',completeClass:'complete'}[name],_input:{classId:id(b.classId)}});
@@ -142,7 +162,7 @@ function operation(name,input,actor){
   return rpc('hosted_learning_action',{_action:'request_help',_input:{creatorId:id(b.creatorId),kind:choice(b.kind,['tutoring','assignment_explanation','project_guidance']),description:string(b.description,20,2000),budgetKobo:b.budgetKobo??0,creationKey:key(b.creationKey)}});
  }
  case 'quoteHelp':case 'acceptHelp':{
-  const b=shape(input,['requestId','quoteKobo']);if(!Number.isSafeInteger(b.quoteKobo)||b.quoteKobo<0||b.quoteKobo>1000000000)throw fault('INVALID_INPUT',422);
+  const b=shape(input,['requestId','quoteKobo']);if(!Number.isSafeInteger(b.quoteKobo)||b.quoteKobo<0||b.quoteKobo>1000000000||(b.quoteKobo>0&&b.quoteKobo<20000))throw fault('INVALID_INPUT',422);
   return rpc('hosted_learning_action',{_action:name==='quoteHelp'?'quote_help':'accept_help',_input:{requestId:id(b.requestId),quoteKobo:b.quoteKobo}});
  }
  case 'startHelp':case 'submitHelp':case 'completeHelp':case 'cancelHelp':case 'disputeHelp':{

@@ -24,7 +24,7 @@ jobs:
       - name: Build dedicated worker image and verify embedded ClamAV engine
         run: |
           docker build -f infra/worker/Dockerfile -t student-creators-worker:ci .
-          docker run --rm --entrypoint /bin/bash student-creators-worker:ci -c 'test "$(id -u)" != 0 && bash -n infra/worker/entrypoint.sh && node --check scripts/run-hosted-workers.mjs && bash scripts/test-clamd-engine.sh'
+          docker run --rm --entrypoint /bin/bash student-creators-worker:ci -c 'test "$(id -u)" != 0 && bash -n infra/worker/entrypoint.sh && node --check scripts/run-hosted-workers.mjs && bash scripts/test-clamd-engine.sh && node --test packages/hosted-core/test/worker-heartbeat.test.mjs && test -w /run/student-creators && ! node scripts/check-worker-health.mjs'
       - name: Verify source artefacts do not contain development secrets
         run: |
           if git ls-files | grep -E '(^|/)(\.env(\..*)?|.*\.pem|.*\.key)$' | grep -vE '\.env\.example$'; then
@@ -198,6 +198,7 @@ jobs:
           psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-settlement-audit.sql
           psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-payout-reservations.sql
           psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-payout-liability-report.sql
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-payout-transfers.sql
           psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-payout-reservations.test.sql
           psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-finance-report.test.sql
           psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-copyright-review.sql
@@ -247,8 +248,17 @@ jobs:
           psql -1 -v ON_ERROR_STOP=1 -f db/production/0010_catalog_and_finance_indexes.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/catalog_and_finance_indexes.sql
           psql -1 -v ON_ERROR_STOP=1 -f db/production/0011_media_source_quarantine.sql
+          psql -1 -v ON_ERROR_STOP=1 -f db/production/0016_media_quarantine_recovery.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/media_source_quarantine.sql
           psql -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-bookmarks.test.sql
+          psql -1 -v ON_ERROR_STOP=1 -f db/production/0017_activity_dashboard.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/activity_dashboard.sql
+          psql -1 -v ON_ERROR_STOP=1 -f db/production/0018_watch_progress.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/watch_progress.sql
+          psql -1 -v ON_ERROR_STOP=1 -f db/production/0019_coverage_and_weekly_comparison.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/watch_coverage.sql
+          psql -1 -v ON_ERROR_STOP=1 -f db/production/0020_creator_retention_and_watch_export.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/creator_retention_and_watch_export.sql
 
       - name: Restore disposable PostgreSQL backup into isolated database
         env:

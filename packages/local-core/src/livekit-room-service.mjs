@@ -6,6 +6,7 @@
  * Not an assertion of provider acceptance until two real clients connect and stream.
  */
 import {createHmac,createHash,randomUUID,timingSafeEqual} from 'node:crypto';
+import {readBoundedGatewayResponse} from '../../payment-core/src/bounded-response.mjs';
 
 const fail=(code,status=503)=>Object.assign(Error(code),{code,status});
 const enc=o=>Buffer.from(JSON.stringify(o)).toString('base64url');
@@ -47,7 +48,11 @@ export function createLiveKitRoomService({url,apiKey,apiSecret,clock=()=>Date.no
     }catch{throw fail('LIVEKIT_PROVIDER_UNAVAILABLE');}
     if(allowMissing&&response.status===404)return {alreadyGone:true};
     if(!response.ok)throw fail('LIVEKIT_PROVIDER_UNAVAILABLE');
-    try{return await response.json();}catch{throw fail('LIVEKIT_PROVIDER_UNAVAILABLE');}
+    try{
+      const value=JSON.parse(await readBoundedGatewayResponse(response,262144,()=>fail('LIVEKIT_PROVIDER_UNAVAILABLE')));
+      if(!value||typeof value!=='object'||Array.isArray(value))throw fail('LIVEKIT_PROVIDER_UNAVAILABLE');
+      return value;
+    }catch{throw fail('LIVEKIT_PROVIDER_UNAVAILABLE');}
   }
   return {
     async createRoom(name,{capacity=12}={}){

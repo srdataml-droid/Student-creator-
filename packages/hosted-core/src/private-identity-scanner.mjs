@@ -32,7 +32,7 @@ export function createClamdIdentityScanner({socketPath,timeoutMs=20000,maxBytes=
  !Number.isSafeInteger(maxBytes)||maxBytes<8||maxBytes>104857600||!Number.isSafeInteger(timeoutMs)||timeoutMs<100||timeoutMs>(maxBytes>IDENTITY_MAX_BYTES?90000:20000))throw invalid();
  return {
   async version(){
-   const v=await clamdExchange(socketPath,Buffer.from('zVERSION\0'),timeoutMs);
+   const v=await clamdExchange(socketPath,Buffer.from('zVERSION\0'),Math.min(timeoutMs,20000));
    if(!/^ClamAV [\x20-\x7e]{1,112}$/.test(v)||v.length>120)throw invalid();return v;
   },
   async scan(bytes){

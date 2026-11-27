@@ -1,5 +1,6 @@
 import {reconcileMuxUpload,createMuxTestClient,createMuxVideoStore} from './mux-video-api.mjs';
 import {readDedicatedSupabaseRuntimeConfig,supabaseServerHeaders} from '../../content-core/src/supabase-runtime-config.mjs';
+import {readBoundedGatewayResponse} from '../../payment-core/src/bounded-response.mjs';
 const UUID=/^[0-9a-f-]{36}$/i, ID=/^[A-Za-z0-9_-]{6,128}$/;
 const REF='jnkqmlbkkvccnxrgkpno';
 const unavailable=()=>new Error('Mux worker unavailable');
@@ -43,7 +44,7 @@ export function createMuxWorker({env=process.env,fetcher=fetch}={}){
  function alias(names){const vals=names.map(n=>env[n]).filter(v=>typeof v==='string'&&v.trim()).map(v=>v.trim());if(vals.some(v=>v!==vals[0]))throw unavailable();return vals[0];}
  const mux=createMuxTestClient({tokenId:alias(['MUX_TOKEN_ID','mux_token_id']),tokenSecret:alias(['MUX_TOKEN_SECRET','mux_token_secret']),origin:env.STUDENT_CREATORS_MUX_UPLOAD_ORIGIN,fetcher,testAsset});
  const store=createMuxVideoStore({url:cfg.url,serverKey:cfg.serverKey,fetcher,testAsset});
- async function rpc(name,body){const r=await fetcher(new URL('/rest/v1/rpc/'+name,cfg.url),{method:'POST',headers:{...supabaseServerHeaders(cfg.serverKey),'content-type':'application/json'},body:JSON.stringify(body),cache:'no-store',redirect:'error',signal:AbortSignal.timeout(8000)});if(!r.ok)throw unavailable();return r.json();}
+ async function rpc(name,body){const r=await fetcher(new URL('/rest/v1/rpc/'+name,cfg.url),{method:'POST',headers:{...supabaseServerHeaders(cfg.serverKey),'content-type':'application/json'},body:JSON.stringify(body),cache:'no-store',redirect:'error',signal:AbortSignal.timeout(8000)});if(!r.ok)throw unavailable();return JSON.parse(await readBoundedGatewayResponse(r,65536,unavailable));}
  const mode=testAsset?'test':'live';
  const queue={claim:()=>rpc('claim_mux_'+mode+'_event',{}),finish:(id,lease,outcome)=>rpc('finish_mux_'+mode+'_event',{_id:id,_lease:lease,_outcome:outcome}),revoke:asset=>rpc('revoke_deleted_mux_'+mode+'_asset',{_asset:asset})};
  return ()=>processMuxEvent({queue,mux,store});

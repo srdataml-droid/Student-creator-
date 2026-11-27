@@ -109,7 +109,8 @@ export function createMuxPlaybackHandler({auth,store,mux,signingKeyId,privateKey
    if(!lesson||lesson.viewerId!==user.id||lesson.id!==lessonId)return json(403,{error:'PLAYBACK_FORBIDDEN'});
    // Recheck the provider before every staging grant; a deleted, public or
    // differently associated asset must never get a fresh signed token.
-   const current=assetSnapshot(await mux.getAsset(lesson.assetId),lesson.reservationId,lesson.uploadId,lesson.assetId,mux.testAsset!==false);
+   const asset=await mux.getAsset(lesson.assetId);
+   const current=assetSnapshot(asset,lesson.reservationId,lesson.uploadId,lesson.assetId,mux.testAsset!==false);
    if(current.state!=='ready'||current.playbackId!==lesson.playbackId)return json(403,{error:'PLAYBACK_UNAVAILABLE'});
    // The provider call may have overlapped a refund, ban or session revocation.
    const again=await auth.getUser(token);
@@ -120,6 +121,16 @@ export function createMuxPlaybackHandler({auth,store,mux,signingKeyId,privateKey
    if(mux.testAsset===false&&(!Object.hasOwn(fresh,'entitlementExpiresAt')||(fresh.entitlementExpiresAt!==null&&(!Number.isSafeInteger(fresh.entitlementExpiresAt)||fresh.entitlementExpiresAt<=Math.floor(Date.now()/1000)))))return json(403,{error:'PLAYBACK_FORBIDDEN'});
    const grant=await issueAuthorizedMuxPlayback({viewer:user,lessonId,loadLesson:async()=>fresh,
     authorizeViewer:async({viewer})=>viewer.id===fresh.viewerId,signingKeyId,privateKeyBase64,ttlSeconds:120});
+   // Analytics failure must not block otherwise authorized playback.
+   if(mux.testAsset===false&&typeof store.registerWatchGrant==='function'&&typeof asset.duration==='number'&&Number.isFinite(asset.duration)&&asset.duration>0&&asset.duration<=43200){
+    try{
+     const claims=JSON.parse(Buffer.from(token.split('.')[1],'base64url').toString('utf8'));
+     if(claims.sub===user.id&&UUID.test(claims.session_id??'')){
+      const watch=await store.registerWatchGrant({viewer:user.id,sessionId:claims.session_id,lessonId,assetId:fresh.assetId,durationMs:Math.ceil(asset.duration*1000),expiresAt:grant.expiresAt});
+      if(UUID.test(watch?.id??'')&&Number.isSafeInteger(watch.nextSequence)&&watch.nextSequence>=1&&watch.durationMs===Math.ceil(asset.duration*1000)&&Number.isSafeInteger(watch.resumePositionMs)&&watch.resumePositionMs>=0&&watch.resumePositionMs<=watch.durationMs&&Number.isSafeInteger(watch.expiresAt))return json(200,{...grant,watchSession:watch});
+     }
+    }catch{/* Playback is independent of optional telemetry. */}
+   }
    return json(200,grant);
   }catch{return json(503,{error:'MUX_PLAYBACK_UNAVAILABLE'});}
  };
@@ -136,7 +147,8 @@ export function createMuxVideoStore({url,serverKey,fetcher=fetch,testAsset=true}
  return {reserve:({creator,lessonId})=>rpc('reserve_mux_'+mode+'_upload',{_creator:creator,_content:lessonId}),
   get:({creator,lessonId})=>rpc('get_mux_'+mode+'_upload',{_creator:creator,_content:lessonId}),
   apply:({reservation,uploadId,assetId,playbackId,state})=>rpc('apply_mux_'+mode+'_snapshot',{_reservation:reservation,_upload:uploadId,_asset:assetId,_playback:playbackId,_state:state}),
-  authorizedPlayback:({viewer,lessonId})=>rpc('authorized_mux_'+mode+'_playback',{_viewer:viewer,_content:lessonId})};
+  authorizedPlayback:({viewer,lessonId})=>rpc('authorized_mux_'+mode+'_playback',{_viewer:viewer,_content:lessonId}),
+  ...(testAsset?{}:{registerWatchGrant:({viewer,sessionId,lessonId,assetId,durationMs,expiresAt})=>rpc('register_live_watch_grant',{_viewer:viewer,_session:sessionId,_content:lessonId,_asset:assetId,_duration_ms:durationMs,_expires_epoch:expiresAt})})};
 }
 export function buildMuxVideoRoute({getEnv=()=>process.env,fetcher=fetch,playback=false}={}){
  return async(request,context)=>{
