@@ -32,7 +32,9 @@ test('isolated hosted frontend exercises community, checkout, history and respon
   if(op==='communityPosts')return r.fulfill({json:joined?posts:[]});
   return r.fulfill({json:{joined,memberCount:joined?1:0,canModerate:false}});
  });
- await page.route('**/api/discovery?ids=*',r=>{expect(new URL(r.request().url()).searchParams.get('ids')).toBe(lesson);return r.fulfill({json:{items:[{id:lesson,title:'Isolated original content',displayName:'Test creator',courseCode:'MTH101'}],page:1,hasNext:false}});});
+ await page.route('**/api/discovery?ids=*',r=>{expect(new URL(r.request().url()).searchParams.get('ids')).toBe(lesson);return r.fulfill({json:{items:[{id:lesson,title:'Isolated original content',displayName:'Test creator',courseCode:'MTH101',contentFormat:'video'}],page:1,hasNext:false}});});
+ await page.route('**/api/lessons/**/mux-thumbnail',r=>{expect(r.request().headers().authorization).toBe('Bearer one.two.three');return r.fulfill({json:{url:'https://image.mux.com/fixture_playback/thumbnail.jpg?token=one.two.three',expiresAt:Math.floor(now/1000)+120}});});
+ await page.route('https://image.mux.com/**',r=>r.fulfill({contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jR1sAAAAASUVORK5CYII=','base64')}));
  await page.route('**/api/account/purchases',r=>r.fulfill({json:{orders:[{id:order,contentId:lesson,amountKobo:20000,currency:'NGN',environment:'test',status:'pending',createdAt:'2026-11-25T10:00:00Z',accessRecorded:false}],truncated:false}}));
  await page.route('**/api/account/checkout-quote/**',r=>r.fulfill({json:{priceKobo:30000,currency:'NGN',accessAvailable:false}}));
  await page.route('**/api/lessons/**/hosted-checkout',r=>{checkoutCalls++;expect(r.request().headers()['idempotency-key']).toMatch(/^[A-Za-z0-9_-]{16,128}$/);expect(r.request().postData()).toBeNull();return r.fulfill({json:{orderId:order,authorizationUrl:'https://checkout.paystack.com/isolated-browser-fixture'}});});
@@ -43,6 +45,7 @@ test('isolated hosted frontend exercises community, checkout, history and respon
  await expect(page.getByRole('button',{name:'Your campus',exact:true})).toHaveAttribute('aria-pressed','true');
  await expect(page.getByRole('link',{name:'Isolated original content',exact:true})).toBeVisible();
  const card=page.locator('.watch-card').filter({has:page.getByRole('link',{name:'Isolated original content',exact:true})});
+ await expect(card.locator('.authorized-thumbnail img')).toHaveAttribute('src',/https:\/\/image\.mux\.com\/fixture_playback\/thumbnail\.jpg/);
  await card.getByRole('button',{name:'Like',exact:true}).click();
  await expect(card.getByRole('button',{name:'Liked',exact:true})).toHaveAttribute('aria-pressed','true');
  await card.getByRole('button',{name:'Liked',exact:true}).click();
@@ -98,6 +101,10 @@ test('isolated hosted frontend exercises community, checkout, history and respon
  await page.goto('/search?q=Python&courseId='+course);
  await expect(page.getByLabel('Search published content')).toHaveValue('Python');
  await expect(page.locator('.viewer-search-page .watch-catalog')).toBeVisible();
+ await page.getByRole('navigation',{name:'Search categories'}).getByRole('link',{name:'Videos'}).click();
+ await expect(page.getByRole('link',{name:'Isolated original content',exact:true})).toBeVisible();
+ await page.getByRole('navigation',{name:'Search categories'}).getByRole('link',{name:'Shorts'}).click();
+ await expect(page.getByText('No published posts in this feed yet.')).toBeVisible();
  await page.goto('/lessons/'+lesson);
  await expect(page.getByRole('region',{name:'Video player'})).toBeVisible();
  await expect(page.getByRole('complementary',{name:'Related videos'})).toBeVisible();
