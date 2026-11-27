@@ -200,6 +200,10 @@ jobs:
           psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-payout-liability-report.sql
           psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-payout-transfers.sql
           psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-payout-reservations.test.sql
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-payout-bank-lookup.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-payout-bank-lookup.test.sql
+          psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-payout-bank-onboarding.sql
+          psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-payout-bank-onboarding.test.sql
           psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-finance-report.test.sql
           psql -1 -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-copyright-review.sql
           psql -v ON_ERROR_STOP=1 -f tasks/W07-governance/hosted-copyright-review.test.sql
