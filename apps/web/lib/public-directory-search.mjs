@@ -1,5 +1,5 @@
 import {discoveryConfig,normalizeDiscoveryFilters} from './hosted-discovery.mjs';
-const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{12}$/i;
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 export function searchCategory(value){return ['all','creators','communities'].includes(value)?value:'all';}
 export async function searchPublicDirectory({category,q='',env=process.env,fetcher=fetch}={}){
  if(!['creators','communities'].includes(category))throw Error('INVALID_DISCOVERY_FILTER');
