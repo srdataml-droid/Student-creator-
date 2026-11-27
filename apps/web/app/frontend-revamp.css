@@ -979,3 +979,11 @@ html[data-appearance] .creator-body .viewer-conversation .message-bubble.own{bac
 .viewer-library-link .viewer-related-media{flex:0 0 126px;width:126px;border-radius:8px}
 .viewer-remove-saved{flex:0 0 44px;width:44px;height:44px;display:grid;place-items:center;padding:0}
 @media(max-width:360px){.viewer-library-link .viewer-related-media{flex-basis:92px;width:92px}.viewer-library-rows li{gap:4px}.viewer-library-link{gap:8px}}
+
+/* Actual signed media replaces the text poster only after the image loads. */
+.viewer-related-media,.viewer-profile-media{position:relative;overflow:hidden}
+.authorized-thumbnail{position:absolute;inset:0;display:block;pointer-events:none;overflow:hidden;opacity:0}
+.authorized-thumbnail.loaded{opacity:1}
+.authorized-thumbnail img{width:100%;height:100%;display:block;object-fit:cover}
+.watch-title-poster:has(.authorized-thumbnail.loaded) .watch-poster-title,.watch-title-poster:has(.authorized-thumbnail.loaded) .watch-poster-context{visibility:hidden}
+.viewer-related-media:has(.authorized-thumbnail.loaded)>svg,.viewer-profile-media:has(.authorized-thumbnail.loaded)>svg{visibility:hidden}
