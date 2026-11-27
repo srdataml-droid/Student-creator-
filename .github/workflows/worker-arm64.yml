@@ -1,0 +1,21 @@
+name: ARM64 worker compatibility
+on:
+  pull_request:
+  push:
+    branches: [main]
+permissions:
+  contents: read
+jobs:
+  worker-arm64:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - name: Confirm native ARM64 runner and build worker
+        run: |
+          test "$(uname -m)" = aarch64
+          docker build -f infra/worker/Dockerfile -t student-creators-worker:arm-ci .
+          test "$(docker image inspect --format '{{.Architecture}}' student-creators-worker:arm-ci)" = arm64
+      - name: Verify scanner, worker and health guard on ARM64
+        run: |
+          docker run --rm --entrypoint /bin/bash student-creators-worker:arm-ci -c 'test "$(id -u)" != 0 && test "$(node -p process.arch)" = arm64 && bash -n infra/worker/entrypoint.sh && node --check scripts/run-hosted-workers.mjs && bash scripts/test-clamd-engine.sh && node --test packages/hosted-core/test/worker-heartbeat.test.mjs && test -w /run/student-creators && ! node scripts/check-worker-health.mjs'
