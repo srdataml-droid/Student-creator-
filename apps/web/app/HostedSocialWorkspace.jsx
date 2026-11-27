@@ -1,5 +1,6 @@
 'use client';
 import Link from 'next/link';
+import {AuthorizedThumbnail} from './AuthorizedThumbnail.jsx';
 import {useEffect,useRef,useState} from 'react';
 import {useParams} from 'next/navigation';
 import {useHostedAccount} from './HostedAccountProvider.jsx';
@@ -80,7 +81,7 @@ function WatchCreator({preview}){
  return <div className="viewer-creator-wrap"><div className="viewer-creator"><Link href={'/creators/'+creatorId} className="viewer-creator-link"><span className="watch-avatar" aria-hidden="true">{name.charAt(0).toUpperCase()}</span><strong>{name}</strong></Link>{!own&&(signed?<button type="button" className="viewer-follow" aria-pressed={following===true} disabled={job.busy} onClick={toggle}>{following===true?'Following':'Follow'}</button>:<Link className="viewer-follow" href="/sign-in">Follow</Link>)}</div><Feedback job={job}/></div>;
 }
 function RelatedVideos({items,available,courseId}){
- return <aside className="viewer-related" aria-labelledby="viewer-related-heading"><h2 id="viewer-related-heading">Related videos</h2>{items.length?<ul>{items.map(item=><li key={item.id}><Link href={'/lessons/'+item.id} className="viewer-related-row"><span className="viewer-related-media" aria-hidden="true"><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m10 9 5 3-5 3z"/></svg></span><span className="viewer-related-copy"><strong>{item.title}</strong><small>{item.institutionName} · {item.courseCode}</small>{item.priceKobo>=20000&&<small>₦{(item.priceKobo/100).toLocaleString('en-NG')}</small>}</span></Link></li>)}</ul>:<p className="hint">{available?'No related videos published yet.':'Related videos are unavailable.'}</p>}{courseId&&<Link className="viewer-related-more" href={'/search?courseId='+encodeURIComponent(courseId)}>Browse this course</Link>}</aside>;
+ return <aside className="viewer-related" aria-labelledby="viewer-related-heading"><h2 id="viewer-related-heading">Related videos</h2>{items.length?<ul>{items.map(item=><li key={item.id}><Link href={'/lessons/'+item.id} className="viewer-related-row"><span className="viewer-related-media" aria-hidden="true"><AuthorizedThumbnail lessonId={item.id}/><svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m10 9 5 3-5 3z"/></svg></span><span className="viewer-related-copy"><strong>{item.title}</strong><small>{item.institutionName} · {item.courseCode}</small>{item.priceKobo>=20000&&<small>₦{(item.priceKobo/100).toLocaleString('en-NG')}</small>}</span></Link></li>)}</ul>:<p className="hint">{available?'No related videos published yet.':'Related videos are unavailable.'}</p>}{courseId&&<Link className="viewer-related-more" href={'/search?courseId='+encodeURIComponent(courseId)}>Browse this course</Link>}</aside>;
 }
 export function HostedLesson({lessonId,preview,related=[],relatedAvailable=false,checkoutMode,terms}){
  const account=useHostedAccount(),signedIn=account?.session.state==='signed-in';
