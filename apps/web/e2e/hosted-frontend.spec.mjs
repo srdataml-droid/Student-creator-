@@ -156,3 +156,38 @@ test('guest community overview exposes public metadata without private discussio
 });
 
 test('Create mirrors the six Brilliant entry points without falsely enabling unsupported publishing',async({browser})=>{const context=await browser.newContext({baseURL:BASE,viewport:{width:390,height:844}});try{const page=await context.newPage();await page.route('**/api/hosted-auth/refresh',r=>r.fulfill({status:401,json:{error:'AUTH_REQUIRED'}}));await page.goto('/create');const rows=page.locator('.create-options > li');await expect(rows).toHaveCount(6);await expect(rows.nth(0)).toContainText('Upload a video');await expect(rows.nth(1)).toContainText('Create a short');await expect(rows.nth(2).locator('[aria-disabled=true]')).toContainText('Photo or text post');await expect(rows.nth(3)).toContainText('Go live');await expect(rows.nth(4)).toContainText('Your drafts');await expect(rows.nth(5)).toContainText('Creator studio');const first=await rows.nth(0).boundingBox(),second=await rows.nth(1).boundingBox(),tile=await rows.nth(0).locator('.community-preview-symbol').boundingBox();expect(first).not.toBeNull();expect(second).not.toBeNull();expect(tile).not.toBeNull();expect(Math.abs(second.y-first.y-84)).toBeLessThanOrEqual(1);expect(Math.abs(tile.width-46)).toBeLessThanOrEqual(1);expect(Math.abs(tile.height-46)).toBeLessThanOrEqual(1);await expect(rows.nth(0).getByRole('link')).toHaveAttribute('href','/sign-in');}finally{await context.close();}});
+
+test('Brilliant gallery keeps mobile navigation compact and desktop Community split into columns',async({browser})=>{
+ const context=await browser.newContext({baseURL:BASE,viewport:{width:390,height:844}});
+ try{
+  const page=await context.newPage();
+  await page.route('**/api/hosted-auth/refresh',r=>r.fulfill({status:401,json:{error:'AUTH_REQUIRED'}}));
+  await page.goto('/communities');
+  const header=page.locator('.modern-header[data-hosted=true]');
+  await expect(header.locator('.mobile-section-title')).toBeVisible();
+  await expect(header.locator('.mobile-section-default')).toHaveText('Community');
+  await expect(header.getByRole('button',{name:'Search Student Creators'})).toBeVisible();
+  await expect(header.getByRole('link',{name:'Notifications'})).toBeVisible();
+  await header.getByRole('button',{name:'Account and navigation menu'}).click();
+  await expect(header.getByRole('navigation',{name:'Account menu'}).getByRole('link',{name:'Join Student Creators'})).toBeVisible();
+  await page.keyboard.press('Escape');
+  const tabs=page.getByRole('navigation',{name:'Mobile navigation'});
+  await expect(tabs.getByRole('link')).toHaveCount(5);
+  const geometry=await tabs.evaluate(e=>({height:e.getBoundingClientRect().height,overflow:document.documentElement.scrollWidth-innerWidth}));
+  expect(geometry.height).toBeGreaterThanOrEqual(74);
+  expect(geometry.overflow).toBeLessThanOrEqual(1);
+  await page.goto('/communities?tab=night');
+  await expect(header.locator('.mobile-night-title')).toBeVisible();
+  await page.goto('/create');
+  await expect(header.locator('.mobile-section-default')).toHaveText('Create');
+  await page.goto('/messages');
+  await expect(header.locator('.mobile-section-default')).toHaveText('Inbox');
+  await page.setViewportSize({width:1280,height:800});
+  await page.goto('/communities');
+  const publicBox=await page.getByRole('region',{name:'Public communities'}).boundingBox();
+  const nightBox=await page.getByRole('region',{name:'Night classes'}).boundingBox();
+  expect(publicBox).not.toBeNull();expect(nightBox).not.toBeNull();
+  expect(nightBox.x).toBeGreaterThan(publicBox.x+publicBox.width);
+  expect(Math.abs(nightBox.y-publicBox.y)).toBeLessThanOrEqual(2);
+ }finally{await context.close();}
+});
