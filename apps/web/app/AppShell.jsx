@@ -66,10 +66,10 @@ export default function AppShell({children}){
   return ()=>{document.removeEventListener('keydown',dismiss);document.removeEventListener('pointerdown',dismiss);};
  },[open]);
  return <>
-  <header className="creator-nav modern-header" data-hosted={hostedAccount?'true':undefined} data-section={section||undefined}><div className="nav-inner">
+  <header className="creator-nav modern-header" data-hosted={hostedAccount?'true':undefined} data-signed-in={signedIn?'true':'false'} data-section={section||undefined}><div className="nav-inner">
    <Link href="/" className="creator-logo" aria-label="Student Creators home"><span className="reference-wordmark">Worthkind<small>Student Creators</small></span></Link>
    {section&&<span className="mobile-section-title" aria-hidden="true"><span className="mobile-section-default">{section}</span>{section==='Community'&&<span className="mobile-night-title">Night classes</span>}</span>}
-   <ShellSearch hosted={Boolean(hostedAccount)} actor={signedIn?session.userId:null}/><div className="nav-auth">{hostedAccount&&<Link className="header-icon" href="/notifications" aria-label="Notifications"><Icon name="bell"/></Link>}{signedIn?<Link className="nav-join" href={hostedAccount?'/account-security':session.role==='admin'?'/manage':'/studio'} prefetch={false}>{hostedAccount?'Account':session.role==='admin'?'Staff console':'My studio'}</Link>:<><Link className="nav-signin" href="/sign-in">Log in</Link><Link className="nav-join" href="/join">Join</Link></>}
+   <ShellSearch hosted={Boolean(hostedAccount)} actor={signedIn?session.userId:null}/><div className="nav-auth">{hostedAccount&&<Link className="header-icon" href="/notifications" aria-label="Notifications"><Icon name="bell"/></Link>}{signedIn?<Link className="nav-join" href={hostedAccount?'/account-security':session.role==='admin'?'/manage':'/studio'} prefetch={false}>{hostedAccount?'Account':session.role==='admin'?'Staff console':'My studio'}</Link>:<><Link className="nav-signin" href="/sign-in">Log in</Link><Link className="nav-join guest-join" href="/join">Join</Link></>}
     <div className="shell-menu" ref={menu}>
      <button type="button" className="shell-menu-toggle" aria-label="Account and navigation menu" aria-expanded={open} aria-controls="shell-account-menu" onClick={()=>setOpen(v=>!v)}><span className="desktop-menu-icon"><Icon name="menu"/></span><span className="mobile-account-icon"><Icon name="user"/></span></button>
      {open&&<nav id="shell-account-menu" className="shell-menu-panel" aria-label="Account menu">
