@@ -3,6 +3,7 @@ import Link from 'next/link';
 import {useHostedAccount} from '../HostedAccountProvider.jsx';
 const options=[
  {title:'Upload a video',detail:'Create original content and upload a private video for review.',href:'/studio#studio-create',icon:'video'},
+ {title:'Create a short',detail:'Publish an original portrait video.',href:'/studio#studio-create',icon:'video'},
  {title:'Go live',detail:'Schedule and manage a night class.',href:'/communities?tab=night',icon:'live'},
  {title:'Your drafts',detail:'Continue your unpublished work.',href:'/studio#studio-content',icon:'draft'},
  {title:'Creator studio',detail:'Manage content, profile and earnings.',href:'/studio',icon:'studio'}
@@ -13,7 +14,7 @@ export default function CreatePage(){
  const signedIn=account?.session.state==='signed-in';
  const pending=signedIn&&!account.accountState;
  return <main id="main" className="main content-create watch-section-page"><h1>Create</h1><p className="hint">Share something original.</p>{!account?<Link href="/studio">Open creator studio</Link>:<>
- <ul className="community-preview-list create-options">{options.map(o=><li key={o.href}><Link className="community-preview-item" href={eligible?o.href:signedIn?'/verification':'/sign-in'}><span className="community-preview-symbol"><Symbol type={o.icon}/></span><span className="community-preview-copy"><strong>{o.title}</strong><small>{o.detail}</small></span><span aria-hidden="true">›</span></Link></li>)}</ul>
+ <ul className="community-preview-list create-options">{options.map(o=><li key={o.title}><Link className="community-preview-item" href={eligible?o.href:signedIn?'/verification':'/sign-in'}><span className="community-preview-symbol"><Symbol type={o.icon}/></span><span className="community-preview-copy"><strong>{o.title}</strong><small>{o.detail}</small></span><span aria-hidden="true">›</span></Link></li>)}</ul>
  {!eligible&&<section className="watch-access-note">{pending?<><h2>Checking creator access</h2><button type="button" className="quiet-button" onClick={()=>account.reloadAccount().catch(()=>{})}>Check again</button></>:<><h2>{signedIn?'Student membership required':'Sign in to start creating'}</h2><p className="hint">Creator features require verified student membership.</p><Link className="primary-link" href={signedIn?'/verification':'/sign-in'}>{signedIn?'Check student membership':'Sign in'}</Link></>}</section>}
  </>}</main>;
 }
