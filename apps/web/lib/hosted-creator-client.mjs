@@ -77,6 +77,9 @@ export function hostedCreatorRequest(operation,input={}){
  case 'mediaSourceReserve':{if(!['video/mp4','video/webm'].includes(input.mime)||!Number.isSafeInteger(input.bytes)||input.bytes<12||input.bytes>104857600||! /^[a-f0-9]{64}$/.test(input.digest))throw Error('INVALID_MEDIA');return json('/api/lessons/'+id(input.lessonId)+'/media-source',{action:'reserve',mime:input.mime,bytes:input.bytes,digest:input.digest});}
  case 'mediaSourceComplete':return json('/api/lessons/'+id(input.lessonId)+'/media-source',{action:'complete',id:id(input.sourceId)});
  case 'accountState':return {path:'/api/account/state',method:'GET',headers:{}};
+ case 'draftFormat':return json('/api/social/draftFormat',{contentId:id(input.contentId)});
+ case 'setDraftFormat':return json('/api/social/setDraftFormat',{contentId:id(input.contentId),format:choice(input.format,['video','short'])});
+ case 'isLiked':return json('/api/social/isLiked',{contentId:id(input.contentId)});
  case 'draftPrice':return json('/api/social/draftPrice',{contentId:id(input.contentId)});
  case 'setDraftPrice':{if(!Number.isSafeInteger(input.amountKobo)||input.amountKobo<0||input.amountKobo>1000000000||(input.amountKobo>0&&input.amountKobo<20000))throw Error('INVALID_PRICE');return json('/api/social/setDraftPrice',{contentId:id(input.contentId),amountKobo:input.amountKobo});}
  case 'liveClassCheckout':{if(!/^[A-Za-z0-9._-]{3,128}$/.test(input.termsVersion||''))throw Error('INVALID_TERMS_VERSION');return {path:'/api/classes/'+id(input.classId)+'/live-checkout',method:'POST',headers:{'idempotency-key':key(input.creationKey),'x-student-creators-terms-version':input.termsVersion}};}
