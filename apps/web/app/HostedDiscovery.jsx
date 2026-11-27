@@ -7,7 +7,7 @@ export default async function HostedDiscovery({params={},search=false}){
  const filters={q:params.q??'',courseId:params.courseId??'',page:params.page??'1'};
  const checkout=checkoutSettings();
  const path=search?'/search':'/';let data,error='';
- try{data=await getHostedDiscovery({filters});}catch(e){error=e.message==='INVALID_DISCOVERY_FILTER'?'Enter a valid search.':'The content catalog could not be reached. You can still browse this page.';}
+ try{data=await getHostedDiscovery({includeCreators:true,filters});}catch(e){error=e.message==='INVALID_DISCOVERY_FILTER'?'Enter a valid search.':'The content catalog could not be reached. You can still browse this page.';}
  const q=typeof filters.q==='string'?filters.q.slice(0,80):'',courseId=typeof filters.courseId==='string'?filters.courseId:'';
  return <HostedFeedBoundary query={q} courseId={courseId} search={search} checkoutMode={checkout.mode} terms={checkout.terms}><section className="feed-area hosted-discovery" aria-labelledby="hosted-discovery-title">
  {!search&&<nav className="feed-tabs public-feed-tabs" aria-label="Discover content"><Link aria-current="page" href="/">For you</Link><Link href="/sign-in">Your campus</Link><Link href="/sign-in">Following</Link><Link href="/shorts">Shorts</Link><Link href="/communities?tab=night">Live</Link></nav>}
