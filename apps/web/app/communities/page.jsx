@@ -22,7 +22,7 @@ export default async function Communities({searchParams}){
  const names=new Map(schools.map(s=>[s.id,s.name]));
  const filtered=courses.filter(c=>(!campus||c.institutionId===campus)&&[c.code,c.title,names.get(c.institutionId)||''].join(' ').toLowerCase().includes(q.toLowerCase()));
  const featured=tab==='discover'?publicCommunityPreview(filtered):filtered;
- return <main id="main" className="main community-directory content-community">
+ return <main id="main" className="main community-directory content-community" data-community-tab={tab}>
   <h1>{tab==='night'?'Night classes':'Community'}</h1>
   <nav className="community-switch" aria-label="Community sections">{[['discover','Discover'],['mine','My communities'],['night','Night classes'],['assignments','Assignments']].map(([key,label])=><Link key={key} href={'/communities?tab='+key} aria-current={tab===key||(key==='discover'&&tab==='public')?'page':undefined}>{label}</Link>)}</nav>
   {(tab==='discover'||tab==='public')&&<section className="community-section" aria-labelledby="public-communities">
