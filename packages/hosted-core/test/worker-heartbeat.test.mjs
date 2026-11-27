@@ -11,3 +11,24 @@ test('health denies absent, stale, future, oversized and malformed state',t=>{co
 test('health command distinguishes degraded live worker from unavailable process',t=>{const {path}=fixture(t);const run=()=>spawnSync(process.execPath,['scripts/check-worker-health.mjs'],{env:{...process.env,STUDENT_CREATORS_WORKER_HEARTBEAT_PATH:path},encoding:'utf8'});assert.equal(run().status,1);writeWorkerHeartbeat(path,'degraded');let r=run();assert.equal(r.status,0);assert.deepEqual(JSON.parse(r.stdout),{live:true,ready:false,state:'degraded'});writeWorkerHeartbeat(path,'tick_complete');r=run();assert.equal(r.status,0);assert.equal(JSON.parse(r.stdout).ready,true);clearWorkerHeartbeat(path);assert.equal(run().status,1);});
 
 test('a long bounded media dispatch and backoff is not mistaken for a crashed worker',t=>{const {path}=fixture(t);writeWorkerHeartbeat(path,'tick_complete',1000);assert.equal(readWorkerHealth(path,{now:1000+420000}).live,true);assert.equal(readWorkerHealth(path,{now:1000+WORKER_HEARTBEAT_MAX_AGE_MS}).live,true);assert.equal(readWorkerHealth(path,{now:1001+WORKER_HEARTBEAT_MAX_AGE_MS}).live,false);});
+
+test('explicit readiness command fails closed without changing Docker liveness',t=>{
+ const {path}=fixture(t);
+ const run=(...args)=>spawnSync(process.execPath,['scripts/check-worker-health.mjs',...args],{env:{...process.env,STUDENT_CREATORS_WORKER_HEARTBEAT_PATH:path},encoding:'utf8'});
+ assert.equal(run('--require-ready').status,1);
+ writeWorkerHeartbeat(path,'starting');
+ assert.equal(run('--require-ready').status,1);
+ writeWorkerHeartbeat(path,'degraded');
+ assert.equal(run().status,0);
+ const degraded=run('--require-ready');
+ assert.equal(degraded.status,1);
+ assert.deepEqual(JSON.parse(degraded.stdout),{live:true,ready:false,state:'degraded'});
+ writeWorkerHeartbeat(path,'tick_complete');
+ assert.equal(run('--require-ready').status,0);
+ assert.equal(run('--unknown').status,2);
+ assert.equal(run('--require-ready','--require-ready').status,2);
+ writeWorkerHeartbeat(path,'tick_complete',Date.now()-WORKER_HEARTBEAT_MAX_AGE_MS-1000);
+ assert.equal(run('--require-ready').status,1);
+ writeFileSync(path,'{}');
+ assert.equal(run('--require-ready').status,1);
+});
