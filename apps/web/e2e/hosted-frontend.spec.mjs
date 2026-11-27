@@ -32,6 +32,7 @@ test('isolated hosted frontend exercises community, checkout, history and respon
   if(op==='communityPosts')return r.fulfill({json:joined?posts:[]});
   return r.fulfill({json:{joined,memberCount:joined?1:0,canModerate:false}});
  });
+ await page.route('**/api/discovery?ids=*',r=>{expect(new URL(r.request().url()).searchParams.get('ids')).toBe(lesson);return r.fulfill({json:{items:[{id:lesson,title:'Isolated original content',displayName:'Test creator',courseCode:'MTH101'}],page:1,hasNext:false}});});
  await page.route('**/api/account/purchases',r=>r.fulfill({json:{orders:[{id:order,contentId:lesson,amountKobo:20000,currency:'NGN',environment:'test',status:'pending',createdAt:'2026-11-25T10:00:00Z',accessRecorded:false}],truncated:false}}));
  await page.route('**/api/account/checkout-quote/**',r=>r.fulfill({json:{priceKobo:30000,currency:'NGN',accessAvailable:false}}));
  await page.route('**/api/lessons/**/hosted-checkout',r=>{checkoutCalls++;expect(r.request().headers()['idempotency-key']).toMatch(/^[A-Za-z0-9_-]{16,128}$/);expect(r.request().postData()).toBeNull();return r.fulfill({json:{orderId:order,authorizationUrl:'https://checkout.paystack.com/isolated-browser-fixture'}});});
@@ -126,9 +127,9 @@ test('isolated hosted frontend exercises community, checkout, history and respon
  await page.getByRole('button',{name:'Save post',exact:true}).click();
  await expect(page.getByRole('button',{name:'Remove from saved'})).toBeVisible();
  await page.goto('/saved');
- await expect(page.getByRole('link',{name:'Open saved post'})).toBeVisible();
+ await expect(page.getByRole('region',{name:'Saved content'}).getByRole('link',{name:/Isolated original content/})).toBeVisible();
  await page.getByRole('button',{name:'Remove saved post'}).click();
- await expect(page.getByText('No saved posts.',{exact:false})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'No saved posts yet'})).toBeVisible();
  await page.goto('/classes');
  await expect(page.getByRole('heading',{name:'Synthetic calculus class'})).toBeVisible();
  await page.getByRole('button',{name:'Enroll',exact:true}).click();
