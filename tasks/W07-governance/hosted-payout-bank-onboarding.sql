@@ -63,7 +63,7 @@ LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
 BEGIN
  IF _actor IS NULL OR _session IS NULL OR NOT public.student_creators_session_active(_actor,_session) OR NOT public.week7_staff_has_capability(_actor,'finance.review') THEN RAISE EXCEPTION 'BANK_FORBIDDEN' USING ERRCODE='42501'; END IF;
  RETURN (SELECT coalesce(jsonb_agg(to_jsonb(q) ORDER BY q.created_at),'[]'::jsonb) FROM
- (SELECT id,creator_id,bank_code,last4,state,created_at,reviewer FROM student_payout_private.bank_requests WHERE creator_id<>_actor AND state IN ('pending','reviewed','uncertain') ORDER BY created_at LIMIT 100) q);
+ (SELECT id,creator_id,bank_code,last4,state,created_at,reviewer FROM student_payout_private.bank_requests WHERE creator_id<>_actor AND state IN ('pending','reviewed','processing','uncertain') ORDER BY created_at LIMIT 100) q);
 END $$;
 CREATE FUNCTION public.staff_bank_details(_actor uuid,_session uuid,_id uuid) RETURNS jsonb
 LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
