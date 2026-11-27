@@ -61,3 +61,17 @@ test('public alias failure preserves available catalog content without inventing
  assert.equal(data.items.length,1);
  assert.equal('displayName' in data.items[0],false);
 });
+
+test('saved metadata only returns requested published content IDs',async()=>{
+ const data=await getHostedDiscovery({env,contentIds:[id(1),id(2)],fetcher:async url=>{
+  assert.equal(url.searchParams.get('id'),'in.('+id(1)+','+id(2)+')');
+  return Response.json([row(1),{...row(2),status:'draft'},row(3)]);
+ }});
+ assert.deepEqual(data.items.map(x=>x.id),[id(1)]);
+ assert.equal(data.hasNext,false);
+});
+test('saved metadata rejects invalid, repeated or excessive IDs and conflicting filters',async()=>{
+ for(const options of [{contentIds:[]},{contentIds:[id(1),id(1)]},{contentIds:['bad']},{contentIds:Array.from({length:25},(_,i)=>id(i+1))},{contentIds:[id(1)],contentId:id(2)},{contentIds:[id(1)],filters:{page:'2'}},{contentIds:[id(1)],format:'short'}]){
+  await assert.rejects(getHostedDiscovery({env,...options,fetcher:()=>assert.fail('unexpected network request')}),/INVALID_DISCOVERY_FILTER/);
+ }
+});
