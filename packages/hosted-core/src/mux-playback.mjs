@@ -14,7 +14,8 @@ const base64url=value=>Buffer.from(JSON.stringify(value)).toString('base64url');
  * paid entitlement, refunds and reversals, and must return exactly true.
  */
 export async function issueAuthorizedMuxPlayback({viewer,lessonId,loadLesson,authorizeViewer,
- signingKeyId,privateKeyBase64,ttlSeconds=900,nowSeconds=Math.floor(Date.now()/1000)}={}){
+ signingKeyId,privateKeyBase64,ttlSeconds=900,purpose='video',nowSeconds=Math.floor(Date.now()/1000)}={}){
+ if(!['video','thumbnail'].includes(purpose))throw reject('INVALID_PLAYBACK_PURPOSE',503);
  if(!viewer||typeof viewer.id!=='string'||viewer.id.length===0)throw reject('AUTH_REQUIRED',401);
  if(typeof lessonId!=='string'||!idPattern.test(lessonId))throw reject('LESSON_NOT_FOUND',404);
  if(typeof loadLesson!=='function'||typeof authorizeViewer!=='function')throw reject('PLAYBACK_BACKEND_UNAVAILABLE',503);
@@ -41,11 +42,11 @@ export async function issueAuthorizedMuxPlayback({viewer,lessonId,loadLesson,aut
   throw reject('PLAYBACK_FORBIDDEN',403);
  const expiresAt=entitlementExpiry==null?nowSeconds+ttlSeconds:Math.min(nowSeconds+ttlSeconds,entitlementExpiry);
  const header={alg:'RS256',typ:'JWT',kid:signingKeyId};
- const claims={sub:lesson.playbackId,aud:'v',exp:expiresAt,kid:signingKeyId};
+ const claims={sub:lesson.playbackId,aud:purpose==='thumbnail'?'t':'v',exp:expiresAt,kid:signingKeyId,...(purpose==='thumbnail'?{width:320,time:0}:{})};
  const input=[base64url(header),base64url(claims)].join('.');
  const signature=sign('RSA-SHA256',Buffer.from(input),privateKey).toString('base64url');
  const token=[input,signature].join('.');
- const url=new URL('https://stream.mux.com/'+lesson.playbackId+'.m3u8');
+ const url=new URL(purpose==='thumbnail'?'https://image.mux.com/'+lesson.playbackId+'/thumbnail.jpg':'https://stream.mux.com/'+lesson.playbackId+'.m3u8');
  url.searchParams.set('token',token);
  return Object.freeze({url:url.toString(),expiresAt});
 }
