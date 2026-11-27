@@ -57,7 +57,7 @@ test('isolated hosted frontend exercises community, checkout, history and respon
  await card.getByRole('button',{name:'Share',exact:true}).click();
  await expect(page.getByRole('textbox',{name:'Content page link'})).toHaveValue(BASE+'/lessons/'+lesson);
  await page.goto('/create');
- await expect(page.getByRole('link',{name:/Upload a video/})).toHaveAttribute('href','/studio#studio-create');
+ await expect(page.getByRole('link',{name:/Upload a video/})).toHaveAttribute('href','/studio?format=video#studio-create');
  await expect(page.getByRole('link',{name:/Go live/})).toHaveAttribute('href','/communities?tab=night');
  await page.goto('/');
  await page.getByRole('button',{name:'Search Student Creators',exact:true}).click();
@@ -149,3 +149,5 @@ test('guest community overview exposes public metadata without private discussio
   expect(privateCalls).toBe(0);
  }finally{await context.close();}
 });
+
+test('Create mirrors the six Brilliant entry points without falsely enabling unsupported publishing',async({browser})=>{const context=await browser.newContext({baseURL:BASE,viewport:{width:390,height:844}});try{const page=await context.newPage();await page.route('**/api/hosted-auth/refresh',r=>r.fulfill({status:401,json:{error:'AUTH_REQUIRED'}}));await page.goto('/create');const rows=page.locator('.create-options > li');await expect(rows).toHaveCount(6);await expect(rows.nth(0)).toContainText('Upload a video');await expect(rows.nth(1)).toContainText('Create a short');await expect(rows.nth(2).locator('[aria-disabled=true]')).toContainText('Photo or text post');await expect(rows.nth(3)).toContainText('Go live');await expect(rows.nth(4)).toContainText('Your drafts');await expect(rows.nth(5)).toContainText('Creator studio');await expect(rows.nth(0).getByRole('link')).toHaveAttribute('href','/sign-in');}finally{await context.close();}});
