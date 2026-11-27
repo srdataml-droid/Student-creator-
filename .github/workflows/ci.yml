@@ -241,6 +241,8 @@ jobs:
           psql -v ON_ERROR_STOP=1 -f db/tests/creator_workspace_edits.sql
           psql -1 -v ON_ERROR_STOP=1 -f db/production/0009_client_table_privileges.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/client_table_privileges.sql
+          psql -1 -v ON_ERROR_STOP=1 -f db/production/0015_short_format.sql
+          psql -v ON_ERROR_STOP=1 -f db/tests/short_format.sql
           psql -1 -v ON_ERROR_STOP=1 -f tasks/W04-social/hosted-bookmarks.sql
           psql -1 -v ON_ERROR_STOP=1 -f db/production/0010_catalog_and_finance_indexes.sql
           psql -v ON_ERROR_STOP=1 -f db/tests/catalog_and_finance_indexes.sql
