@@ -987,3 +987,31 @@ html[data-appearance] .creator-body .viewer-conversation .message-bubble.own{bac
 .authorized-thumbnail img{width:100%;height:100%;display:block;object-fit:cover}
 .watch-title-poster:has(.authorized-thumbnail.loaded) .watch-poster-title,.watch-title-poster:has(.authorized-thumbnail.loaded) .watch-poster-context{visibility:hidden}
 .viewer-related-media:has(.authorized-thumbnail.loaded)>svg,.viewer-profile-media:has(.authorized-thumbnail.loaded)>svg{visibility:hidden}
+
+
+/* Immersive Shorts: controls overlay the video, never occupy a second column. */
+.creator-body .main.immersive-shorts:not(.admin-console){padding:0;max-width:none;margin:0;min-height:0;width:100%;background:#101010;color:#fff;display:flex;align-items:center;justify-content:center}
+.creator-body .shorts-shell{--short-viewport:calc(100dvh - 68px);width:100%;height:var(--short-viewport);gap:0;justify-content:center}
+.creator-body .shorts-stage{--short-height:var(--short-viewport);display:block;width:min(100%,calc(var(--short-height)*9/16));height:100%;min-height:0;max-width:100%;overflow:hidden;position:relative;color:#fff;background:#101010}
+.creator-body .shorts-portrait{width:100%;height:100%;max-height:none;aspect-ratio:auto;border-radius:0;overflow:hidden;touch-action:pan-x pinch-zoom}
+.creator-body .shorts-portrait video,.creator-body .shorts-portrait .watch-player-frame{width:100%;height:100%;max-height:none;aspect-ratio:auto;object-fit:contain;border-radius:0}
+.creator-body .shorts-portrait .shorts-rail{position:absolute;right:8px;bottom:64px;z-index:3;width:58px;gap:4px;padding:0;max-height:calc(100% - 116px);overflow-y:auto;overscroll-behavior:contain;color:#fff;scrollbar-width:none}
+.creator-body .shorts-portrait .shorts-rail .media-action,.creator-body .shorts-portrait .shorts-rail .watch-action{color:#fff;background:transparent;border:0;text-shadow:0 1px 4px #000;filter:drop-shadow(0 1px 2px #0009);min-height:44px;width:56px}
+.creator-body .shorts-portrait .shorts-rail .media-action:focus-visible,.creator-body .shorts-portrait .shorts-rail .watch-action:focus-visible{outline:2px solid #fff;outline-offset:-3px}
+.creator-body .shorts-portrait .shorts-rail .content-share{margin:0}
+.creator-body .shorts-portrait .shorts-rail .media-action-notice{position:fixed;inset:auto 12px 90px;max-width:340px;background:#242424;color:#fff}
+.creator-body .shorts-portrait .shorts-caption{left:12px;right:76px;bottom:48px;padding:8px 4px;background:transparent;border-radius:0;overflow-wrap:anywhere;text-shadow:0 1px 5px #000,0 1px 10px #000}
+.creator-body .shorts-portrait .shorts-caption p{display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.creator-body .shorts-navigation,.creator-body .shorts-catalog-note{position:absolute;z-index:4;top:8px;left:50%;transform:translateX(-50%);width:min(calc(100% - 24px),340px);max-width:none;color:#fff;background:#101010b8;border-radius:8px;padding:4px 8px}
+.creator-body .shorts-navigation .quiet-button{color:#fff;background:transparent;border:0;min-height:40px}
+.creator-body .shorts-shell>p[role=alert]{position:absolute;top:60px;left:12px;right:12px;z-index:4;color:white;background:#242424;padding:8px}
+@media(max-width:760px){
+ .creator-body .shorts-shell{--short-viewport:calc(100dvh - 54px - 74px - max(0px,env(safe-area-inset-bottom) - 10px))}
+ .creator-body .shorts-stage{width:100%;max-width:none}
+ .creator-body .shorts-portrait video{object-fit:cover}
+ .creator-body .shorts-portrait .shorts-locked{padding-right:78px}
+}
+@media(max-height:550px){
+ .creator-body .shorts-portrait .shorts-rail{bottom:48px;max-height:calc(100% - 92px);gap:0}
+ .creator-body .shorts-portrait .shorts-caption{bottom:38px}
+}
