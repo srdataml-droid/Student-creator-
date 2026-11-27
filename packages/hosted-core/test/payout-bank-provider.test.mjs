@@ -45,3 +45,28 @@ test('wrong mode keys and unapproved live configuration fail closed',()=>{
  assert.throws(()=>createPayoutBankProvider({key:'sk_test_fixture',environment:'live'}),{code:'PAYOUT_BANK_PROVIDER_UNAVAILABLE'});
  assert.throws(()=>buildLivePayoutBankProvider({env:{}}),{code:'PAYOUT_BANK_PROVIDER_UNAVAILABLE'});
 });
+
+test('recipient creation is disabled by default and rejects a different reviewed account name',async()=>{
+ const base=fixture([]);
+ await assert.rejects(base.provider.createRecipient({bankCode,accountNumber,approvedAccountName:'Fixture Person'}),{code:'PAYOUT_BANK_PROVIDER_UNAVAILABLE'});
+ assert.equal(base.calls.length,0);
+ let calls=0;
+ const provider=createPayoutBankProvider({key:'sk_test_fixture',environment:'test',allowRecipientCreation:true,fetcher:async()=>{calls++;return response({data:{account_number:accountNumber,account_name:'Other Person'}});}});
+ await assert.rejects(provider.createRecipient({bankCode,accountNumber,approvedAccountName:'Fixture Person'}),{code:'PAYOUT_BANK_PROVIDER_UNAVAILABLE'});
+ assert.equal(calls,1);
+});
+test('approved recipient creation re-resolves, creates and independently verifies the same account without transferring funds',async()=>{
+ const calls=[],replies=[response({data:{account_number:accountNumber,account_name:'Fixture Person'}}),response({data}),response({data})];
+ const provider=createPayoutBankProvider({key:'sk_test_fixture',environment:'test',allowRecipientCreation:true,fetcher:async(url,options)=>{calls.push({url,options});return replies.shift();}});
+ assert.deepEqual(await provider.createRecipient({bankCode,accountNumber,approvedAccountName:' fixture   person '}),{recipientCode,bankCode,accountLast4:'6789',providerVerified:true});
+ assert.deepEqual(calls.map(x=>[x.options.method,x.url.pathname]),[['GET','/bank/resolve'],['POST','/transferrecipient'],['GET','/transferrecipient/'+recipientCode]]);
+ assert.deepEqual(JSON.parse(calls[1].options.body),{type:'nuban',name:'Fixture Person',account_number:accountNumber,bank_code:bankCode,currency:'NGN'});
+});
+test('wrong recipient creation response and uncertain POST do not retry or return verified status',async()=>{
+ for(const reply of [response({data:{...data,domain:'live'}}),response({data:{...data,details:{account_number:'9999999999',bank_code:bankCode}}}),new Error('private upstream error')]){
+  let calls=0;const replies=[response({data:{account_number:accountNumber,account_name:'Fixture Person'}}),reply];
+  const provider=createPayoutBankProvider({key:'sk_test_fixture',environment:'test',allowRecipientCreation:true,fetcher:async()=>{calls++;const x=replies.shift();if(x instanceof Error)throw x;return x;}});
+  await assert.rejects(provider.createRecipient({bankCode,accountNumber,approvedAccountName:'Fixture Person'}),{message:'PAYOUT_BANK_PROVIDER_UNAVAILABLE'});
+  assert.equal(calls,2);
+ }
+});

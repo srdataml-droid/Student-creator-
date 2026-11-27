@@ -9,22 +9,24 @@ const recipientOk=v=>typeof v==='string'&&/^RCP_[A-Za-z0-9]{8,80}$/.test(v);
 const nameOk=v=>typeof v==='string'&&v.trim().length>0&&v.length<=180&&!/[\x00-\x1f\x7f]/.test(v);
 const object=v=>v!==null&&typeof v==='object'&&!Array.isArray(v);
 
-// Server-only provider adapter. No route, recipient creation, funds movement,
-// ownership attestation, or database write is performed by this module.
-export function createPayoutBankProvider({key,environment='live',fetcher=fetch}={}){
+// Server-only provider adapter. Recipient creation is separately gated.
+// This module never moves funds, attests ownership or writes the database.
+export function createPayoutBankProvider({key,environment='live',allowRecipientCreation=false,fetcher=fetch}={}){
  if(!['live','test'].includes(environment)||typeof key!=='string'||!new RegExp('^sk_'+environment+'_[A-Za-z0-9]+$').test(key))throw failure();
- async function get(path,params={}){
+ async function call(path,params={},payload){
   try{
    const url=new URL(path,'https://api.paystack.co');
    url.search=new URLSearchParams(params).toString();
-   const response=await fetcher(url,{method:'GET',headers:{Authorization:'Bearer '+key,Accept:'application/json'},cache:'no-store',redirect:'error',signal:AbortSignal.timeout(8000)});
+   const response=await fetcher(url,{method:payload===undefined?'GET':'POST',headers:{Authorization:'Bearer '+key,Accept:'application/json',...(payload===undefined?{}:{'content-type':'application/json'})},...(payload===undefined?{}:{body:JSON.stringify(payload)}),cache:'no-store',redirect:'error',signal:AbortSignal.timeout(8000)});
    if(!response.ok)throw failure();
    const body=JSON.parse(await readBoundedGatewayResponse(response,262144,failure));
    if(!object(body)||body.status!==true)throw failure();
    return body;
   }catch{throw failure();}
  }
- return Object.freeze({
+ const get=(path,params)=>call(path,params);
+ const sameName=(a,b)=>a.normalize('NFC').trim().replace(/\s+/g,' ').toLocaleLowerCase('en')===b.normalize('NFC').trim().replace(/\s+/g,' ').toLocaleLowerCase('en');
+ const provider={
   // Use cursor pagination instead of silently truncating the bank catalog.
   async listBanks(){
    const banks=new Map(),seen=new Set();
@@ -54,6 +56,20 @@ export function createPayoutBankProvider({key,environment='live',fetcher=fetch}=
    if(!object(data)||data.account_number!==accountNumber||!nameOk(data.account_name))throw failure();
    return {bankCode,accountLast4:accountNumber.slice(-4),accountName:data.account_name.trim()};
   },
+  // Only an independently approved, durable server workflow may call this.
+  // approvedAccountName is verified evidence from that workflow, not browser input.
+  async createRecipient({bankCode,accountNumber,approvedAccountName}={}){
+   if(allowRecipientCreation!==true)throw failure();
+   if(!codeOk(bankCode)||!accountOk(accountNumber)||!nameOk(approvedAccountName))throw invalid();
+   const resolved=await provider.resolveAccount({bankCode,accountNumber});
+   if(!sameName(resolved.accountName,approvedAccountName))throw failure();
+   // A duplicate may return an existing record; always verify it independently.
+   // A failed/uncertain response must be investigated by the durable caller,
+   // not retried automatically or treated as authorization to transfer funds.
+   const {data}=await call('/transferrecipient',{}, {type:'nuban',name:resolved.accountName,account_number:accountNumber,bank_code:bankCode,currency:'NGN'});
+   if(!object(data)||!recipientOk(data.recipient_code)||data.domain!==environment||data.currency!=='NGN'||data.type!=='nuban'||data.active!==true||data.is_deleted===true||!object(data.details)||data.details.account_number!==accountNumber||data.details.bank_code!==bankCode)throw failure();
+   return provider.verifyRecipient({recipientCode:data.recipient_code,bankCode,accountNumber});
+  },
   // Only a trusted reviewer/server workflow may supply the expected account.
   // Never use a browser-supplied recipient code as verified payout evidence.
   async verifyRecipient({recipientCode,bankCode,accountNumber}={}){
@@ -62,7 +78,8 @@ export function createPayoutBankProvider({key,environment='live',fetcher=fetch}=
    if(!object(data)||data.recipient_code!==recipientCode||data.domain!==environment||data.currency!=='NGN'||data.type!=='nuban'||data.active!==true||data.is_deleted===true||!object(data.details)||data.details.account_number!==accountNumber||data.details.bank_code!==bankCode)throw failure();
    return {recipientCode,bankCode,accountLast4:accountNumber.slice(-4),providerVerified:true};
   }
- });
+ };
+ return Object.freeze(provider);
 }
 
 export function buildLivePayoutBankProvider({env=process.env,fetcher=fetch}={}){
