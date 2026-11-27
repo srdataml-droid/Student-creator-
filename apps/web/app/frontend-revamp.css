@@ -728,3 +728,44 @@ html[data-appearance] .creator-body .modern-frame .mobile-creator-tabs a:not(.cu
 .creator-body .shorts-rail{gap:6px}.creator-body .shorts-rail .media-action{min-height:43px}
 .creator-body .shorts-portrait .shorts-caption{right:12px;bottom:44px;padding:12px;background:#101010c9;border-radius:8px}
 @media(max-height:650px){.creator-body .shorts-rail{gap:2px}.creator-body .shorts-rail .media-action{min-height:34px;font-size:10px}.creator-body .shorts-rail .media-action svg{width:20px;height:20px}}
+
+/* Brilliant source: Community #g243, Night classes #g295, Create #g381.
+   390px reference geometry; responsive rows retain content-driven height. */
+html[data-appearance=dark] .creator-body{--muted:#a6a6a6}
+html[data-appearance=light] .creator-body{--text:#151515;--ink:#151515;--muted:#666;--line:#e5e5e5;--surface-2:#f0f0f0;--action:#151515}
+.creator-body .content-community .community-switch{gap:7px;border:0;padding:0;margin:0 0 20px;align-items:center}
+.creator-body .content-community .community-switch a{display:inline-flex;align-items:center;justify-content:center;height:32px;padding:0 11px;font-size:13px;line-height:1.25;font-weight:600;border-radius:9px;text-decoration:none}
+.creator-body .content-community .community-switch a:nth-child(1){min-width:78px}
+.creator-body .content-community .community-switch a:nth-child(2){min-width:120px}
+.creator-body .content-community .community-switch a:nth-child(3){min-width:113px}
+.creator-body .content-community .community-switch a[aria-current=page]{background:var(--action);color:var(--on-action)}
+.creator-body .content-community .community-section-heading{margin-bottom:4px;min-height:24px}
+.creator-body .content-community .community-section-heading h2{font-size:19px;font-weight:600;line-height:1.25;letter-spacing:0}
+.creator-body .content-community .community-section-heading>a{font-size:12px;font-weight:500;color:var(--muted);text-decoration:none}
+.creator-body .content-community .community-section{margin-bottom:24px}
+.creator-body .content-community .community-preview-item{min-height:73px;padding:12px 0 14px;gap:12px;text-decoration:none}
+.creator-body .content-community .community-preview-symbol{flex:0 0 46px;height:46px;border-radius:12px;color:var(--text)}
+.creator-body .content-community .community-preview-copy{gap:4px}
+.creator-body .content-community .community-preview-copy strong{font-size:15px;font-weight:600;line-height:1.25}
+.creator-body .content-community .community-preview-copy small{font-size:12px;line-height:1.25;font-weight:500}
+.creator-body .content-community .community-preview-item>span:last-child{font-size:16px;color:var(--muted);margin-inline:4px 12px}
+.creator-body .content-community .night-directory-list{border:0;padding:0;background:transparent}
+.creator-body .content-community .night-directory-list>.heading-row{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.creator-body .content-community .night-directory-list>.heading-row h2{font-size:18px;font-weight:600;letter-spacing:0;margin:0 auto 0 0}
+.creator-body .content-community .night-directory-list>.heading-row button{font-size:12px;padding:8px;min-height:44px}
+.creator-body .content-community .community-preview-price{font-size:12px}
+.creator-body .watch-inbox .watch-avatar{width:46px;height:46px;flex-basis:46px;border-radius:50%}
+.creator-body .watch-inbox .community-preview-item{min-height:74px;padding:12px 0;gap:12px}
+.creator-body .watch-inbox .community-preview-copy strong{font-size:15px;font-weight:600}
+.creator-body .watch-inbox .community-preview-copy small{font-size:12px}
+.creator-body .watch-inbox .community-preview-item>span:last-child{font-size:12px;color:var(--muted)}
+@media(max-width:760px){
+ .creator-body .content-community,.creator-body .watch-section-page{padding-inline:18px}
+ .creator-body .content-community>h1,.creator-body .watch-section-page>h1{font-size:23px;line-height:1.25;font-weight:700;letter-spacing:0;margin:0 0 14px}
+ .creator-body .content-community>h1{padding-bottom:8px;border-bottom:1px solid var(--line)}
+ .creator-body .modern-frame .mobile-creator-tabs{min-height:74px;padding:10px 0 max(10px,env(safe-area-inset-bottom));gap:0}
+ .creator-body .modern-frame .mobile-creator-tabs a{gap:6px}
+ .creator-body .modern-frame .mobile-creator-tabs a svg{width:22px;height:22px}
+ .creator-body .modern-frame .mobile-creator-tabs a span{line-height:1.25;font-weight:500}
+ .creator-body .modern-frame .mobile-creator-tabs a.current span{font-weight:600}
+}
