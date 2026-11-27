@@ -5,7 +5,7 @@ const options=[
  {title:'Upload a video',detail:'Long-form original content',href:'/studio?format=video#studio-create',icon:'video'},
  {title:'Create a short',detail:'Vertical, quick content',href:'/studio?format=short#studio-create',icon:'short'},
  {title:'Photo or text post',detail:'Ideas, images and experiences',icon:'image',unavailable:true},
- {title:'Go live',detail:'Host a night class',href:'/communities?tab=night',icon:'live'},
+ {title:'Go live',detail:'Host a night class',href:'/classes',icon:'live'},
  {title:'Your drafts',detail:'Continue unfinished work',href:'/studio#studio-content',icon:'draft'},
  {title:'Creator studio',detail:'Content, analytics and earnings',href:'/studio',icon:'studio'}
 ];
