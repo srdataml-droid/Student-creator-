@@ -1,12 +1,22 @@
 
 import Link from 'next/link';
 import HostedDiscovery from '../HostedDiscovery.jsx';
+import {searchCategory,searchPublicDirectory} from '../../lib/public-directory-search.mjs';
 import {isLocalMode,getLocalPublicCourses,getLocalPublicInstitutions,getLocalTopics,searchLocalPublishedLessons} from '../../lib/local-public.mjs';
 export const dynamic='force-dynamic';
 export const metadata={title:'Search | Student Creators'};
 export default async function SearchPage({searchParams}){
  const params=(await searchParams)||{};
- if(!isLocalMode())return <main id="main" className="creator-main modern-home hosted-home viewer-search-page"><div className="feed-column"><Link className="viewer-back watch-back" href="/"><span aria-hidden="true">←</span> Search results</Link><h1 className="visually-hidden">Search Student Creators</h1><form className="viewer-search-form" action="/search" method="GET"><label className="visually-hidden" htmlFor="viewer-search-query">Search published content</label><svg aria-hidden="true" viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input key={typeof params.q==='string'?params.q:''} id="viewer-search-query" type="search" name="q" defaultValue={typeof params.q==='string'?params.q.slice(0,80):''} placeholder="Search Student Creators" maxLength={80}/>{typeof params.courseId==='string'&&<input type="hidden" name="courseId" value={params.courseId}/>}<button type="submit">Search</button></form><HostedDiscovery params={params} search/></div></main>;
+ if(!isLocalMode()){
+  const category=searchCategory(params.category),q=typeof params.q==='string'?params.q.slice(0,80):'',courseId=typeof params.courseId==='string'?params.courseId:'';
+  let directory=[],error='';
+  if(category!=='all')try{directory=await searchPublicDirectory({category,q});}catch(e){error=e.message==='INVALID_DISCOVERY_FILTER'?'Enter a valid search.':'Search is temporarily unavailable.';}
+  function categoryHref(key){const query=new URLSearchParams();if(q)query.set('q',q);if(key==='all'&&courseId)query.set('courseId',courseId);if(key!=='all')query.set('category',key);return '/search?'+query;}
+  return <main id="main" className="creator-main modern-home hosted-home viewer-search-page"><div className="feed-column"><Link className="viewer-back watch-back" href="/"><span aria-hidden="true">←</span> Search results</Link><h1 className="visually-hidden">Search Student Creators</h1><form className="viewer-search-form" action="/search" method="GET"><label className="visually-hidden" htmlFor="viewer-search-query">Search published content</label><svg aria-hidden="true" viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input key={q} id="viewer-search-query" type="search" name="q" defaultValue={q} placeholder="Search Student Creators" maxLength={80}/>{category!=='all'&&<input type="hidden" name="category" value={category}/>} {category==='all'&&courseId&&<input type="hidden" name="courseId" value={courseId}/>}<button type="submit">Search</button></form>
+  <nav className="feed-tabs public-feed-tabs viewer-search-categories" aria-label="Search categories">{[['all','All'],['creators','Creators'],['communities','Communities']].map(([key,label])=><Link href={categoryHref(key)} key={key} aria-current={category===key?'page':undefined}>{label}</Link>)}</nav>
+  {category==='all'?<HostedDiscovery params={params} search/>:<section className="viewer-directory-results" aria-label={category==='creators'?'Creator results':'Community results'}>{error?<p role="alert">{error}</p>:!q?<p className="hint">Search by {category==='creators'?'creator name or handle':'course name or code'}.</p>:directory.length===0?<p className="hint" role="status">No matching {category} found.</p>:<><ul className="community-preview-list">{directory.map(item=><li key={item.id}><Link className="community-preview-item" href={(category==='creators'?'/creators/':'/communities/')+item.id}><span className="community-preview-symbol" aria-hidden="true">{category==='creators'?item.title.charAt(0).toUpperCase():'#'}</span><span className="community-preview-copy"><strong>{item.title}</strong><small>{item.subtitle}</small></span><span aria-hidden="true">›</span></Link></li>)}</ul>{directory.length===50&&<p className="hint">Showing up to 50 results. Refine your search to find more.</p>}</>}</section>}
+  </div></main>;
+ }
  const q=typeof params.q==='string'?params.q.trim():'';
  const institutionId=typeof params.institutionId==='string'?params.institutionId:'';
  const courseId=typeof params.courseId==='string'?params.courseId:'';
