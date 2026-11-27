@@ -717,7 +717,7 @@ html[data-appearance] .creator-body .modern-frame .mobile-creator-tabs a:not(.cu
 
 /* Exact Brilliant Create row geometry: 46 px glyph tiles, 84 px row rhythm. */
 .creator-body .content-create{padding-inline:18px}
-.creator-body .content-create .create-options .community-preview-item{min-height:84px;gap:12px;padding:16px 0;border-bottom:1px solid var(--line)}
+.creator-body .content-create .create-options .community-preview-item{min-height:83px;box-sizing:border-box;gap:12px;padding:16px 0;border-bottom:0}
 .creator-body .content-create .community-preview-symbol{width:46px;height:46px;flex:0 0 46px;border-radius:12px}
 .creator-body .content-create .community-preview-copy strong{font-size:15px;line-height:1.25;font-weight:600}
 .creator-body .content-create .community-preview-copy small{font-size:12px;line-height:1.25}
@@ -771,3 +771,10 @@ html[data-appearance=light] .creator-body{--text:#151515;--ink:#151515;--muted:#
 }
 
 .creator-body .night-directory-list .night-row-title{font-size:15px;line-height:1.25;font-weight:600;margin:0;letter-spacing:0;overflow-wrap:anywhere}.creator-body .night-directory-list .night-your-sessions{margin:36px 0 4px}
+
+/* Create #g381: one separator per 84px row; title rule and subtitle spacing. */
+.creator-body .content-create.watch-section-page>h1{font-size:23px;line-height:1.25;letter-spacing:0;padding-bottom:7px;border-bottom:1px solid var(--line);margin:0 0 22px}
+.creator-body .content-create.watch-section-page>.hint{font-size:15px;line-height:1.25;font-weight:500;margin:0 0 16px}
+.creator-body .content-create .create-options>li{border-bottom:1px solid var(--line)}
+.creator-body .content-create .community-preview-copy small{font-weight:500}
+.creator-body .content-create .community-preview-item>span:last-child{margin-inline-end:12px;color:var(--muted);font-size:16px}
