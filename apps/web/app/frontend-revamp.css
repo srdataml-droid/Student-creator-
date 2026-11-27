@@ -956,3 +956,15 @@ html[data-appearance] .creator-body .viewer-conversation .message-bubble.own{bac
 .creator-body .viewer-send{flex:0 0 44px;width:44px;height:44px;border:0;border-radius:50%;display:grid;place-items:center;background:var(--action);color:var(--on-action);padding:0}
 .creator-body .viewer-send:disabled{opacity:.45}
 @media(max-width:760px){.creator-body .main.hosted-workspace:has(.viewer-conversation){padding-inline:18px}.creator-body .viewer-conversation{min-height:calc(100dvh - 220px)}}
+
+/* Brilliant recording 01:00 — notification filters and flat list. */
+.viewer-notifications{max-width:680px;margin-inline:auto}
+.viewer-notification-tabs{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.viewer-notification-tabs .feed-tabs{margin:0;gap:6px;border:0}
+.viewer-notification-tabs .feed-tabs button{font-size:13px;padding:8px 12px;border-radius:8px}
+.viewer-notification-row{display:flex;align-items:center;gap:12px;min-height:76px;padding:14px 0;border-bottom:1px solid var(--line)}
+.viewer-notification-icon{display:grid;place-items:center;flex:0 0 28px;color:var(--text)}
+.viewer-notification-copy{flex:1;min-width:0;display:flex;flex-direction:column;gap:5px}
+.viewer-notification-copy strong{font-size:15px;line-height:1.35;font-weight:600;text-transform:capitalize;overflow-wrap:anywhere}
+.viewer-notification-copy small{font-size:12px;color:var(--muted)}
+.viewer-notification-row button{flex-shrink:0;font-size:12px}
