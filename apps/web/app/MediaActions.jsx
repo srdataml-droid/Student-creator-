@@ -10,11 +10,20 @@ export function OfficialActions({vertical=false}){const [notice,setNotice]=useSt
 export function CreatorActions(props){const account=useHostedAccount();return <ScopedCreatorActions key={(account?.session.userId||'guest')+':'+props.post.id} {...props}/>;}
 function ScopedCreatorActions({post,vertical=false,checkoutMode='disabled',terms,showPayment=true}){
  const account=useHostedAccount(),signed=account?.session.state==='signed-in',actor=account?.session.userId,contentId=post.id,creatorId=post.creatorId;
- const [liked,setLiked]=useState(null),[followed,setFollowed]=useState(null),[saved,setSaved]=useState(null),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[quote,setQuote]=useState(null),[opened,setOpened]=useState(false);const lock=useRef(false),dialog=useRef(null);
+ const [liked,setLiked]=useState(null),[followed,setFollowed]=useState(typeof post.following==='boolean'?post.following:null),[saved,setSaved]=useState(null),[hydrating,setHydrating]=useState(vertical&&signed),[busy,setBusy]=useState(false),[notice,setNotice]=useState(''),[quote,setQuote]=useState(null),[opened,setOpened]=useState(false);const lock=useRef(false),dialog=useRef(null);
  const own=actor===creatorId,validCreator=UUID.test(creatorId||'');
  async function readLike(){const rows=await account.creatorRequest('isLiked',{contentId});if(!Array.isArray(rows))throw Error('INVALID_LIKES');return rows.some(x=>x.content_id===contentId);}
  async function readFollow(){const rows=await account.creatorRequest('isFollowing',{creatorId});if(!Array.isArray(rows))throw Error('INVALID_FOLLOW');return rows.some(x=>x.creator_id===creatorId);}
- useEffect(()=>{setLiked(null);setFollowed(null);setSaved(null);setQuote(null);setNotice('');setOpened(false);},[actor,contentId]);
+ useEffect(()=>{
+  if(!vertical||!signed){setHydrating(false);return;}
+  let active=true;setHydrating(true);
+  Promise.allSettled([
+   readLike(),
+   validCreator&&!own?readFollow():Promise.resolve(null),
+   account.creatorRequest('isBookmarked',{contentId}).then(rows=>{if(!Array.isArray(rows))throw Error('INVALID_SAVED');return rows.some(x=>x.content_id===contentId);})
+  ]).then(results=>{if(!active)return;const [like,follow,save]=results;if(like.status==='fulfilled')setLiked(like.value);if(follow.status==='fulfilled')setFollowed(follow.value);if(save.status==='fulfilled')setSaved(save.value);setHydrating(false);});
+  return()=>{active=false;};
+ },[vertical,signed,actor,contentId,creatorId]);
  async function run(fn){if(lock.current)return;lock.current=true;setBusy(true);setNotice('');try{await fn();}catch(e){setNotice(e.status===403?'This action requires an eligible account.':'Could not confirm this action. Try again.');}finally{lock.current=false;setBusy(false);}}
  const href='/lessons/'+contentId;
  async function toggleLike(){await run(async()=>{const old=await readLike();await account.creatorRequest(old?'unlike':'like',{contentId});const now=await readLike();if(now===old)throw Error('UNCONFIRMED');setLiked(now);});}
@@ -23,9 +32,9 @@ function ScopedCreatorActions({post,vertical=false,checkoutMode='disabled',terms
  async function access(){await run(async()=>{const r=await account.creatorRequest('checkoutQuote',{lessonId:contentId});if(r.currency!=='NGN'||typeof r.accessAvailable!=='boolean'||(!r.accessAvailable&&(!Number.isSafeInteger(r.priceKobo)||r.priceKobo<20000)))throw Error('INVALID_PRICE');setQuote(r);setOpened(true);dialog.current?.showModal();});}
  const accessLabel=post.priceKobo>=20000?'Pay ₦'+(post.priceKobo/100).toLocaleString('en-NG')+' to watch':'Watch / unlock';
  return <div className={vertical?'shorts-rail':'media-action-row'} aria-label="Content actions">
- {signed?<button type="button" className="media-action" aria-pressed={liked===true} disabled={busy} onClick={toggleLike}><SocialIcon name="like" filled={liked===true}/><span>{liked?'Liked':'Like'}</span></button>:<Link className="media-action" href="/sign-in"><SocialIcon name="like"/><span>Like</span></Link>}
- {validCreator&&!own&&(signed?<button type="button" className="media-action" aria-pressed={followed===true} disabled={busy} onClick={toggleFollow}><SocialIcon name="follow"/><span>{followed?'Following':'Follow'}</span></button>:<Link className="media-action" href="/sign-in"><SocialIcon name="follow"/><span>Follow</span></Link>)}
- <Link className="media-action" href={href+'#watch-discussion'}><SocialIcon name="comment"/><span>Comment</span></Link>{signed?<button type="button" className="media-action" aria-pressed={saved===true} disabled={busy} onClick={toggleSave}><SocialIcon name="save" filled={saved===true}/><span>{saved?'Saved':'Save'}</span></button>:<Link className="media-action" href="/sign-in"><SocialIcon name="save"/><span>Save</span></Link>}<ShareContent contentId={contentId} title={post.title}/>
+ {signed?<button type="button" className="media-action" aria-pressed={liked===null?undefined:liked} disabled={busy||hydrating} onClick={toggleLike}><SocialIcon name="like" filled={liked===true}/><span>{liked?'Liked':'Like'}</span></button>:<Link className="media-action" href="/sign-in"><SocialIcon name="like"/><span>Like</span></Link>}
+ {validCreator&&!own&&(signed?<button type="button" className="media-action" aria-pressed={followed===null?undefined:followed} disabled={busy||hydrating} onClick={toggleFollow}><SocialIcon name="follow"/><span>{followed?'Following':'Follow'}</span></button>:<Link className="media-action" href="/sign-in"><SocialIcon name="follow"/><span>Follow</span></Link>)}
+ <Link className="media-action" href={href+'#watch-discussion'}><SocialIcon name="comment"/><span>Comment</span></Link>{signed?<button type="button" className="media-action" aria-pressed={saved===null?undefined:saved} disabled={busy||hydrating} onClick={toggleSave}><SocialIcon name="save" filled={saved===true}/><span>{saved?'Saved':'Save'}</span></button>:<Link className="media-action" href="/sign-in"><SocialIcon name="save"/><span>Save</span></Link>}<ShareContent contentId={contentId} title={post.title}/>
  {showPayment&&(signed?<button className="media-action media-access" disabled={busy} type="button" onClick={access}><SocialIcon name="lock"/><span>{accessLabel}</span></button>:<Link className="media-action media-access" href="/sign-in"><SocialIcon name="lock"/><span>{accessLabel}</span></Link>)}
  {notice&&<p className="media-action-notice" role="status">{notice}</p>}
  <dialog ref={dialog} className="media-access-dialog" aria-label="Viewing access" onClose={()=>setOpened(false)}><div className="heading-row"><h2>Viewing access</h2><button type="button" className="quiet-button" onClick={()=>dialog.current?.close()}>Close</button></div>{opened&&quote&&(quote.accessAvailable?<><p>You already have access.</p><Link className="primary-link" href={href}>Continue watching</Link></>:<><p>Pay to continue watching · ₦{(quote.priceKobo/100).toLocaleString('en-NG')}</p><HostedCheckout lessonId={contentId} mode={checkoutMode} terms={terms} initialQuote={quote}/></>)}</dialog>
