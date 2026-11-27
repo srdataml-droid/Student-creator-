@@ -28,7 +28,7 @@ BEGIN
  at_time:=clock_timestamp();
  DELETE FROM student_payout_private.bank_lookup_attempts WHERE created_at<at_time-interval '24 hours';
  IF (SELECT count(*) FROM student_payout_private.bank_lookup_attempts WHERE created_at>at_time-interval '1 hour')>=200
- OR (SELECT count(*) FROM student_payout_private.bank_lookup_attempts WHERE actor_id=_actor AND kind=_kind AND created_at>at_time-interval '1 hour')>=CASE WHEN _kind='resolve' THEN 5 ELSE 10 END
+ OR (SELECT count(*) FROM student_payout_private.bank_lookup_attempts WHERE actor_id=_actor AND kind=_kind AND created_at>at_time-interval '1 hour')>=(CASE WHEN _kind='resolve' THEN 5 ELSE 10 END)
  THEN RETURN false; END IF;
  INSERT INTO student_payout_private.bank_lookup_attempts(actor_id,kind,created_at) VALUES(_actor,_kind,at_time);
  RETURN true;
