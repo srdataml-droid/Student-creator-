@@ -6,7 +6,7 @@ export const dynamic='force-dynamic';
 export const metadata={title:'Search | Student Creators'};
 export default async function SearchPage({searchParams}){
  const params=(await searchParams)||{};
- if(!isLocalMode())return <main id="main" className="creator-main modern-home hosted-home"><div className="feed-column"><h1 className="visually-hidden">Search Student Creators</h1><HostedDiscovery params={params} search/></div></main>;
+ if(!isLocalMode())return <main id="main" className="creator-main modern-home hosted-home viewer-search-page"><div className="feed-column"><Link className="viewer-back watch-back" href="/"><span aria-hidden="true">←</span> Search results</Link><h1 className="visually-hidden">Search Student Creators</h1><form className="viewer-search-form" action="/search" method="GET"><label className="visually-hidden" htmlFor="viewer-search-query">Search published content</label><svg aria-hidden="true" viewBox="0 0 24 24" width="21" height="21" fill="none" stroke="currentColor" strokeWidth="1.7"><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></svg><input key={typeof params.q==='string'?params.q:''} id="viewer-search-query" type="search" name="q" defaultValue={typeof params.q==='string'?params.q.slice(0,80):''} placeholder="Search Student Creators" maxLength={80}/>{typeof params.courseId==='string'&&<input type="hidden" name="courseId" value={params.courseId}/>}<button type="submit">Search</button></form><HostedDiscovery params={params} search/></div></main>;
  const q=typeof params.q==='string'?params.q.trim():'';
  const institutionId=typeof params.institutionId==='string'?params.institutionId:'';
  const courseId=typeof params.courseId==='string'?params.courseId:'';
