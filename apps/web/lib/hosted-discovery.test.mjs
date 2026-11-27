@@ -35,3 +35,29 @@ test('provider errors and malformed payloads fail closed',async()=>{
 test('public content preview queries only the exact published content ID',async()=>{const data=await getHostedDiscovery({env,contentId:id(1),fetcher:async(url)=>{assert.equal(url.searchParams.get('id'),'eq.'+id(1));return Response.json([row(1),row(2),{...row(1),status:'draft'}]);}});assert.deepEqual(data.items.map(p=>p.id),[id(1)]);await assert.rejects(getHostedDiscovery({env,contentId:'bad'}),/INVALID_DISCOVERY_FILTER/);});
 
 test('Shorts discovery uses explicit format and validated public listing prices',async()=>{const creator=id(300),valid={...row(1),creator_id:creator,content_format:'short',listing:[{content_id:id(1),creator_id:creator,price_kobo:30000,currency:'NGN',state:'active'}]};const d=await getHostedDiscovery({env,format:'short',fetcher:async url=>{assert.equal(url.searchParams.get('content_format'),'eq.short');return Response.json([valid,{...row(2),content_format:'video'},{...row(3),content_format:'short',creator_id:creator,listing:[{content_id:id(3),creator_id:id(301),price_kobo:10000,currency:'NGN',state:'active'}]}]);}});assert.deepEqual(d.items.map(x=>x.id),[id(1),id(3)]);assert.equal(d.items[0].priceKobo,30000);assert.equal(d.items[0].creatorId,creator);assert.equal(d.items[0].contentFormat,'short');assert.equal('priceKobo' in d.items[1],false);await assert.rejects(getHostedDiscovery({env,format:'arbitrary'}),/INVALID_DISCOVERY_FILTER/);});
+
+test('creator aliases use one bounded public request and do not expose private records',async()=>{
+ const creator=id(300),other=id(301),calls=[];
+ const data=await getHostedDiscovery({env,includeCreators:true,fetcher:async(url,opts)=>{
+  calls.push(url.pathname);
+  assert.equal(opts.headers.apikey,env.supabase_publishable_key);
+  assert.equal('authorization' in opts.headers,false);
+  if(url.pathname.endsWith('/content_items'))return Response.json([{...row(1),creator_id:creator},{...row(2),creator_id:creator},{...row(3),creator_id:other}]);
+  assert.equal(url.pathname,'/rest/v1/creator_public_profiles');
+  assert.equal(url.searchParams.get('select'),'user_id,display_name,handle');
+  assert.equal(url.searchParams.get('user_id'),'in.('+creator+','+other+')');
+  assert.equal(url.searchParams.get('limit'),'2');
+  return Response.json([{user_id:creator,display_name:'Public creator',handle:'creator',private_email:'must-not-leak'},{user_id:id(999),display_name:'Unrelated profile',handle:'unrelated'}]);
+ }});
+ assert.deepEqual(calls,['/rest/v1/content_items','/rest/v1/creator_public_profiles']);
+ assert.equal(data.items[0].displayName,'Public creator');
+ assert.equal(data.items[1].handle,'creator');
+ assert.equal('displayName' in data.items[2],false);
+ assert.equal(JSON.stringify(data).includes('must-not-leak'),false);
+ assert.equal(JSON.stringify(data).includes('Unrelated profile'),false);
+});
+test('public alias failure preserves available catalog content without inventing a name',async()=>{
+ const data=await getHostedDiscovery({env,includeCreators:true,fetcher:async(url)=>url.pathname.endsWith('/content_items')?Response.json([{...row(),creator_id:id(300)}]):new Response(null,{status:503})});
+ assert.equal(data.items.length,1);
+ assert.equal('displayName' in data.items[0],false);
+});
