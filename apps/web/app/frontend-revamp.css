@@ -895,3 +895,25 @@ html[data-appearance=light] .creator-body{--text:#151515;--ink:#151515;--muted:#
  .creator-body .viewer-watch-primary .watch-detail-copy{margin:12px 0 16px}
  .creator-body .viewer-watch-primary .watch-detail-copy h1{font-size:21px}
 }
+
+/* Recorded viewer profile: public identity, two-action row and media-first work grid. */
+.creator-body .viewer-profile{max-width:1024px;width:100%;margin-inline:auto;min-width:0}
+.creator-body .viewer-profile .public-creator-header{border:0;padding:0;box-shadow:none;background:transparent}
+.creator-body .viewer-profile .public-creator-cover{height:clamp(100px,15vw,180px);background:var(--surface-2);border-radius:8px}
+.creator-body .viewer-profile .public-creator-details{display:flex;flex-direction:column;align-items:flex-start;gap:8px;padding:0;margin-top:-26px;position:relative}
+.creator-body .viewer-profile .public-creator-avatar{height:62px;width:62px;flex:0 0 62px;border:3px solid var(--surface);background:var(--surface-2);color:var(--text);border-radius:50%}
+.creator-body .viewer-profile .public-creator-details h1{font-size:24px;line-height:1.25;margin:0 0 5px;letter-spacing:-.02em}
+.creator-body .viewer-profile .public-creator-details p{font-size:14px;line-height:1.5;margin:4px 0;overflow-wrap:anywhere}
+.creator-body .viewer-profile .public-creator-details .hint{font-size:12px}
+.creator-body .viewer-profile .public-creator-header .button-row{display:flex;gap:10px;margin:20px 0}
+.creator-body .viewer-profile .public-creator-header .button-row>:is(button,a){flex:1;min-height:44px;border:0;border-radius:999px;display:flex;align-items:center;justify-content:center;font-size:14px}
+.creator-body .viewer-profile .public-creator-header .button-row>button{background:var(--action);color:var(--on-action)}
+.creator-body .viewer-profile .public-creator-header .button-row>button[aria-pressed=true]{background:var(--surface-2);color:var(--text)}
+.creator-body .viewer-profile .creator-profile-posts{border-top:1px solid var(--line);padding-top:16px}
+.creator-body .viewer-profile .creator-profile-posts h2{font-size:18px;font-weight:600;margin:0 0 16px}
+.viewer-profile-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,200px),1fr));gap:20px 12px}
+.viewer-profile-post{display:block;color:var(--text);text-decoration:none;min-width:0}
+.viewer-profile-media{aspect-ratio:16/9;display:grid;place-items:center;background:var(--surface-2);color:var(--muted);border-radius:8px}
+.viewer-profile-post h3{font-size:15px;font-weight:600;line-height:1.3;margin:8px 0 3px;overflow-wrap:anywhere}
+.viewer-profile-post p{font-size:12px;margin:0}
+@media(max-width:760px){.creator-body .viewer-profile{padding:0 18px 32px}.viewer-profile-grid{grid-template-columns:repeat(2,minmax(0,1fr))}}
