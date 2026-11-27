@@ -17,9 +17,9 @@ export default function ShortsFeed({initial=[],hasNext=false,catalogAvailable,ch
  <section className="shorts-stage" aria-label="Short video" onKeyDown={e=>{if(e.target!==e.currentTarget)return;if(e.key==='ArrowDown'){e.preventDefault();void next();}if(e.key==='ArrowUp'){e.preventDefault();previous();}}} tabIndex={0}>
  <div className="shorts-portrait" key={post?.id||'official'} onTouchStart={onTouchStart} onTouchEnd={onTouchEnd}>
  {post?signed?<Player key={actor+':'+post.id} lessonId={post.id}/>:<div className="shorts-locked"><span className="shorts-category">{post.courseCode||'Student Creators'}</span><h2>{post.title}</h2><Link className="primary-link" href="/sign-in">Sign in to watch</Link></div>:<video controls muted loop playsInline preload="metadata" poster="/platform-intro.svg" aria-label="Silent Worthkind introduction"><source src="/api/platform-intro?format=webm" type="video/webm"/><source src="/api/platform-intro" type="video/mp4"/></video>}
- <div className="shorts-caption"><strong>{post?.displayName||post?.institutionName||'Worthkind'}</strong><p>{post?.title||'Welcome to Student Creators'}</p>{!post&&<small>Official introduction · Free</small>}</div></div>
+ <div className="shorts-caption"><strong>{post?.displayName||post?.institutionName||'Worthkind'}</strong><p>{post?.title||'Welcome to Student Creators'}</p>{!post&&<small>Official introduction · Free</small>}</div>
  {post?<CreatorActions post={post} vertical checkoutMode={checkoutMode} terms={terms}/>:<OfficialActions vertical/>}
- </section>
+ </div></section>
  {items.length>0?<div className="shorts-navigation" aria-label="Short video navigation"><button type="button" className="quiet-button" onClick={previous} disabled={index===0||busy}>Previous</button><span>{index+1} / {items.length}{more?'+':''}</span><button type="button" className="quiet-button" onClick={next} disabled={busy||(!more&&index+1>=items.length)}>{busy?'Loading…':'Next short'}</button></div>:<p className="hint shorts-catalog-note">{catalogAvailable?'No student Shorts published yet.':'Shorts catalog is temporarily unavailable.'}</p>}
  {error&&<p role="alert">{error}</p>}</div></main>;
 }
