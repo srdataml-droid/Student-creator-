@@ -842,3 +842,16 @@ html[data-appearance=light] .creator-body{--text:#151515;--ink:#151515;--muted:#
   .creator-body:has(.content-community[data-community-tab=assignments]) .content-community>h1{position:static;width:auto;height:auto;padding:0;margin:4px 0 12px;clip-path:none;overflow:visible;white-space:normal}
  }
 }
+
+/* Recorded reference 00:35 — private verification upload and evidence receipt. */
+.creator-body .identity-evidence-panel{max-width:520px;margin-inline:auto;background:transparent;border:0;padding:0;box-shadow:none}
+.creator-body .identity-evidence-panel h2{font-size:23px;line-height:1.25;font-weight:700;margin:0 0 10px;letter-spacing:-.015em}
+.creator-body .identity-evidence-panel>.hint{font-size:13px;line-height:1.45}
+.creator-body .identity-evidence-panel .identity-file-drop{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;min-height:148px;padding:18px;background:var(--surface-2);border-radius:9px;text-align:center;cursor:pointer;overflow-wrap:anywhere}
+.creator-body .identity-file-drop strong{font-size:15px;font-weight:600;max-width:100%}
+.creator-body .identity-file-drop small{font-size:12px;color:var(--muted)}
+.creator-body .identity-file-input{font-size:12px;width:100%;max-width:100%}
+.creator-body .identity-upload-note{font-size:12px;line-height:1.4;color:var(--muted);background:var(--surface-2);padding:12px;border-radius:8px}
+.creator-body .identity-evidence-panel .primary-link{width:100%;border-radius:999px;min-height:48px}
+.creator-body .identity-received{display:flex;flex-direction:column;align-items:center;text-align:center;background:var(--surface-2);padding:24px 16px;border-radius:10px;gap:10px}
+.creator-body .identity-received h3,.creator-body .identity-received p{margin:0}
