@@ -19,7 +19,7 @@ test('isolated hosted frontend exercises community, checkout, history and respon
   if(op==='follow'||op==='unfollow'){expect(body.creatorId).toBe(order);followed=op==='follow';return r.fulfill({json:{following:followed}});}
   if(op==='comment'){commentReply=body.replyTo;return r.fulfill({json:{id:lesson,replayed:false}});}
   if(op==='feed'){if(body.institutionId)expect(body.institutionId).toBe(course);return r.fulfill({json:[{id:lesson,creatorId:order,title:'Isolated original content',displayName:'Test creator',institutionName:'Test campus',courseCode:'MTH101',previewText:'Fixture only',priceKobo:30000,following:false}]});}
-  if(op==='bookmarks')return r.fulfill({json:saved?[{content_id:lesson,created_at:'2026-11-25T10:00:00Z'}]:[]});
+  if(op==='bookmarks'||op==='isBookmarked')return r.fulfill({json:saved?[{content_id:lesson,created_at:'2026-11-25T10:00:00Z'}]:[]});
   if(op==='bookmark'||op==='unbookmark'){saved=op==='bookmark';return r.fulfill({json:{bookmarked:saved,replayed:false}});}
   if(op==='availableClasses')return r.fulfill({json:body.classId?sessions.filter(c=>c.id===body.classId):sessions});
   if(op==='myCommunities')return r.fulfill({json:[{course_id:course,course:{id:course,code:'MTH101',title:'Isolated joined community',active:true}}]});
@@ -48,7 +48,11 @@ test('isolated hosted frontend exercises community, checkout, history and respon
  await expect(card.getByRole('button',{name:'Like',exact:true})).toHaveAttribute('aria-pressed','false');
  await card.getByRole('button',{name:'Follow',exact:true}).click();
  await expect(card.getByRole('button',{name:'Following',exact:true})).toHaveAttribute('aria-pressed','true');
- await card.getByRole('button',{name:'Pay to continue watching',exact:true}).click();
+ await card.getByRole('button',{name:'Save',exact:true}).click();
+ await expect(card.getByRole('button',{name:'Saved',exact:true})).toHaveAttribute('aria-pressed','true');
+ await card.getByRole('button',{name:'Saved',exact:true}).click();
+ await expect(card.getByRole('button',{name:'Save',exact:true})).toHaveAttribute('aria-pressed','false');
+ await card.getByRole('button',{name:/Pay ₦[\d,]+ to watch/}).click();
  const access=page.getByRole('dialog',{name:'Viewing access'});
  await expect(access).toContainText('₦300');
  await expect(access.getByRole('button',{name:'Request test checkout'})).toBeEnabled();
@@ -58,6 +62,7 @@ test('isolated hosted frontend exercises community, checkout, history and respon
  await expect(page.getByRole('textbox',{name:'Content page link'})).toHaveValue(BASE+'/lessons/'+lesson);
  await page.goto('/create');
  await expect(page.getByRole('link',{name:/Upload a video/})).toHaveAttribute('href','/studio?format=video#studio-create');
+ await expect(page.getByRole('link',{name:/Create a short/})).toHaveAttribute('href','/studio?format=short#studio-create');
  await expect(page.getByRole('link',{name:/Go live/})).toHaveAttribute('href','/communities?tab=night');
  await page.goto('/');
  await page.getByRole('button',{name:'Search Student Creators',exact:true}).click();
