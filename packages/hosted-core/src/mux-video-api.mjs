@@ -97,7 +97,7 @@ export function createMuxUploadHandler({auth,store,mux,origin}={}){
  };
 }
 
-export function createMuxPlaybackHandler({auth,store,mux,signingKeyId,privateKeyBase64}={}){
+export function createMuxPlaybackHandler({auth,store,mux,signingKeyId,privateKeyBase64,thumbnail=false}={}){
  return async(request,{lessonId}={})=>{
   if(!UUID.test(lessonId??''))return json(404,{error:'LESSON_NOT_FOUND'});
   if(request.method!=='GET')return json(405,{error:'METHOD_NOT_ALLOWED'});
@@ -120,7 +120,8 @@ export function createMuxPlaybackHandler({auth,store,mux,signingKeyId,privateKey
    // Live grants require the migrated DB contract. Null means owner/free access.
    if(mux.testAsset===false&&(!Object.hasOwn(fresh,'entitlementExpiresAt')||(fresh.entitlementExpiresAt!==null&&(!Number.isSafeInteger(fresh.entitlementExpiresAt)||fresh.entitlementExpiresAt<=Math.floor(Date.now()/1000)))))return json(403,{error:'PLAYBACK_FORBIDDEN'});
    const grant=await issueAuthorizedMuxPlayback({viewer:user,lessonId,loadLesson:async()=>fresh,
-    authorizeViewer:async({viewer})=>viewer.id===fresh.viewerId,signingKeyId,privateKeyBase64,ttlSeconds:120});
+    authorizeViewer:async({viewer})=>viewer.id===fresh.viewerId,signingKeyId,privateKeyBase64,ttlSeconds:120,purpose:thumbnail?'thumbnail':'video'});
+   if(thumbnail)return json(200,grant);
    // Analytics failure must not block otherwise authorized playback.
    if(mux.testAsset===false&&typeof store.registerWatchGrant==='function'&&typeof asset.duration==='number'&&Number.isFinite(asset.duration)&&asset.duration>0&&asset.duration<=43200){
     try{
@@ -150,14 +151,14 @@ export function createMuxVideoStore({url,serverKey,fetcher=fetch,testAsset=true}
   authorizedPlayback:({viewer,lessonId})=>rpc('authorized_mux_'+mode+'_playback',{_viewer:viewer,_content:lessonId}),
   ...(testAsset?{}:{registerWatchGrant:({viewer,sessionId,lessonId,assetId,durationMs,expiresAt})=>rpc('register_live_watch_grant',{_viewer:viewer,_session:sessionId,_content:lessonId,_asset:assetId,_duration_ms:durationMs,_expires_epoch:expiresAt})})};
 }
-export function buildMuxVideoRoute({getEnv=()=>process.env,fetcher=fetch,playback=false}={}){
+export function buildMuxVideoRoute({getEnv=()=>process.env,fetcher=fetch,playback=false,thumbnail=false}={}){
  return async(request,context)=>{
   try{
    const env=getEnv();
    const testAsset=env.STUDENT_CREATORS_ENVIRONMENT!=='production';
    if((testAsset&&env.STUDENT_CREATORS_MUX_TEST_VIDEO_ENABLED!=='true')||(!testAsset&&(env.STUDENT_CREATORS_MUX_LIVE_VIDEO_ENABLED!=='true'||env.STUDENT_CREATORS_MUX_TEST_VIDEO_ENABLED==='true')))throw unavailable();
    // Live video uploads must enter private quarantine; never expose Mux PUT URLs.
-   if(!testAsset&&!playback)return json(409,{error:'MEDIA_SOURCE_UPLOAD_REQUIRED'});
+   if(!testAsset&&!playback&&!thumbnail)return json(409,{error:'MEDIA_SOURCE_UPLOAD_REQUIRED'});
    const cfg=readDedicatedSupabaseRuntimeConfig(env,{server:true});
    if(!cfg||cfg.url!=='https://'+REF+'.supabase.co')throw unavailable();
    const origin=env.STUDENT_CREATORS_MUX_UPLOAD_ORIGIN;
@@ -165,7 +166,7 @@ export function buildMuxVideoRoute({getEnv=()=>process.env,fetcher=fetch,playbac
     tokenSecret:alias(env,['MUX_TOKEN_SECRET','mux_token_secret']),origin,fetcher,testAsset});
    const auth=createCurrentSupabaseAuth({url:cfg.url,publicKey:cfg.publishableKey,serverKey:cfg.serverKey,requireStudent:true,fetcher});
    const store=createMuxVideoStore({url:cfg.url,serverKey:cfg.serverKey,fetcher,testAsset});
-   const handler=playback?createMuxPlaybackHandler({auth,store,mux,
+   const handler=playback||thumbnail?createMuxPlaybackHandler({auth,store,mux,thumbnail,
     signingKeyId:alias(env,['MUX_PLAYBACK_SIGNING_KEY_ID','mux_playback_signing_key_id']),
     privateKeyBase64:alias(env,['MUX_PLAYBACK_PRIVATE_KEY_BASE64','mux_playback_private_key_base64'])})
     :createMuxUploadHandler({auth,store,mux,origin});
