@@ -5,7 +5,7 @@ import HostedGate from './HostedGate.jsx';
 import {useHostedAccount} from './HostedAccountProvider.jsx';
 export function SavedControls({lessonId}){
  const account=useHostedAccount(),[saved,setSaved]=useState(null),[error,setError]=useState(''),[busy,setBusy]=useState(false),lock=useRef(false);
- useEffect(()=>{let active=true;account.creatorRequest('bookmarks',{}).then(rows=>{if(!Array.isArray(rows))throw Error();if(active)setSaved(rows.some(r=>r.content_id===lessonId));}).catch(()=>{if(active)setError('Saved status unavailable.');});return()=>{active=false;};},[lessonId,account.session.userId]);
+ useEffect(()=>{let active=true;account.creatorRequest('isBookmarked',{contentId:lessonId}).then(rows=>{if(!Array.isArray(rows))throw Error();if(active)setSaved(rows.some(r=>r.content_id===lessonId));}).catch(()=>{if(active)setError('Saved status unavailable.');});return()=>{active=false;};},[lessonId,account.session.userId]);
  async function toggle(){if(lock.current)return;lock.current=true;setBusy(true);setError('');try{const expected=!saved;const r=await account.creatorRequest(expected?'bookmark':'unbookmark',{contentId:lessonId});if(r.bookmarked!==expected)throw Error();setSaved(expected);}catch{setError('Unable to confirm saved status.');}finally{lock.current=false;setBusy(false);}}
  return <div><button type="button" className="secondary-link" disabled={saved===null||busy} aria-pressed={saved===true} onClick={toggle}>{saved?'Remove from saved':'Save post'}</button>{error&&<p role="alert">{error}</p>}</div>;
 }
