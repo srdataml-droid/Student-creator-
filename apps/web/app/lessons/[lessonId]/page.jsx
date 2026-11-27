@@ -12,7 +12,12 @@ import PurchasePanel from './PurchasePanel.jsx';
 export const dynamic='force-dynamic';
 export default async function LessonPage({params}){
  const {lessonId}=await params;
- if(!isLocalMode()){const checkout=checkoutSettings();let preview=null;try{preview=(await getHostedDiscovery({contentId:lessonId})).items[0]??null;}catch{}return <HostedLesson lessonId={lessonId} preview={preview} checkoutMode={checkout.mode} terms={checkout.terms}/>;}
+ if(!isLocalMode()){
+  const checkout=checkoutSettings();let preview=null,related=[],relatedAvailable=false;
+  try{preview=(await getHostedDiscovery({includeCreators:true,contentId:lessonId})).items[0]??null;}catch{}
+  if(preview?.courseId)try{const result=await getHostedDiscovery({includeCreators:true,filters:{courseId:preview.courseId},format:'video'});related=result.items.filter(item=>item.id!==lessonId).slice(0,6);relatedAvailable=true;}catch{}
+  return <HostedLesson lessonId={lessonId} preview={preview} related={related} relatedAvailable={relatedAvailable} checkoutMode={checkout.mode} terms={checkout.terms}/>;
+ }
  let lesson;try{lesson=await getLocalViewablePublishedLesson(lessonId);}catch(error){
    if(error?.status===404)return notFound();
    if(error?.status===402){

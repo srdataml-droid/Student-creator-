@@ -8,9 +8,9 @@ import {useHostedAccount} from './HostedAccountProvider.jsx';
 
 const paths={
  home:<><path d="M3 10.5 12 3l9 7.5V21h-6v-7H9v7H3z"/></>,
- shorts:<><rect x="6" y="3" width="12" height="18" rx="4"/><path d="m10 8 5 4-5 4z"/></>,
+ shorts:<><circle cx="12" cy="12" r="9.5"/><path d="m10 8 6 4-6 4z"/></>,
  search:<><circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 5 5"/></>,
- create:<><rect x="3" y="3" width="18" height="18" rx="5"/><path d="M12 7v10M7 12h10"/></>,
+ create:<><circle cx="12" cy="12" r="9.5"/><path d="M12 7v10M7 12h10"/></>,
  community:<><circle cx="9" cy="8" r="3"/><path d="M2 20v-2a7 7 0 0 1 14 0v2M17 5a3 3 0 0 1 0 6M18 14a6 6 0 0 1 4 6"/></>,
  saved:<path d="M6 3h12v18l-6-4-6 4z"/>,
  access:<><rect x="3" y="5" width="18" height="14" rx="3"/><path d="M3 10h18M7 15h4"/></>,
@@ -55,6 +55,7 @@ export default function AppShell({children}){
   return()=>{active=false;document.removeEventListener('visibilitychange',onVisible);};
  },[Boolean(hostedAccount)]);
  const signedIn=session.state==='signed-in';
+ const section=hostedAccount?({'/communities':'Community','/create':'Create','/messages':'Inbox'}[path]||''):'';
  const visibleAccount=account.filter(item=>signedIn||item.href==='/account-security');
  const primary=hostedAccount?basePrimary.map(item=>item.href==='/studio'?{...item,href:'/create',label:'Create'}:item.href==='/search'?{...item,href:'/shorts',label:'Shorts',mobile:'Shorts',icon:'shorts'}:item):basePrimary;
  useEffect(()=>{setOpen(false)},[path]);
@@ -65,11 +66,12 @@ export default function AppShell({children}){
   return ()=>{document.removeEventListener('keydown',dismiss);document.removeEventListener('pointerdown',dismiss);};
  },[open]);
  return <>
-  <header className="creator-nav modern-header"><div className="nav-inner">
+  <header className="creator-nav modern-header" data-hosted={hostedAccount?'true':undefined} data-signed-in={signedIn?'true':'false'} data-section={section||undefined}><div className="nav-inner">
    <Link href="/" className="creator-logo" aria-label="Student Creators home"><span className="reference-wordmark">Worthkind<small>Student Creators</small></span></Link>
-   <ShellSearch hosted={Boolean(hostedAccount)} actor={signedIn?session.userId:null}/><div className="nav-auth">{hostedAccount&&<Link className="header-icon" href="/notifications" aria-label="Notifications"><Icon name="bell"/></Link>}{signedIn?<Link className="nav-join" href={hostedAccount?'/account-security':session.role==='admin'?'/manage':'/studio'} prefetch={false}>{hostedAccount?'Account':session.role==='admin'?'Staff console':'My studio'}</Link>:<><Link className="nav-signin" href="/sign-in">Log in</Link><Link className="nav-join" href="/join">Join</Link></>}
+   {section&&<span className="mobile-section-title" aria-hidden="true"><span className="mobile-section-default">{section}</span>{section==='Community'&&<span className="mobile-night-title">Night classes</span>}</span>}
+   <ShellSearch hosted={Boolean(hostedAccount)} actor={signedIn?session.userId:null}/><div className="nav-auth">{hostedAccount&&<Link className="header-icon" href="/notifications" aria-label="Notifications"><Icon name="bell"/></Link>}{signedIn?<Link className="nav-join" href={hostedAccount?'/account-security':session.role==='admin'?'/manage':'/studio'} prefetch={false}>{hostedAccount?'Account':session.role==='admin'?'Staff console':'My studio'}</Link>:<><Link className="nav-signin" href="/sign-in">Log in</Link><Link className="nav-join guest-join" href="/join">Join</Link></>}
     <div className="shell-menu" ref={menu}>
-     <button type="button" className="shell-menu-toggle" aria-label="Account and navigation menu" aria-expanded={open} aria-controls="shell-account-menu" onClick={()=>setOpen(v=>!v)}><Icon name="menu"/></button>
+     <button type="button" className="shell-menu-toggle" aria-label="Account and navigation menu" aria-expanded={open} aria-controls="shell-account-menu" onClick={()=>setOpen(v=>!v)}><span className="desktop-menu-icon"><Icon name="menu"/></span><span className="mobile-account-icon"><Icon name="user"/></span></button>
      {open&&<nav id="shell-account-menu" className="shell-menu-panel" aria-label="Account menu">
        {[...(!signedIn?[{href:'/sign-in',label:'Log in',icon:'user'},{href:'/join',label:'Join Student Creators',icon:'user'}]:[]),...primary,...visibleAccount,...(hostedAccount?[{href:'/notifications',label:'Notifications',icon:'messages'}]:[]),...(session.role==='admin'?[{href:'/manage',label:'Staff console',icon:'shield'}]:[])].map(item=><Link key={item.href} href={item.href} prefetch={false} onClick={()=>setOpen(false)} aria-current={isCurrent(path,item.href)?'page':undefined}><Icon name={item.icon}/>{item.label}</Link>)}
      </nav>}

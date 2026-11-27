@@ -130,6 +130,7 @@ function operation(name,input,actor){
  case 'like':case 'unlike':{
   const b=shape(input,['contentId']);return rpc('social_like_action',{_content:id(b.contentId),_enabled:name==='like'});
  }
+ case 'isBookmarked':{const b=shape(input,['contentId']);return select('content_bookmarks','content_id',{user_id:'eq.'+actor,content_id:'eq.'+id(b.contentId),limit:'1'});}
  case 'bookmarks':{const b=shape(input,['limit']);return select('content_bookmarks','content_id,created_at',{order:'created_at.desc,content_id.desc',limit:String(integer(b.limit,100,50))});}
  case 'bookmark':case 'unbookmark':{const b=shape(input,['contentId']);return rpc('social_bookmark_action',{_content:id(b.contentId),_enabled:name==='bookmark'});}
  case 'myCommunities':{shape(input,[]);return select('social_community_members','course_id,course:courses!inner(id,code,title,active)',{user_id:'eq.'+actor,'course.active':'eq.true',order:'course_id.asc',limit:'100'});}

@@ -89,3 +89,17 @@ test('live signed grant optionally registers bounded provider duration without m
  let response=await createMuxPlaybackHandler(deps)(req('GET',token),{lessonId});assert.equal(response.status,200);assert.equal((await response.json()).watchSession.resumePositionMs,5000);assert.equal(input.durationMs,12345);assert.equal(input.sessionId,sessionId);
  deps.store.registerWatchGrant=async()=>{throw Error('telemetry offline');};response=await createMuxPlaybackHandler(deps)(req('GET',token),{lessonId});assert.equal(response.status,200);assert.equal(Object.hasOwn(await response.json(),'watchSession'),false);
 });
+
+test('thumbnail grant rechecks viewer and provider access and cannot create a watch session',async()=>{
+ const {privateKey}=generateKeyPairSync('rsa',{modulusLength:2048});
+ const expiry=Math.floor(Date.now()/1000)+90;
+ const lesson={id:lessonId,viewerId:creator,status:'published',videoStatus:'ready',playbackPolicy:'signed',assetId,playbackId,reservationId:reservation,uploadId,entitlementExpiresAt:expiry};
+ let checks=0,watch=0,allowed=true;
+ const deps={thumbnail:true,auth:{getUser:async()=>({id:creator})},store:{authorizedPlayback:async()=>{checks++;return allowed?lesson:null;},registerWatchGrant:async()=>{watch++;}},mux:{testAsset:false,getAsset:async()=>({...asset,test:false,duration:30})},signingKeyId:'key_fixture',privateKeyBase64:Buffer.from(privateKey.export({type:'pkcs8',format:'pem'})).toString('base64')};
+ const handler=createMuxPlaybackHandler(deps);
+ const response=await handler(req('GET'),{lessonId});assert.equal(response.status,200);assert.equal(response.headers.get('cache-control'),'no-store');
+ const grant=await response.json(),u=new URL(grant.url),claims=JSON.parse(Buffer.from(u.searchParams.get('token').split('.')[1],'base64url'));
+ assert.equal(u.origin,'https://image.mux.com');assert.equal(u.pathname,'/'+playbackId+'/thumbnail.jpg');assert.equal(claims.aud,'t');assert.equal(claims.width,320);assert.equal(claims.time,0);assert.equal(grant.expiresAt,expiry);assert.equal(checks,2);assert.equal(watch,0);assert.equal('watchSession' in grant,false);
+ allowed=false;assert.equal((await handler(req('GET'),{lessonId})).status,403);assert.equal((await handler(req('GET',''),{lessonId})).status,401);
+ allowed=true;const changed=createMuxPlaybackHandler({...deps,mux:{testAsset:false,getAsset:async()=>{allowed=false;return {...asset,test:false};}}});assert.equal((await changed(req('GET'),{lessonId})).status,403);
+});

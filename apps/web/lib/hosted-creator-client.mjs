@@ -38,8 +38,9 @@ export function hostedCreatorRequest(operation,input={}){
  case 'muxReserve':return {path:'/api/lessons/'+id(input.lessonId)+'/mux-upload',method:'POST',headers:{}};
  case 'submitReview':return {path:'/api/lessons/'+id(input.lessonId)+'/submit',method:'POST',headers:{}};
  case 'moderate':return json('/api/lessons/'+id(input.lessonId)+'/moderate',{decision:choice(input.decision,['approve','reject']),reason:bounded(input.reason,5,1000)});
+ case 'thumbnail':return {path:'/api/lessons/'+id(input.lessonId)+'/mux-thumbnail',method:'GET',headers:{}};
  case 'playback':return {path:'/api/lessons/'+id(input.lessonId)+'/mux-playback',method:'GET',headers:{}};
- case 'feed':{const q=bounded(input.q??'',0,80);if(q.length===1)throw Error('INVALID_TEXT');return json('/api/social/feed',{mode:choice(input.mode??'all',['all','following']),q,limit:60,...(input.institutionId?{institutionId:id(input.institutionId)}:{})});}
+ case 'feed':{const q=bounded(input.q??'',0,80);if(q.length===1)throw Error('INVALID_TEXT');return json('/api/social/feed',{mode:choice(input.mode??'all',['all','following']),q,limit:60,...(input.institutionId?{institutionId:id(input.institutionId)}:{}),...(input.courseId?{courseId:id(input.courseId)}:{})});}
  case 'follow':case 'unfollow':return json('/api/social/'+operation,{creatorId:id(input.creatorId)});
  case 'myLikes':return json('/api/social/myLikes',{});
  case 'like':case 'unlike':return json('/api/social/'+operation,{contentId:id(input.contentId)});
@@ -62,6 +63,7 @@ export function hostedCreatorRequest(operation,input={}){
  case 'liveCheckout':{if(!/^[A-Za-z0-9._-]{3,128}$/.test(input.termsVersion||''))throw Error('INVALID_TERMS_VERSION');return {path:'/api/lessons/'+id(input.lessonId)+'/live-checkout',method:'POST',headers:{'idempotency-key':key(input.creationKey),'x-student-creators-terms-version':input.termsVersion}};}
  case 'checkoutQuote':return {path:'/api/account/checkout-quote/'+id(input.lessonId),method:'GET',headers:{}};
  case 'purchaseHistory':return {path:'/api/account/purchases',method:'GET',headers:{}};
+ case 'isBookmarked':return json('/api/social/isBookmarked',{contentId:id(input.contentId)});
  case 'bookmarks':return json('/api/social/bookmarks',{limit:100});
  case 'bookmark':case 'unbookmark':return json('/api/social/'+operation,{contentId:id(input.contentId)});
  case 'payoutBanks':return json('/api/account/payout-bank/banks',{});

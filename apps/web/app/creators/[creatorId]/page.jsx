@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import {AuthorizedThumbnail} from '../../AuthorizedThumbnail.jsx';
 import {getHostedPublicCreator} from '../../../lib/hosted-public-creator.mjs';
 import HostedCreatorActions from '../../HostedCreatorActions.jsx';
 import {notFound} from 'next/navigation';
@@ -11,7 +12,12 @@ export async function generateMetadata({params}){
 }
 export default async function CreatorProfile({params}){
  const {creatorId}=await params;
- if(!isLocalMode()){let data;try{data=await getHostedPublicCreator({creatorId});}catch{return <main id="main" className="main"><p role="status">Creator profile unavailable.</p><Link href="/">Back to discovery</Link></main>;}if(!data)return notFound();const {creator,posts}=data;return <main id="main" className="main creator-profile-shell"><Link href="/">Back to discovery</Link><section className="public-creator-header"><div className="public-creator-cover"/><div className="public-creator-details"><div className="public-creator-avatar" aria-hidden="true">{creator.displayName.slice(0,1).toUpperCase()}</div><div><h1>{creator.displayName}</h1><p>@{creator.handle}</p><p>{creator.bio}</p></div></div><HostedCreatorActions creatorId={creatorId}/></section><section className="creator-profile-posts"><h2>Published posts</h2>{posts.length?<ul className="lesson-list">{posts.map(p=><li key={p.id}><p className="hint">{p.courseCode}</p><h3><Link href={'/lessons/'+p.id}>{p.title}</Link></h3><p>{p.previewText}</p></li>)}</ul>:<p>No published posts.</p>}</section></main>;}
+ if(!isLocalMode()){
+  let data;try{data=await getHostedPublicCreator({creatorId});}catch{return <main id="main" className="main"><p role="status">Creator profile unavailable.</p><Link href="/">Back to discovery</Link></main>;}
+  if(!data)return notFound();
+  const {creator,posts}=data;
+  return <main id="main" className="main creator-profile-shell viewer-profile"><Link className="viewer-back watch-back" href="/"><span aria-hidden="true">←</span> Creator profile</Link><section className="public-creator-header"><div className="public-creator-cover"/><div className="public-creator-details"><div className="public-creator-avatar" aria-hidden="true">{creator.displayName.slice(0,1).toUpperCase()}</div><div><h1>{creator.displayName}</h1><p className="hint">@{creator.handle}</p>{creator.bio&&<p>{creator.bio}</p>}</div></div><HostedCreatorActions creatorId={creatorId}/></section><section className="creator-profile-posts"><h2>Published posts</h2>{posts.length?<div className="viewer-profile-grid">{posts.map(p=><Link className="viewer-profile-post" href={'/lessons/'+p.id} key={p.id}><div className="viewer-profile-media" aria-hidden="true"><AuthorizedThumbnail lessonId={p.id}/><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5"><rect x="3" y="5" width="18" height="14" rx="3"/><path d="m10 9 5 3-5 3z"/></svg></div><h3>{p.title}</h3><p className="hint">{p.courseCode}</p></Link>)}</div>:<p className="hint" role="status">No published posts yet.</p>}</section></main>;
+ }
  let creator,posts;
  try{
   creator=getLocalPublicCreator(creatorId);

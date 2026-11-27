@@ -19,7 +19,7 @@ test('isolated hosted frontend exercises community, checkout, history and respon
   if(op==='follow'||op==='unfollow'){expect(body.creatorId).toBe(order);followed=op==='follow';return r.fulfill({json:{following:followed}});}
   if(op==='comment'){commentReply=body.replyTo;return r.fulfill({json:{id:lesson,replayed:false}});}
   if(op==='feed'){if(body.institutionId)expect(body.institutionId).toBe(course);return r.fulfill({json:[{id:lesson,creatorId:order,title:'Isolated original content',displayName:'Test creator',institutionName:'Test campus',courseCode:'MTH101',previewText:'Fixture only',priceKobo:30000,following:false}]});}
-  if(op==='bookmarks')return r.fulfill({json:saved?[{content_id:lesson,created_at:'2026-11-25T10:00:00Z'}]:[]});
+  if(op==='bookmarks'||op==='isBookmarked')return r.fulfill({json:saved?[{content_id:lesson,created_at:'2026-11-25T10:00:00Z'}]:[]});
   if(op==='bookmark'||op==='unbookmark'){saved=op==='bookmark';return r.fulfill({json:{bookmarked:saved,replayed:false}});}
   if(op==='availableClasses')return r.fulfill({json:body.classId?sessions.filter(c=>c.id===body.classId):sessions});
   if(op==='myCommunities')return r.fulfill({json:[{course_id:course,course:{id:course,code:'MTH101',title:'Isolated joined community',active:true}}]});
@@ -32,6 +32,9 @@ test('isolated hosted frontend exercises community, checkout, history and respon
   if(op==='communityPosts')return r.fulfill({json:joined?posts:[]});
   return r.fulfill({json:{joined,memberCount:joined?1:0,canModerate:false}});
  });
+ await page.route('**/api/discovery?ids=*',r=>{expect(new URL(r.request().url()).searchParams.get('ids')).toBe(lesson);return r.fulfill({json:{items:[{id:lesson,title:'Isolated original content',displayName:'Test creator',courseCode:'MTH101',contentFormat:'video'}],page:1,hasNext:false}});});
+ await page.route('**/api/lessons/**/mux-thumbnail',r=>{expect(r.request().headers().authorization).toBe('Bearer one.two.three');return r.fulfill({json:{url:'https://image.mux.com/fixture_playback/thumbnail.jpg?token=one.two.three',expiresAt:Math.floor(now/1000)+120}});});
+ await page.route('https://image.mux.com/**',r=>r.fulfill({contentType:'image/png',body:Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jR1sAAAAASUVORK5CYII=','base64')}));
  await page.route('**/api/account/purchases',r=>r.fulfill({json:{orders:[{id:order,contentId:lesson,amountKobo:20000,currency:'NGN',environment:'test',status:'pending',createdAt:'2026-11-25T10:00:00Z',accessRecorded:false}],truncated:false}}));
  await page.route('**/api/account/checkout-quote/**',r=>r.fulfill({json:{priceKobo:30000,currency:'NGN',accessAvailable:false}}));
  await page.route('**/api/lessons/**/hosted-checkout',r=>{checkoutCalls++;expect(r.request().headers()['idempotency-key']).toMatch(/^[A-Za-z0-9_-]{16,128}$/);expect(r.request().postData()).toBeNull();return r.fulfill({json:{orderId:order,authorizationUrl:'https://checkout.paystack.com/isolated-browser-fixture'}});});
@@ -42,13 +45,18 @@ test('isolated hosted frontend exercises community, checkout, history and respon
  await expect(page.getByRole('button',{name:'Your campus',exact:true})).toHaveAttribute('aria-pressed','true');
  await expect(page.getByRole('link',{name:'Isolated original content',exact:true})).toBeVisible();
  const card=page.locator('.watch-card').filter({has:page.getByRole('link',{name:'Isolated original content',exact:true})});
+ await expect(card.locator('.authorized-thumbnail img')).toHaveAttribute('src',/https:\/\/image\.mux\.com\/fixture_playback\/thumbnail\.jpg/);
  await card.getByRole('button',{name:'Like',exact:true}).click();
  await expect(card.getByRole('button',{name:'Liked',exact:true})).toHaveAttribute('aria-pressed','true');
  await card.getByRole('button',{name:'Liked',exact:true}).click();
  await expect(card.getByRole('button',{name:'Like',exact:true})).toHaveAttribute('aria-pressed','false');
  await card.getByRole('button',{name:'Follow',exact:true}).click();
  await expect(card.getByRole('button',{name:'Following',exact:true})).toHaveAttribute('aria-pressed','true');
- await card.getByRole('button',{name:'Pay to continue watching',exact:true}).click();
+ await card.getByRole('button',{name:'Save',exact:true}).click();
+ await expect(card.getByRole('button',{name:'Saved',exact:true})).toHaveAttribute('aria-pressed','true');
+ await card.getByRole('button',{name:'Saved',exact:true}).click();
+ await expect(card.getByRole('button',{name:'Save',exact:true})).toHaveAttribute('aria-pressed','false');
+ await card.getByRole('button',{name:/Pay ₦[\d,]+ to watch/}).click();
  const access=page.getByRole('dialog',{name:'Viewing access'});
  await expect(access).toContainText('₦300');
  await expect(access.getByRole('button',{name:'Request test checkout'})).toBeEnabled();
@@ -57,8 +65,9 @@ test('isolated hosted frontend exercises community, checkout, history and respon
  await card.getByRole('button',{name:'Share',exact:true}).click();
  await expect(page.getByRole('textbox',{name:'Content page link'})).toHaveValue(BASE+'/lessons/'+lesson);
  await page.goto('/create');
- await expect(page.getByRole('link',{name:/Upload a video/})).toHaveAttribute('href','/studio#studio-create');
- await expect(page.getByRole('link',{name:/Go live/})).toHaveAttribute('href','/communities?tab=night');
+ await expect(page.getByRole('link',{name:/Upload a video/})).toHaveAttribute('href','/studio?format=video#studio-create');
+ await expect(page.getByRole('link',{name:/Create a short/})).toHaveAttribute('href','/studio?format=short#studio-create');
+ await expect(page.getByRole('link',{name:/Go live/})).toHaveAttribute('href','/classes');
  await page.goto('/');
  await page.getByRole('button',{name:'Search Student Creators',exact:true}).click();
  await expect(page.getByRole('dialog',{name:'Search Student Creators'})).toBeVisible();
@@ -89,8 +98,23 @@ test('isolated hosted frontend exercises community, checkout, history and respon
  await page.getByRole('button',{name:'Leave discussion'}).click();
  await expect(page.getByRole('button',{name:'Join discussion'})).toBeVisible();
  await expect(page.getByText('Original isolated question',{exact:true})).toHaveCount(0);
+ await page.goto('/search?q=Python&courseId='+course);
+ await expect(page.getByLabel('Search published content')).toHaveValue('Python');
+ await expect(page.locator('.viewer-search-page .watch-catalog')).toBeVisible();
+ await page.getByRole('navigation',{name:'Search categories'}).getByRole('link',{name:'Videos'}).click();
+ await expect(page.getByRole('link',{name:'Isolated original content',exact:true})).toBeVisible();
+ await page.getByRole('navigation',{name:'Search categories'}).getByRole('link',{name:'Shorts'}).click();
+ await expect(page.getByText('No published posts in this feed yet.')).toBeVisible();
  await page.goto('/lessons/'+lesson);
  await expect(page.getByRole('region',{name:'Video player'})).toBeVisible();
+ await expect(page.getByRole('complementary',{name:'Related videos'})).toBeVisible();
+ const mobilePlayer=await page.locator('.watch-player-frame').boundingBox();
+ expect(mobilePlayer.width).toBeGreaterThanOrEqual(388);
+ expect(Math.abs(mobilePlayer.width/mobilePlayer.height-16/9)).toBeLessThan(.04);
+ await page.setViewportSize({width:1280,height:800});
+ const primary=await page.locator('.viewer-watch-primary').boundingBox(),rail=await page.locator('.viewer-related').boundingBox();
+ expect(rail.x).toBeGreaterThan(primary.x+primary.width);
+ await page.setViewportSize({width:390,height:844});
  await page.getByRole('button',{name:'Load discussion and likes'}).click();
  await page.getByRole('button',{name:'Reply',exact:true}).click();
  await page.getByLabel('Your reply',{exact:true}).fill('Reply from browser acceptance');
@@ -110,9 +134,9 @@ test('isolated hosted frontend exercises community, checkout, history and respon
  await page.getByRole('button',{name:'Save post',exact:true}).click();
  await expect(page.getByRole('button',{name:'Remove from saved'})).toBeVisible();
  await page.goto('/saved');
- await expect(page.getByRole('link',{name:'Open saved post'})).toBeVisible();
+ await expect(page.getByRole('region',{name:'Saved content'}).getByRole('link',{name:/Isolated original content/})).toBeVisible();
  await page.getByRole('button',{name:'Remove saved post'}).click();
- await expect(page.getByText('No saved posts.',{exact:false})).toBeVisible();
+ await expect(page.getByRole('heading',{name:'No saved posts yet'})).toBeVisible();
  await page.goto('/classes');
  await expect(page.getByRole('heading',{name:'Synthetic calculus class'})).toBeVisible();
  await page.getByRole('button',{name:'Enroll',exact:true}).click();
@@ -147,5 +171,42 @@ test('guest community overview exposes public metadata without private discussio
   await expect(page.getByRole('link',{name:'Browse course videos'})).toHaveAttribute('href','/courses/'+course);
   await expect(page.getByRole('button',{name:'Post to class'})).toHaveCount(0);
   expect(privateCalls).toBe(0);
+ }finally{await context.close();}
+});
+
+test('Create mirrors the six Brilliant entry points without falsely enabling unsupported publishing',async({browser})=>{const context=await browser.newContext({baseURL:BASE,viewport:{width:390,height:844}});try{const page=await context.newPage();await page.route('**/api/hosted-auth/refresh',r=>r.fulfill({status:401,json:{error:'AUTH_REQUIRED'}}));await page.goto('/create');const rows=page.locator('.create-options > li');await expect(rows).toHaveCount(6);await expect(rows.nth(0)).toContainText('Upload a video');await expect(rows.nth(1)).toContainText('Create a short');await expect(rows.nth(2).locator('[aria-disabled=true]')).toContainText('Photo or text post');await expect(rows.nth(3)).toContainText('Go live');await expect(rows.nth(4)).toContainText('Your drafts');await expect(rows.nth(5)).toContainText('Creator studio');const first=await rows.nth(0).boundingBox(),second=await rows.nth(1).boundingBox(),tile=await rows.nth(0).locator('.community-preview-symbol').boundingBox();expect(first).not.toBeNull();expect(second).not.toBeNull();expect(tile).not.toBeNull();expect(Math.abs(second.y-first.y-84)).toBeLessThanOrEqual(1);expect(Math.abs(tile.width-46)).toBeLessThanOrEqual(1);expect(Math.abs(tile.height-46)).toBeLessThanOrEqual(1);await expect(rows.nth(0).getByRole('link')).toHaveAttribute('href','/sign-in');}finally{await context.close();}});
+
+test('Brilliant gallery keeps mobile navigation compact and desktop Community split into columns',async({browser})=>{
+ const context=await browser.newContext({baseURL:BASE,viewport:{width:390,height:844}});
+ try{
+  const page=await context.newPage();
+  await page.route('**/api/hosted-auth/refresh',r=>r.fulfill({status:401,json:{error:'AUTH_REQUIRED'}}));
+  await page.goto('/communities');
+  const header=page.locator('.modern-header[data-hosted=true]');
+  await expect(header.locator('.mobile-section-title')).toBeVisible();
+  await expect(header.locator('.mobile-section-default')).toHaveText('Community');
+  await expect(header.getByRole('button',{name:'Search Student Creators'})).toBeVisible();
+  await expect(header.getByRole('link',{name:'Notifications'})).toBeVisible();
+  await header.getByRole('button',{name:'Account and navigation menu'}).click();
+  await expect(header.getByRole('navigation',{name:'Account menu'}).getByRole('link',{name:'Join Student Creators'})).toBeVisible();
+  await page.keyboard.press('Escape');
+  const tabs=page.getByRole('navigation',{name:'Mobile navigation'});
+  await expect(tabs.getByRole('link')).toHaveCount(5);
+  const geometry=await tabs.evaluate(e=>({height:e.getBoundingClientRect().height,overflow:document.documentElement.scrollWidth-innerWidth}));
+  expect(geometry.height).toBeGreaterThanOrEqual(74);
+  expect(geometry.overflow).toBeLessThanOrEqual(1);
+  await page.goto('/communities?tab=night');
+  await expect(header.locator('.mobile-night-title')).toBeVisible();
+  await page.goto('/create');
+  await expect(header.locator('.mobile-section-default')).toHaveText('Create');
+  await page.goto('/messages');
+  await expect(header.locator('.mobile-section-default')).toHaveText('Inbox');
+  await page.setViewportSize({width:1280,height:800});
+  await page.goto('/communities');
+  const publicBox=await page.getByRole('region',{name:'Public communities'}).boundingBox();
+  const nightBox=await page.getByRole('region',{name:'Night classes'}).boundingBox();
+  expect(publicBox).not.toBeNull();expect(nightBox).not.toBeNull();
+  expect(nightBox.x).toBeGreaterThan(publicBox.x+publicBox.width);
+  expect(Math.abs(nightBox.y-publicBox.y)).toBeLessThanOrEqual(2);
  }finally{await context.close();}
 });
