@@ -49,3 +49,13 @@ test('payout browser requests target fixed authenticated routes and exclude inje
  assert.throws(()=>hostedCreatorRequest('payoutBankReview',{id,decision:'approve',evidence:'invalid reference'}));
  assert.deepEqual(JSON.parse(hostedCreatorRequest('payoutBankReview',{id,decision:'approve',evidence:'verified-ref',reviewer:'fake'}).body),{id,decision:'approve',evidence:'verified-ref'});
 });
+
+test('finance withdrawal transport exposes only fixed authorized commands and evidence',()=>{
+ const id='da130000-0000-4000-8000-000000000001';
+ assert.equal(hostedCreatorRequest('financeWithdrawalQueue',{}).path,'/api/governance/finance/payouts');
+ assert.deepEqual(JSON.parse(hostedCreatorRequest('financeWithdrawalReview',{id,decision:'reserve',note:'Reviewed independent records',actor:'fake'}).body),{decision:'reserve',note:'Reviewed independent records'});
+ assert.deepEqual(JSON.parse(hostedCreatorRequest('financeTransferAction',{id,action:'confirm_paid',evidence:'bank-evidence'}).body),{action:'confirm_paid',evidence:'bank-evidence'});
+ assert.throws(()=>hostedCreatorRequest('financeTransferAction',{id,action:'confirm_paid'}));
+ assert.throws(()=>hostedCreatorRequest('financeTransferAction',{id,action:'authorize',evidence:'invalid'}));
+ assert.throws(()=>hostedCreatorRequest('financeTransferAction',{id,action:'send-money'}));
+});
