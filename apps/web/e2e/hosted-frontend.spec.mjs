@@ -2,7 +2,7 @@ import {test,expect} from '@playwright/test';
 const BASE='http://localhost:3000',actor='11111111-1111-4111-8111-111111111111',course='22222222-2222-4222-8222-222222222222',lesson='33333333-3333-4333-8333-333333333333',order='44444444-4444-4444-8444-444444444444';
 test('isolated hosted frontend exercises community, checkout, history and responsive failure states',async({browser})=>{
  const context=await browser.newContext({baseURL:BASE,viewport:{width:390,height:844}});
- const page=await context.newPage();let joined=false,posts=[],checkoutCalls=0,saved=false,enrolled=false,commentReply=null;
+ const page=await context.newPage();let joined=false,posts=[],checkoutCalls=0,saved=false,enrolled=false,commentReply=null,liked=false,followed=false;
  const now=Date.parse('2026-11-26T20:00:00Z'),sessions=Array.from({length:4},(_,i)=>({id:'55555555-5555-4555-8555-'+String(i+1).padStart(12,'0'),host_id:order,title:'Isolated night class '+(i+1),description:'Test fixture only',starts_at:new Date(now+3600000*(i===0?-1:i+1)).toISOString(),ends_at:new Date(now+3600000*(i===0?1:i+2)).toISOString(),status:i===0?'room_open':'scheduled',price_kobo:0,currency:'NGN'}));
  try{
  await page.clock.setFixedTime(new Date(now));
@@ -13,9 +13,12 @@ test('isolated hosted frontend exercises community, checkout, history and respon
   const op=new URL(r.request().url()).pathname.split('/').pop();
   const body=r.request().postDataJSON();
   if(op==='comments')return r.fulfill({json:[{id:order,content_id:lesson,author_id:course,parent_id:null,body:'Original fixture comment',created_at:'2026-11-25T10:00:00Z'}]});
-  if(op==='myLikes')return r.fulfill({json:[]});
+  if(op==='myLikes'||op==='isLiked')return r.fulfill({json:liked?[{content_id:lesson}]:[]});
+  if(op==='like'||op==='unlike'){expect(body.contentId).toBe(lesson);liked=op==='like';return r.fulfill({json:{liked}});}
+  if(op==='isFollowing')return r.fulfill({json:followed?[{creator_id:order}]:[]});
+  if(op==='follow'||op==='unfollow'){expect(body.creatorId).toBe(order);followed=op==='follow';return r.fulfill({json:{following:followed}});}
   if(op==='comment'){commentReply=body.replyTo;return r.fulfill({json:{id:lesson,replayed:false}});}
-  if(op==='feed'){if(body.institutionId)expect(body.institutionId).toBe(course);return r.fulfill({json:[{id:lesson,creatorId:order,title:'Isolated original content',displayName:'Test creator',institutionName:'Test campus',courseCode:'MTH101',previewText:'Fixture only',following:false}]});}
+  if(op==='feed'){if(body.institutionId)expect(body.institutionId).toBe(course);return r.fulfill({json:[{id:lesson,creatorId:order,title:'Isolated original content',displayName:'Test creator',institutionName:'Test campus',courseCode:'MTH101',previewText:'Fixture only',priceKobo:30000,following:false}]});}
   if(op==='bookmarks')return r.fulfill({json:saved?[{content_id:lesson,created_at:'2026-11-25T10:00:00Z'}]:[]});
   if(op==='bookmark'||op==='unbookmark'){saved=op==='bookmark';return r.fulfill({json:{bookmarked:saved,replayed:false}});}
   if(op==='availableClasses')return r.fulfill({json:body.classId?sessions.filter(c=>c.id===body.classId):sessions});
@@ -30,7 +33,7 @@ test('isolated hosted frontend exercises community, checkout, history and respon
   return r.fulfill({json:{joined,memberCount:joined?1:0,canModerate:false}});
  });
  await page.route('**/api/account/purchases',r=>r.fulfill({json:{orders:[{id:order,contentId:lesson,amountKobo:20000,currency:'NGN',environment:'test',status:'pending',createdAt:'2026-11-25T10:00:00Z',accessRecorded:false}],truncated:false}}));
- await page.route('**/api/account/checkout-quote/**',r=>r.fulfill({json:{priceKobo:20000,currency:'NGN'}}));
+ await page.route('**/api/account/checkout-quote/**',r=>r.fulfill({json:{priceKobo:30000,currency:'NGN',accessAvailable:false}}));
  await page.route('**/api/lessons/**/hosted-checkout',r=>{checkoutCalls++;expect(r.request().headers()['idempotency-key']).toMatch(/^[A-Za-z0-9_-]{16,128}$/);expect(r.request().postData()).toBeNull();return r.fulfill({json:{orderId:order,authorizationUrl:'https://checkout.paystack.com/isolated-browser-fixture'}});});
  await page.addInitScript(({actor,lesson})=>{localStorage.setItem('student-creators:resume:'+actor+':'+lesson,'65');Object.defineProperty(navigator,'share',{value:undefined,configurable:true});},{actor,lesson});
  await page.goto('/');
@@ -38,7 +41,20 @@ test('isolated hosted frontend exercises community, checkout, history and respon
  await page.getByRole('button',{name:'Your campus',exact:true}).click();
  await expect(page.getByRole('button',{name:'Your campus',exact:true})).toHaveAttribute('aria-pressed','true');
  await expect(page.getByRole('link',{name:'Isolated original content',exact:true})).toBeVisible();
- await page.getByRole('button',{name:'Share',exact:true}).click();
+ const card=page.locator('.watch-card').filter({has:page.getByRole('link',{name:'Isolated original content',exact:true})});
+ await card.getByRole('button',{name:'Like',exact:true}).click();
+ await expect(card.getByRole('button',{name:'Liked',exact:true})).toHaveAttribute('aria-pressed','true');
+ await card.getByRole('button',{name:'Liked',exact:true}).click();
+ await expect(card.getByRole('button',{name:'Like',exact:true})).toHaveAttribute('aria-pressed','false');
+ await card.getByRole('button',{name:'Follow',exact:true}).click();
+ await expect(card.getByRole('button',{name:'Following',exact:true})).toHaveAttribute('aria-pressed','true');
+ await card.getByRole('button',{name:'Pay to continue watching',exact:true}).click();
+ const access=page.getByRole('dialog',{name:'Viewing access'});
+ await expect(access).toContainText('₦300');
+ await expect(access.getByRole('button',{name:'Request test checkout'})).toBeEnabled();
+ expect(checkoutCalls).toBe(0);
+ await access.getByRole('button',{name:'Close',exact:true}).click();
+ await card.getByRole('button',{name:'Share',exact:true}).click();
  await expect(page.getByRole('textbox',{name:'Content page link'})).toHaveValue(BASE+'/lessons/'+lesson);
  await page.goto('/create');
  await expect(page.getByRole('link',{name:/Upload a video/})).toHaveAttribute('href','/studio#studio-create');
