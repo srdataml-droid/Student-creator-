@@ -57,9 +57,9 @@ export function FinancePayoutBank(){
  return account?.session.state==='signed-in'?<FinanceBank key={account.session.userId}/>:null;
 }
 function FinanceBank(){
- const account=useHostedAccount(),task=useTask(),[rows,setRows]=useState(null),[details,setDetails]=useState(null),[evidence,setEvidence]=useState('');
+ const account=useHostedAccount(),task=useTask(),[rows,setRows]=useState(null),[details,setDetails]=useState(null),[evidence,setEvidence]=useState(''),[recoveryId,setRecoveryId]=useState(''),[recipientCode,setRecipientCode]=useState('');
  const request=(op,input={})=>account.creatorRequest(op,input);
- function clear(){setDetails(null);setEvidence('');}
+ function clear(){setDetails(null);setEvidence('');setRecoveryId('');setRecipientCode('');}
  async function load(){clear();const out=await request('payoutBankQueue');setRows(readRows(out.requests,true));}
  useEffect(()=>{
   if(!details)return;
@@ -77,6 +77,6 @@ function FinanceBank(){
  <label htmlFor={'bank-evidence-'+r.id}>Independent ownership evidence reference</label><input id={'bank-evidence-'+r.id} value={evidence} onChange={e=>setEvidence(e.target.value)} pattern="[A-Za-z0-9_.:-]{8,128}" required autoComplete="off" disabled={task.busy}/><p className="hint">Use a reference to approved evidence, not an account number or document contents.</p>
  <div className="button-row"><button type="submit" value="approve" disabled={task.busy}>Approve ownership</button><button type="submit" value="reject" disabled={task.busy}>Reject</button></div></form>}</div>}
  {r.state==='reviewed'&&r.reviewer!==account.session.userId&&<button type="button" disabled={task.busy} onClick={()=>task.run(async notice=>{clear();const out=await request('payoutBankRegister',{id:r.id});if(out.registered!==true)throw Error('UNCONFIRMED');notice('Recipient registered and independently verified.');await load();})}>Register reviewed recipient</button>}
- {['uncertain','processing'].includes(r.state)&&<p role="status">Do not register again. Investigate the provider record before recovery.</p>}</li>)}</ul>}
+ {['uncertain','processing'].includes(r.state)&&<div><p role="status">Do not register again. Investigate the existing Paystack recipient. An interrupted processing request can be recovered after ten minutes.</p>{r.reviewer!==account.session.userId&&<><button type="button" disabled={task.busy} onClick={()=>{clear();setRecoveryId(r.id);}}>Recover existing recipient</button>{recoveryId===r.id&&<form className="form-stack" onSubmit={e=>{e.preventDefault();task.run(async notice=>{const out=await request('payoutBankRecover',{id:r.id,recipientCode});if(out.registered!==true)throw Error('UNCONFIRMED');notice('Existing recipient verified and recovered.');await load();});}}><label htmlFor={'recipient-recovery-'+r.id}>Existing Paystack recipient reference</label><input id={'recipient-recovery-'+r.id} value={recipientCode} onChange={e=>setRecipientCode(e.target.value)} autoComplete="off" required pattern="RCP_[A-Za-z0-9]{8,80}" disabled={task.busy}/><button disabled={task.busy}>Verify existing recipient</button><button type="button" onClick={clear}>Cancel</button></form>}</>}</div>}</li>)}</ul>}
  <Feedback task={task}/></section>;
 }

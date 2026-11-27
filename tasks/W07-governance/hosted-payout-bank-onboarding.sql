@@ -139,3 +139,24 @@ BEGIN
 END $$;
 REVOKE ALL ON FUNCTION public.creator_bank_submission(uuid,uuid,uuid,text,text,text),public.creator_bank_status(uuid,uuid),public.creator_bank_cancel(uuid,uuid,uuid),public.staff_bank_queue(uuid,uuid),public.staff_bank_details(uuid,uuid,uuid),public.staff_bank_review(uuid,uuid,uuid,text,text),public.staff_bank_claim(uuid,uuid,uuid),public.staff_bank_finish(uuid,uuid,uuid,uuid,text) FROM PUBLIC,anon,authenticated,service_role;
 GRANT EXECUTE ON FUNCTION public.creator_bank_submission(uuid,uuid,uuid,text,text,text),public.creator_bank_status(uuid,uuid),public.creator_bank_cancel(uuid,uuid,uuid),public.staff_bank_queue(uuid,uuid),public.staff_bank_details(uuid,uuid,uuid),public.staff_bank_review(uuid,uuid,uuid,text,text),public.staff_bank_claim(uuid,uuid,uuid),public.staff_bank_finish(uuid,uuid,uuid,uuid,text) TO service_role;
+
+-- Recover a recipient already created at Paystack. Never dispatch a second
+-- creation POST. The old lease is replaced only after a conservative delay.
+CREATE FUNCTION public.staff_bank_recovery_claim(_actor uuid,_session uuid,_id uuid) RETURNS jsonb
+LANGUAGE plpgsql SECURITY DEFINER SET search_path='' AS $$
+DECLARE r student_payout_private.bank_requests%ROWTYPE; owner_id uuid;
+BEGIN
+ IF _actor IS NULL OR _session IS NULL OR NOT public.student_creators_session_active(_actor,_session) OR NOT public.week7_staff_has_capability(_actor,'finance.review') THEN RAISE EXCEPTION 'BANK_FORBIDDEN' USING ERRCODE='42501'; END IF;
+ SELECT creator_id INTO owner_id FROM student_payout_private.bank_requests WHERE id=_id AND creator_id<>_actor;
+ IF NOT FOUND THEN RETURN NULL; END IF;
+ PERFORM pg_advisory_xact_lock(hashtextextended(owner_id::text||':payout',0));
+ IF NOT public.affiliation_eligible(owner_id) OR NOT student_payout_private.bank_change_allowed(owner_id) THEN RETURN NULL; END IF;
+ UPDATE student_payout_private.bank_requests SET state='processing',registrar=_actor,lease=gen_random_uuid(),updated_at=now()
+ WHERE id=_id AND reviewer<>_actor AND public.week7_staff_has_capability(reviewer,'finance.review')
+ AND (state='uncertain' OR (state='processing' AND updated_at<now()-interval '10 minutes')) RETURNING * INTO r;
+ IF NOT FOUND THEN RETURN NULL; END IF;
+ INSERT INTO public.audit_events(actor_id,action,target_kind,target_id) VALUES(_actor,'payout.bank.recovery_claimed','payout_bank',_id);
+ RETURN jsonb_build_object('id',r.id,'creatorId',r.creator_id,'lease',r.lease,'envelope',r.envelope);
+END $$;
+REVOKE ALL ON FUNCTION public.staff_bank_recovery_claim(uuid,uuid,uuid) FROM PUBLIC,anon,authenticated,service_role;
+GRANT EXECUTE ON FUNCTION public.staff_bank_recovery_claim(uuid,uuid,uuid) TO service_role;

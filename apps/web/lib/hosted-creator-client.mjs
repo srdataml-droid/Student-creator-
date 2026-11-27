@@ -77,6 +77,10 @@ export function hostedCreatorRequest(operation,input={}){
   if(typeof input.evidence!=='string'||!/^[A-Za-z0-9_.:-]{8,128}$/.test(input.evidence))throw Error('INVALID_EVIDENCE');
   return json('/api/account/payout-bank-workflow/review',{id:id(input.id),decision:choice(input.decision,['approve','reject']),evidence:input.evidence});
  }
+ case 'payoutBankRecover':{
+  if(typeof input.recipientCode!=='string'||!/^RCP_[A-Za-z0-9]{8,80}$/.test(input.recipientCode))throw Error('INVALID_RECIPIENT');
+  return json('/api/account/payout-bank-workflow/recover',{id:id(input.id),recipientCode:input.recipientCode});
+ }
  case 'payoutBankRegister':return json('/api/account/payout-bank-workflow/register',{id:id(input.id)});
  case 'myPayouts':return json('/api/social/myPayouts',{});
  case 'requestPayout':{if(!Number.isSafeInteger(input.amountKobo)||input.amountKobo<1)throw Error('INVALID_AMOUNT');return json('/api/social/requestPayout',{amountKobo:input.amountKobo,requestKey:key(input.requestKey)});}

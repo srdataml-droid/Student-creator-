@@ -23,3 +23,7 @@ POST /api/account/payout-bank-workflow/{submit,status,cancel,queue,details,revie
 ## Creator and finance interfaces
 
 Creator earnings now links directly to bank selection, explicit consent, account name preview, submission, masked history and cancellation. The existing staff console exposes the independently authorized finance queue, audited private details, evidence-based review and second-reviewer registration. Raw account data remains in component memory only and reviewer details are cleared on hiding the tab or after one minute. All controls use the existing memory-only authenticated browser transport. No automatic retry of registration, no simulated records and no enabled production gates. Browser transport regression tests are included; real hosted UI acceptance remains required.
+
+## Interrupted registration recovery
+
+An authorized finance reviewer, distinct from the initial ownership approver, may recover an uncertain request or an interrupted processing request after ten minutes. Recovery acquires a new lease under the existing creator payout lock and verifies an existing Paystack recipient against the original encrypted bank/account. It uses GET only; it never retries recipient creation. Old leases cannot finalize. If no existing recipient can be established, the case stays blocked for independent investigation. No funds are transferred and no live flags are enabled.

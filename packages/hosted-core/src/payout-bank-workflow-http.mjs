@@ -13,8 +13,8 @@ const uuid=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]
 const recipient=/^RCP_[A-Za-z0-9]{8,80}$/;
 const evidence=/^[A-Za-z0-9_.:-]{8,128}$/;
 const jwt=/^[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/;
-const staffActions=new Set(['queue','details','review','register']);
-const allowed=Object.freeze({submit:['bankCode','accountNumber','consent'],status:[],cancel:['id'],queue:[],details:['id'],review:['id','decision','evidence'],register:['id']});
+const staffActions=new Set(['queue','details','review','register','recover']);
+const allowed=Object.freeze({submit:['bankCode','accountNumber','consent'],status:[],cancel:['id'],queue:[],details:['id'],review:['id','decision','evidence'],register:['id'],recover:['id','recipientCode']});
 const safeErrors=new Set(['PAYOUT_BANK_UNAVAILABLE','BANK_FORBIDDEN','BANK_CONFLICT','BANK_INVALID','REGISTRATION_NOT_APPROVED']);
 const exact=(value,keys)=>value&&typeof value==='object'&&!Array.isArray(value)&&Object.keys(value).length===keys.length&&keys.every(k=>Object.hasOwn(value,k));
 function getSession(token,actor){try{const c=JSON.parse(Buffer.from(token.split('.')[1],'base64url').toString('utf8'));return c.sub===actor&&uuid.test(c.session_id??'')?c.session_id:null;}catch{return null;}}
@@ -53,6 +53,7 @@ export function createPayoutBankWorkflowHandler({env=process.env,fetcher=fetch,r
    let input;try{input=JSON.parse(await readBoundedGatewayResponse(request,1024,unavailable));}catch{return reply(400,{error:'INVALID_INPUT'});}
    if(!exact(input,allowed[action])||(Object.hasOwn(input,'id')&&!uuid.test(input.id??''))||(action==='review'&&(!['approve','reject'].includes(input.decision)||typeof input.evidence!=='string'||!evidence.test(input.evidence))))return reply(422,{error:'INVALID_INPUT'});
    if(action==='submit'&&(input.consent!==true||typeof input.bankCode!=='string'||!/^\d{3,6}$/.test(input.bankCode)||typeof input.accountNumber!=='string'||!/^\d{10}$/.test(input.accountNumber)))return reply(422,{error:'INVALID_INPUT'});
+   if(action==='recover'&&(typeof input.recipientCode!=='string'||!recipient.test(input.recipientCode)))return reply(422,{error:'INVALID_INPUT'});
    const user=await r.auth.getUser(token),session=user&&getSession(token,user.id);
    if(!session)return reply(403,{error:'SESSION_REQUIRED'});
    const actor=user.id,base={_actor:actor,_session:session};
@@ -76,16 +77,16 @@ export function createPayoutBankWorkflowHandler({env=process.env,fetcher=fetch,r
      return reply(200,{id:result.id,creatorId:result.creatorId,...value});
     }
     case 'review':return await rpc('staff_bank_review',{_id:input.id,_decision:input.decision,_evidence:input.evidence})===true?reply(200,{reviewed:true}):reply(409,{error:'BANK_CONFLICT'});
-    case 'register':{
+    case 'register':case 'recover':{
      if(r.registrationApproved!==true)return reply(503,{error:'REGISTRATION_NOT_APPROVED'});
-     const claimed=await rpc('staff_bank_claim',{_id:input.id});
+     const claimed=await rpc(action==='recover'?'staff_bank_recovery_claim':'staff_bank_claim',{_id:input.id});
      if(!claimed)return reply(409,{error:'BANK_CONFLICT'});
      if(claimed.id!==input.id||!uuid.test(claimed.lease??'')||!uuid.test(claimed.creatorId??''))throw unavailable();
      let code=null;
      try{
       const value=openPayoutBank({secret:r.secret,actor:claimed.creatorId,id:claimed.id,envelope:claimed.envelope});
-      const result=await r.provider.createRecipient({bankCode:value.bankCode,accountNumber:value.accountNumber,approvedAccountName:value.accountName});
-      if(result?.providerVerified===true&&result.bankCode===value.bankCode&&result.accountLast4===value.accountNumber.slice(-4)&&recipient.test(result.recipientCode??''))code=result.recipientCode;
+      const result=action==='recover'?await r.provider.verifyRecipient({recipientCode:input.recipientCode,bankCode:value.bankCode,accountNumber:value.accountNumber}):await r.provider.createRecipient({bankCode:value.bankCode,accountNumber:value.accountNumber,approvedAccountName:value.accountName});
+      if(result?.providerVerified===true&&result.bankCode===value.bankCode&&result.accountLast4===value.accountNumber.slice(-4)&&recipient.test(result.recipientCode??'')&&(action!=='recover'||result.recipientCode===input.recipientCode))code=result.recipientCode;
      }catch{/* uncertain provider operation: no automatic retry */}
      const done=await rpc('staff_bank_finish',{_id:claimed.id,_lease:claimed.lease,_recipient:code});
      return done===true&&code?reply(200,{registered:true}):reply(409,{error:'BANK_REGISTRATION_REVIEW_REQUIRED'});

@@ -10,8 +10,8 @@ function request(input,user=actor,extra={}){
 }
 function fixture({approved=true,providerFails=false,claim=true}={}){
  const calls=[],envelope=sealPayoutBank({secret,actor,id,value});
- const handler=createPayoutBankWorkflowHandler({newId:()=>id,runtime:(_e,_f,isStaff)=>({origin,secret,registrationApproved:approved,auth:{getUser:async()=>({id:isStaff?staff:actor})},provider:{resolveAccount:async args=>{calls.push(['resolve',args]);return {bankCode:'058',accountLast4:'6789',accountName:value.accountName};},createRecipient:async args=>{calls.push(['create',args]);if(providerFails)throw Error('sensitive error');return {bankCode:'058',accountLast4:'6789',recipientCode:'RCP_fixture12345',providerVerified:true};}},rpc:async(name,args)=>{
- calls.push([name,args]);switch(name){case 'admit_creator_bank_lookup':return true;case 'creator_bank_submission':return {id,state:'pending'};case 'staff_bank_claim':return claim?{id,creatorId:actor,lease,envelope}:null;case 'staff_bank_finish':return args._recipient!==null;case 'staff_bank_details':return {id,creatorId:actor,envelope};case 'staff_bank_review':return true;default:return [];}
+ const handler=createPayoutBankWorkflowHandler({newId:()=>id,runtime:(_e,_f,isStaff)=>({origin,secret,registrationApproved:approved,auth:{getUser:async()=>({id:isStaff?staff:actor})},provider:{resolveAccount:async args=>{calls.push(['resolve',args]);return {bankCode:'058',accountLast4:'6789',accountName:value.accountName};},verifyRecipient:async args=>{calls.push(['verify',args]);return {bankCode:'058',accountLast4:'6789',recipientCode:args.recipientCode,providerVerified:true};},createRecipient:async args=>{calls.push(['create',args]);if(providerFails)throw Error('sensitive error');return {bankCode:'058',accountLast4:'6789',recipientCode:'RCP_fixture12345',providerVerified:true};}},rpc:async(name,args)=>{
+ calls.push([name,args]);switch(name){case 'admit_creator_bank_lookup':return true;case 'creator_bank_submission':return {id,state:'pending'};case 'staff_bank_recovery_claim':case 'staff_bank_claim':return claim?{id,creatorId:actor,lease,envelope}:null;case 'staff_bank_finish':return args._recipient!==null;case 'staff_bank_details':return {id,creatorId:actor,envelope};case 'staff_bank_review':return true;default:return [];}
  }})});
  return {handler,calls};
 }
@@ -42,4 +42,17 @@ test('disabled registration, rejected claim and uncertain provider call cannot t
 test('audited details return only decrypted account information with no-cache',async()=>{
  const {handler,calls}=fixture();
  const res=await handler(request({id},staff),'details');assert.deepEqual(await res.json(),{id,creatorId:actor,...value});assert.match(res.headers.get('cache-control'),/no-store/);assert.equal(calls[0][0],'staff_bank_details');
+});
+
+test('recovery verifies a previously existing recipient, never repeats creation',async()=>{
+ const {handler,calls}=fixture();
+ const res=await handler(request({id,recipientCode:'RCP_fixture12345'},staff),'recover');
+ assert.equal(res.status,200);
+ assert.deepEqual(calls.map(x=>x[0]),['staff_bank_recovery_claim','verify','staff_bank_finish']);
+ assert.equal(calls[2][1]._recipient,'RCP_fixture12345');
+});
+test('unclaimed recovery does not access provider',async()=>{
+ const {handler,calls}=fixture({claim:false});
+ assert.equal((await handler(request({id,recipientCode:'RCP_fixture12345'},staff),'recover')).status,409);
+ assert.deepEqual(calls.map(x=>x[0]),['staff_bank_recovery_claim']);
 });

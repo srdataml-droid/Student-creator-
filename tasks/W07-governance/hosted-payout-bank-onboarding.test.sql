@@ -26,7 +26,14 @@ DO $$ DECLARE a uuid:='db110000-0000-4000-8000-000000000001'; b uuid:='db110000-
  IF public.staff_bank_claim(b,b,rid) IS NOT NULL THEN RAISE EXCEPTION 'Same reviewer claimed registration'; END IF;
  j:=public.staff_bank_claim(c,c,rid);
  IF j IS NULL OR public.staff_bank_claim(c,c,rid) IS NOT NULL OR public.creator_bank_cancel(a,a,rid) THEN RAISE EXCEPTION 'Duplicate claim or cancellation'; END IF;
+ IF public.staff_bank_recovery_claim(c,c,rid) IS NOT NULL THEN RAISE EXCEPTION 'Fresh lease prematurely recovered'; END IF;
  IF public.staff_bank_finish(c,c,rid,gen_random_uuid(),'RCP_fixture12345') THEN RAISE EXCEPTION 'Wrong lease accepted'; END IF;
+ IF public.staff_bank_finish(c,c,rid,(j->>'lease')::uuid,NULL) THEN RAISE EXCEPTION 'Uncertain recipient accepted'; END IF;
+ IF public.staff_bank_recovery_claim(b,b,rid) IS NOT NULL THEN RAISE EXCEPTION 'Reviewer recovered own approval'; END IF;
+ PERFORM set_config('fixture.previous_bank_lease',j->>'lease',true);
+ j:=public.staff_bank_recovery_claim(c,c,rid);
+ IF j IS NULL OR j->>'lease'=current_setting('fixture.previous_bank_lease') THEN RAISE EXCEPTION 'Recovery lease failed'; END IF;
+ IF public.staff_bank_finish(c,c,rid,current_setting('fixture.previous_bank_lease')::uuid,'RCP_fixture12345') THEN RAISE EXCEPTION 'Old lease accepted'; END IF;
  IF NOT public.staff_bank_finish(c,c,rid,(j->>'lease')::uuid,'RCP_fixture12345') THEN RAISE EXCEPTION 'Fixture registration failed'; END IF;
  IF public.creator_bank_status(a,a)->>'recipientVerified'<>'true' THEN RAISE EXCEPTION 'Recipient status missing'; END IF;
 END $$;
