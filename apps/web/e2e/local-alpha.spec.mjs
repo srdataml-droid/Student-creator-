@@ -42,11 +42,19 @@ test('frontend revamp supports active navigation, search and compact mobile acce
   await page.goto('/');
   await expect(page.getByRole('heading',{name:'Discover',exact:true})).toBeVisible();
   const primary=page.getByRole('navigation',{name:'Primary navigation'});
-  await expect(primary.getByRole('link',{name:'For you'})).toHaveAttribute('aria-current','page');
+  await expect(primary.getByRole('link',{name:'Home',exact:true})).toHaveAttribute('aria-current','page');
+  await page.getByRole('button',{name:'Search Student Creators',exact:true}).click();
   await page.getByRole('searchbox',{name:'Search Student Creators'}).fill('Calculus');
-  await page.getByRole('button',{name:'Submit search'}).click();
+  await page.getByRole('dialog').getByRole('button',{name:'Search',exact:true}).click();
   await expect(page).toHaveURL(/\/search\?q=Calculus/);
   await expect(primary.getByRole('link',{name:'Explore'})).toHaveAttribute('aria-current','page');
+  await page.goto('/account-security');
+  await page.getByRole('button',{name:'Light',exact:true}).click();
+  await expect(page.locator('html')).toHaveAttribute('data-appearance','light');
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-appearance','light');
+  await page.getByRole('button',{name:'Dark',exact:true}).click();
+  await expect(page.locator('html')).toHaveAttribute('data-appearance','dark');
   for(const width of [320,360,390,768,1280]){
    await page.setViewportSize({width,height:850});
    await page.goto('/');
@@ -64,7 +72,7 @@ test('frontend revamp supports active navigation, search and compact mobile acce
     await menu.click();
     const panel=page.getByRole('navigation',{name:'Account menu'});
     await expect(panel.getByRole('link',{name:'Saved posts',exact:true})).toBeVisible();
-    await expect(panel.getByRole('link',{name:'Account security',exact:true})).toBeVisible();
+    await expect(panel.getByRole('link',{name:'Settings',exact:true})).toBeVisible();
     await expect(panel.getByRole('link',{name:'Staff console',exact:true})).toHaveCount(0);
     await expect(panel.getByRole('link',{name:'My access',exact:true})).toBeVisible();
     await page.keyboard.press('Escape');
@@ -72,11 +80,12 @@ test('frontend revamp supports active navigation, search and compact mobile acce
     await expect(menu).toBeFocused();
     await mobile.getByRole('link',{name:'Community',exact:true}).click();
     await expect(page).toHaveURL(/\/communities$/);
-    await expect(page.getByRole('heading',{name:'Communities',exact:true})).toBeVisible();
+    await expect(page.getByRole('heading',{name:'Community',exact:true})).toBeVisible();
     await expect(mobile.getByRole('link',{name:'Community',exact:true})).toHaveAttribute('aria-current','page');
+    await page.getByRole('region',{name:'Public communities'}).getByRole('link',{name:'View all'}).click();
     await page.locator('#community-query').fill('impossible-course-code-xyzz');
-    await page.getByRole('button',{name:'Find communities'}).click();
-    await expect(page.getByRole('heading',{name:'No matching courses'})).toBeVisible();
+    await page.getByRole('main').getByRole('button',{name:'Search',exact:true}).click();
+    await expect(page.getByText('No matching communities.',{exact:true})).toBeVisible();
     expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width+1);
     await menu.click();
     await panel.getByRole('link',{name:'Log in',exact:true}).click();
@@ -129,7 +138,7 @@ test('synthetic creator, moderator and viewer journey keeps media access server-
     expect(courseId).toBeTruthy();
     await adminPage.goto('/communities?q=ALP+101');
     const directoryCourse=adminPage.getByRole('listitem').filter({hasText:schoolName});
-    await expect(directoryCourse.getByRole('link',{name:'Discussion',exact:true})).toHaveAttribute('href','/communities/'+courseId);
+    await expect(directoryCourse.getByRole('link',{name:/Original Student Content/})).toHaveAttribute('href','/communities/'+courseId);
     await expect(directoryCourse.getByRole('link',{name:'Study rounds',exact:true})).toHaveAttribute('href','/study/'+courseId);
 
     const creatorPage=await creator.newPage();

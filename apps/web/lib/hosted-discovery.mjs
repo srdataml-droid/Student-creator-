@@ -19,19 +19,21 @@ export function normalizeDiscoveryFilters({q='',courseId='',page='1'}={}){
  if(!/^(?:[1-9]|[1-4][0-9]|50)$/.test(page))throw Error('INVALID_DISCOVERY_FILTER');
  return {query,courseId,page:Number(page)};
 }
-export async function getHostedDiscovery({filters={},env=process.env,fetcher=fetch}={}){
+export async function getHostedDiscovery({filters={},contentId='',env=process.env,fetcher=fetch}={}){
  const {query,courseId,page}=normalizeDiscoveryFilters(filters);
+ if(contentId&&!UUID.test(contentId))throw Error('INVALID_DISCOVERY_FILTER');
  const config=discoveryConfig(env);
  const url=new URL('/rest/v1/content_items',config.url);
  const size=24;
  const select='id,course_id,institution_id,title,preview_text,published_at,status,course:courses!content_items_course_id_fkey!inner(id,code,title,active,institution_id),institution:institutions!content_items_institution_id_fkey!inner(id,name,active)';
  for(const [k,v] of Object.entries({select,status:'eq.published','course.active':'eq.true','institution.active':'eq.true',order:'published_at.desc,id.desc',limit:String(size+1),offset:String((page-1)*size)}))url.searchParams.set(k,v);
+ if(contentId)url.searchParams.set('id','eq.'+contentId);
  if(courseId)url.searchParams.set('course_id','eq.'+courseId);
  if(query)url.searchParams.set('or','(title.ilike.*'+query+'*,preview_text.ilike.*'+query+'*)');
  const response=await fetcher(url,{headers:{apikey:config.publishableKey,accept:'application/json'},cache:'no-store',redirect:'error',signal:AbortSignal.timeout(5000)});
  if(!response.ok)throw Error('CATALOG_UNAVAILABLE');
  const rows=await response.json();
  if(!Array.isArray(rows)||rows.length>size+1)throw Error('CATALOG_UNAVAILABLE');
- const items=rows.slice(0,size).filter(r=>r&&r.status==='published'&&UUID.test(r.id)&&UUID.test(r.course_id)&&UUID.test(r.institution_id)&&r.course?.active===true&&r.course.id===r.course_id&&r.course.institution_id===r.institution_id&&r.institution?.active===true&&r.institution.id===r.institution_id&&(!courseId||r.course_id===courseId)&&typeof r.title==='string'&&typeof r.published_at==='string'&&Number.isFinite(Date.parse(r.published_at))).map(r=>({id:r.id,courseId:r.course_id,title:r.title.slice(0,160),previewText:typeof r.preview_text==='string'?r.preview_text.slice(0,800):'',publishedAt:r.published_at,courseCode:String(r.course.code??'').slice(0,32),courseTitle:String(r.course.title??'').slice(0,160),institutionName:String(r.institution.name??'').slice(0,160)}));
+ const items=rows.slice(0,size).filter(r=>r&&r.status==='published'&&UUID.test(r.id)&&UUID.test(r.course_id)&&UUID.test(r.institution_id)&&r.course?.active===true&&r.course.id===r.course_id&&r.course.institution_id===r.institution_id&&r.institution?.active===true&&r.institution.id===r.institution_id&&(!contentId||r.id===contentId)&&(!courseId||r.course_id===courseId)&&typeof r.title==='string'&&typeof r.published_at==='string'&&Number.isFinite(Date.parse(r.published_at))).map(r=>({id:r.id,courseId:r.course_id,title:r.title.slice(0,160),previewText:typeof r.preview_text==='string'?r.preview_text.slice(0,800):'',publishedAt:r.published_at,courseCode:String(r.course.code??'').slice(0,32),courseTitle:String(r.course.title??'').slice(0,160),institutionName:String(r.institution.name??'').slice(0,160)}));
  return {items,page,hasNext:rows.length>size&&page<50};
 }

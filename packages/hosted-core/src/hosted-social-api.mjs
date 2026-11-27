@@ -112,6 +112,8 @@ function operation(name,input,actor){
  }
  case 'bookmarks':{const b=shape(input,['limit']);return select('content_bookmarks','content_id,created_at',{order:'created_at.desc,content_id.desc',limit:String(integer(b.limit,100,50))});}
  case 'bookmark':case 'unbookmark':{const b=shape(input,['contentId']);return rpc('social_bookmark_action',{_content:id(b.contentId),_enabled:name==='bookmark'});}
+ case 'myCommunities':{shape(input,[]);return select('social_community_members','course_id,course:courses!inner(id,code,title,active)',{user_id:'eq.'+actor,'course.active':'eq.true',order:'course_id.asc',limit:'100'});}
+ case 'availableClasses':{const b=shape(input,['classId','limit']);return select('interactive_classes','id,institution_id,course_id,host_id,title,description,starts_at,ends_at,capacity,price_kobo,currency,status',{...(b.classId?{id:'eq.'+id(b.classId)}:{}),status:'in.(scheduled,room_open)',ends_at:'gt.'+new Date().toISOString(),order:'starts_at.asc,id.asc',limit:String(integer(b.limit,100,50))});}
  case 'classes':{
   const b=shape(input,['courseId','limit']);return select('interactive_classes','id,institution_id,course_id,host_id,title,description,starts_at,ends_at,capacity,price_kobo,currency,status',{...(b.courseId?{course_id:'eq.'+id(b.courseId)}:{}),order:'starts_at.asc,id.asc',limit:String(integer(b.limit,100,50))});
  }
