@@ -66,6 +66,33 @@ export function hostedCreatorRequest(operation,input={}){
  case 'isBookmarked':return json('/api/social/isBookmarked',{contentId:id(input.contentId)});
  case 'bookmarks':return json('/api/social/bookmarks',{limit:100});
  case 'bookmark':case 'unbookmark':return json('/api/social/'+operation,{contentId:id(input.contentId)});
+ case 'payoutBanks':return json('/api/account/payout-bank/banks',{});
+ case 'payoutBankResolve':case 'payoutBankSubmit':{
+  if(input.consent!==true||typeof input.bankCode!=='string'||!/^\d{3,6}$/.test(input.bankCode)||typeof input.accountNumber!=='string'||!/^\d{10}$/.test(input.accountNumber))throw Error('INVALID_BANK_ACCOUNT');
+  return json(operation==='payoutBankResolve'?'/api/account/payout-bank/resolve':'/api/account/payout-bank-workflow/submit',{bankCode:input.bankCode,accountNumber:input.accountNumber,consent:true});
+ }
+ case 'payoutBankStatus':return json('/api/account/payout-bank-workflow/status',{});
+ case 'payoutBankCancel':return json('/api/account/payout-bank-workflow/cancel',{id:id(input.id)});
+ case 'payoutBankQueue':return json('/api/account/payout-bank-workflow/queue',{});
+ case 'payoutBankDetails':return json('/api/account/payout-bank-workflow/details',{id:id(input.id)});
+ case 'payoutBankReview':{
+  if(typeof input.evidence!=='string'||!/^[A-Za-z0-9_.:-]{8,128}$/.test(input.evidence))throw Error('INVALID_EVIDENCE');
+  return json('/api/account/payout-bank-workflow/review',{id:id(input.id),decision:choice(input.decision,['approve','reject']),evidence:input.evidence});
+ }
+ case 'payoutBankRecover':{
+  if(typeof input.recipientCode!=='string'||!/^RCP_[A-Za-z0-9]{8,80}$/.test(input.recipientCode))throw Error('INVALID_RECIPIENT');
+  return json('/api/account/payout-bank-workflow/recover',{id:id(input.id),recipientCode:input.recipientCode});
+ }
+ case 'payoutBankRegister':return json('/api/account/payout-bank-workflow/register',{id:id(input.id)});
+ case 'financeWithdrawalQueue':return json('/api/governance/finance/payouts',{limit:50});
+ case 'financeTransferQueue':return json('/api/governance/finance/payout-transfers',{limit:50});
+ case 'financeWithdrawalReview':return json('/api/governance/finance/payouts/'+id(input.id)+'/review',{decision:choice(input.decision,['reserve','reject']),note:bounded(input.note,10,500)});
+ case 'financeTransferAction':{
+  const action=choice(input.action,['authorize','recheck','void_before_dispatch','confirm_paid','confirm_returned']);
+  const needsEvidence=['confirm_paid','confirm_returned'].includes(action);
+  if(needsEvidence?(typeof input.evidence!=='string'||!/^[A-Za-z0-9_.:-]{8,128}$/.test(input.evidence)):input.evidence!==undefined)throw Error('INVALID_EVIDENCE');
+  return json('/api/governance/finance/payouts/'+id(input.id)+'/transfer',{action,...(needsEvidence?{evidence:input.evidence}:{})});
+ }
  case 'myPayouts':return json('/api/social/myPayouts',{});
  case 'requestPayout':{if(!Number.isSafeInteger(input.amountKobo)||input.amountKobo<1)throw Error('INVALID_AMOUNT');return json('/api/social/requestPayout',{amountKobo:input.amountKobo,requestKey:key(input.requestKey)});}
  case 'cancelPayout':return json('/api/social/cancelPayout',{requestId:id(input.requestId)});

@@ -1,0 +1,29 @@
+# Creator bank account provider foundation
+
+This server-only read adapter follows Paystack's documented bank list, resolve account, and fetch transfer recipient APIs: https://paystack.com/docs/api/miscellaneous/ and https://paystack.com/docs/api/transfer-recipient/. The normal bank lookup runtime performs only GET calls; recipient creation is disabled by default. The live builder is explicitly disabled unless the new bank onboarding flag is set and existing production configuration is valid. The authenticated lookup routes described below are now wired in source; do not enable the flag as a substitute for authorization.
+
+Remaining integration: independent bank ownership/identity evidence, durable approved recipient creation/replacement with fresh resolution and independently authorized evidence, existing payout evidence lifecycle and lock coordination, masked creator status, audit trail without raw account numbers, and actual provider acceptance. Account name resolution does not prove ownership. A provider recipient code must never be trusted solely because a browser submitted it. Do not enable payouts or create real recipients as part of automated tests. Test fixtures are synthetic and not provider acceptance.
+
+## Authenticated bank lookup integration
+
+The POST /api/account/payout-bank/banks and /resolve routes use the existing remotely verified current-student session, strict same-origin check, explicit resolution consent, bounded JSON, and a service-only database admission RPC. The RPC checks the current session again and caps resolution at five per student per hour, catalog queries at ten per student per hour, and total lookups at 200 per hour; admission metadata older than 24 hours is removed on an admitted lookup. No raw account or name is stored in the rate table. The SQL is staged in the existing W07 contract workflow, not applied to hosted production. The new flag must stay off until privacy/merchant approval and reviewed schema/provider acceptance. The lookup does not establish ownership and cannot create, replace, or activate a payout recipient. Those workflows still require independent evidence, lifecycle controls and integration.
+
+## Recipient provider creation contract
+
+The provider now supports a separately gated server-only creation method. It re-resolves the exact bank and account, compares the provider name to independently reviewed ownership evidence, creates a recipient using Paystack's documented API, and verifies the returned recipient by a separate GET. Duplicate recipient responses are not blindly accepted. The normal lookup route and live builder never enable this capability. The durable approval, encrypted account storage, reviewer evidence, idempotent job state and safe replacement workflow are still required before any production caller is connected. No funds move in this operation. No real recipient was created in tests.
+
+## Durable review and encrypted storage
+
+Server-only database contracts now implement submission, masked status, cancellation, finance review, second-reviewer registration claim and exact-lease finalization. AES-256-GCM envelopes are bound to creator and request IDs. Envelopes are removed on success, rejection or pre-registration cancellation. The initial 90-day evidence validity and two distinct finance reviewers are conservative proposed defaults requiring founder approval. Replacement is blocked with unresolved payouts. Uncertain registrations are not automatically retried; an independently reviewed recovery process is still required. No payout gate is activated. HTTP orchestration and actual provider acceptance remain separate until wired and tested.
+
+## HTTP orchestration
+
+POST /api/account/payout-bank-workflow/{submit,status,cancel,queue,details,review,register} is wired to the durable contracts. Student and staff authentication are separate; SQL independently enforces current sessions, finance capability and non-self-review. Staff detail access is audited; no raw account appears in creator status. The registration action requires the separate registration approval flag, a current second reviewer and an atomic claim; a failed or ambiguous provider operation is not retried. A processing request is visible for operator investigation if finalization fails. Production requires explicit policy approval, reviewed encryption key storage/rotation, deployment of the SQL, provider acceptance and an independently authorized recovery procedure. No flags are enabled by this patch.
+
+## Creator and finance interfaces
+
+Creator earnings now links directly to bank selection, explicit consent, account name preview, submission, masked history and cancellation. The existing staff console exposes the independently authorized finance queue, audited private details, evidence-based review and second-reviewer registration. Raw account data remains in component memory only and reviewer details are cleared on hiding the tab or after one minute. All controls use the existing memory-only authenticated browser transport. No automatic retry of registration, no simulated records and no enabled production gates. Browser transport regression tests are included; real hosted UI acceptance remains required.
+
+## Interrupted registration recovery
+
+An authorized finance reviewer, distinct from the initial ownership approver, may recover an uncertain request or an interrupted processing request after ten minutes. Recovery acquires a new lease under the existing creator payout lock and verifies an existing Paystack recipient against the original encrypted bank/account. It uses GET only; it never retries recipient creation. Old leases cannot finalize. If no existing recipient can be established, the case stays blocked for independent investigation. No funds are transferred and no live flags are enabled.
