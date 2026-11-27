@@ -968,3 +968,14 @@ html[data-appearance] .creator-body .viewer-conversation .message-bubble.own{bac
 .viewer-notification-copy strong{font-size:15px;line-height:1.35;font-weight:600;text-transform:capitalize;overflow-wrap:anywhere}
 .viewer-notification-copy small{font-size:12px;color:var(--muted)}
 .viewer-notification-row button{flex-shrink:0;font-size:12px}
+
+/* Viewer library follows the recorded flat list layout and existing appearance tokens. */
+.viewer-saved-list{max-width:800px;margin-inline:auto;min-width:0}
+.viewer-library-heading{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:12px}
+.viewer-library-heading .hint{font-size:13px;margin:0}
+.viewer-library-rows{list-style:none;padding:0;margin:0}
+.viewer-library-rows li{display:flex;align-items:center;gap:12px;padding:14px 0;border-bottom:1px solid var(--line);min-width:0}
+.viewer-library-link{flex:1;min-width:0;display:flex;align-items:flex-start;gap:12px;color:var(--text);text-decoration:none}
+.viewer-library-link .viewer-related-media{flex:0 0 126px;width:126px;border-radius:8px}
+.viewer-remove-saved{flex:0 0 44px;width:44px;height:44px;display:grid;place-items:center;padding:0}
+@media(max-width:360px){.viewer-library-link .viewer-related-media{flex-basis:92px;width:92px}.viewer-library-rows li{gap:4px}.viewer-library-link{gap:8px}}
