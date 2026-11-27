@@ -769,3 +769,5 @@ html[data-appearance=light] .creator-body{--text:#151515;--ink:#151515;--muted:#
  .creator-body .modern-frame .mobile-creator-tabs a span{line-height:1.25;font-weight:500}
  .creator-body .modern-frame .mobile-creator-tabs a.current span{font-weight:600}
 }
+
+.creator-body .night-directory-list .night-row-title{font-size:15px;line-height:1.25;font-weight:600;margin:0;letter-spacing:0;overflow-wrap:anywhere}.creator-body .night-directory-list .night-your-sessions{margin:36px 0 4px}
