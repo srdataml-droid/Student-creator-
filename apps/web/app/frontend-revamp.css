@@ -822,3 +822,23 @@ html[data-appearance=light] .creator-body{--text:#151515;--ink:#151515;--muted:#
   .creator-body:has(.modern-header[data-hosted=true][data-section]) :is(.content-community,.content-create,.watch-inbox){padding-top:14px}
  }
 }
+
+/* Recorded reference 2026-11-27, 02:19–02:29: guest and assignments. */
+.creator-body .assignments-unavailable h2{font-size:23px;line-height:1.25;margin:0 0 10px;font-weight:700;letter-spacing:-.02em}
+.creator-body .assignments-unavailable>.hint{font-size:13px;line-height:1.45;margin:0 0 22px}
+.creator-body .assignments-empty{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:var(--surface-2);border-radius:8px;padding:22px 12px;min-height:124px;margin-bottom:24px}
+.creator-body .assignments-empty svg{color:var(--muted)}
+.creator-body .assignments-empty strong{font-size:14px;font-weight:500;text-align:center}
+.creator-body .assignments-browse{display:flex;align-items:center;justify-content:center;width:100%;min-height:44px;border:0;border-radius:999px;font-size:14px;font-weight:600;margin-top:48px;text-decoration:none}
+@media(max-width:760px){
+ .creator-body .modern-header[data-hosted=true][data-signed-in=false] .nav-auth>.guest-join{display:inline-flex;justify-content:center;align-items:center;width:40px;height:32px;padding:0;border-radius:999px;background:var(--action);color:var(--on-action);font-size:12px;font-weight:500}
+ .creator-body .modern-header[data-hosted=true][data-signed-in=false] .shell-menu-toggle{width:32px;min-width:32px}
+ .creator-body .content-community[data-community-tab=assignments] .community-switch{margin-bottom:28px}
+}
+@supports selector(body:has(main)){
+ @media(max-width:760px){
+  .creator-body:has(.content-community[data-community-tab=assignments]) .modern-header[data-hosted=true] .creator-logo{display:flex}
+  .creator-body:has(.content-community[data-community-tab=assignments]) .modern-header[data-hosted=true] .mobile-section-title{display:none}
+  .creator-body:has(.content-community[data-community-tab=assignments]) .content-community>h1{position:static;width:auto;height:auto;padding:0;margin:4px 0 12px;clip-path:none;overflow:visible;white-space:normal}
+ }
+}
