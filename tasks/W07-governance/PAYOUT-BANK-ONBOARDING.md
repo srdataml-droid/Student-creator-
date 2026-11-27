@@ -11,3 +11,7 @@ The POST /api/account/payout-bank/banks and /resolve routes use the existing rem
 ## Recipient provider creation contract
 
 The provider now supports a separately gated server-only creation method. It re-resolves the exact bank and account, compares the provider name to independently reviewed ownership evidence, creates a recipient using Paystack's documented API, and verifies the returned recipient by a separate GET. Duplicate recipient responses are not blindly accepted. The normal lookup route and live builder never enable this capability. The durable approval, encrypted account storage, reviewer evidence, idempotent job state and safe replacement workflow are still required before any production caller is connected. No funds move in this operation. No real recipient was created in tests.
+
+## Durable review and encrypted storage
+
+Server-only database contracts now implement submission, masked status, cancellation, finance review, second-reviewer registration claim and exact-lease finalization. AES-256-GCM envelopes are bound to creator and request IDs. Envelopes are removed on success, rejection or pre-registration cancellation. The initial 90-day evidence validity and two distinct finance reviewers are conservative proposed defaults requiring founder approval. Replacement is blocked with unresolved payouts. Uncertain registrations are not automatically retried; an independently reviewed recovery process is still required. No payout gate is activated. HTTP orchestration and actual provider acceptance remain separate until wired and tested.
