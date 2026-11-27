@@ -4,6 +4,7 @@ import {useEffect,useRef,useState} from 'react';
 import {useHostedAccount} from './HostedAccountProvider.jsx';
 import {availableNightClasses,sessionHref,currentNightClass} from '../lib/community-discovery.mjs';
 const dateLabel=v=>new Date(v).toLocaleString('en-NG',{timeZone:'Africa/Lagos',weekday:'short',hour:'numeric',minute:'2-digit',month:'short',day:'numeric'})+' WAT';
+export function CommunityRowIcon({kind='community'}){return <svg aria-hidden="true" viewBox="0 0 24 24" width="23" height="23" fill="none" stroke="currentColor" strokeWidth="1.7" strokeLinecap="round" strokeLinejoin="round">{kind==='moon'?<path d="M20.8 15.2A9 9 0 0 1 8.8 3.2a9 9 0 1 0 12 12Z"/>:kind==='live'?<><circle cx="12" cy="12" r="2"/><path d="M8.5 8.5a5 5 0 0 0 0 7m7-7a5 5 0 0 1 0 7M5 5a10 10 0 0 0 0 14M19 5a10 10 0 0 1 0 14"/></>:<><circle cx="9" cy="8" r="3.5"/><path d="M2 19v-1a7 7 0 0 1 14 0v1M17 5a3.5 3.5 0 0 1 0 7m1 2a6 6 0 0 1 4 5"/></>}</svg>;}
 function useScopedRead(operation,input,enabled){
  const account=useHostedAccount(),request=useRef(account?.creatorRequest),generation=useRef(0),[result,setResult]=useState({state:'loading',rows:[]});
  request.current=account?.creatorRequest;
@@ -35,7 +36,7 @@ export function NightClassPreview(){
 }
 function NightList(){
  const result=useScopedRead('availableClasses',{},true),rows=availableNightClasses(result.rows).slice(0,3);
- return <ReadState result={result} empty="No available night classes yet.">{rows.length?<ul className="community-preview-list">{rows.map(c=><li key={c.id}><Link href={sessionHref(c.id)} className="community-preview-item"><span className="community-preview-symbol" aria-hidden="true">◷</span><span className="community-preview-copy"><strong>{c.title}</strong><small>{dateLabel(c.starts_at)} · {c.status==='room_open'?'Live session':'Upcoming'}</small></span><span className="community-preview-price">{c.price_kobo===0?'Free':'₦'+(c.price_kobo/100).toLocaleString('en-NG')}</span><span aria-hidden="true">›</span></Link></li>)}</ul>:null}</ReadState>;
+ return <ReadState result={result} empty="No available night classes yet.">{rows.length?<ul className="community-preview-list">{rows.map(c=><li key={c.id}><Link href={sessionHref(c.id)} className="community-preview-item"><span className="community-preview-symbol" aria-hidden="true"><CommunityRowIcon kind={c.status==='room_open'?'live':'moon'}/></span><span className="community-preview-copy"><strong>{c.title}</strong><small>{c.status==='room_open'?'Room open':dateLabel(c.starts_at)} · {c.price_kobo===0?'Free':'₦'+(c.price_kobo/100).toLocaleString('en-NG')}</small></span><span aria-hidden="true">›</span></Link></li>)}</ul>:null}</ReadState>;
 }
 export function MyCommunityList(){
  const account=useHostedAccount();
@@ -44,7 +45,7 @@ export function MyCommunityList(){
 function JoinedList(){
  const result=useScopedRead('myCommunities',{},true);
  const rows=result.rows.filter(r=>r.course?.active===true&&r.course.id===r.course_id&&typeof r.course.title==='string');
- return <ReadState result={result} empty="You have not joined any communities yet.">{rows.length?<ul className="community-preview-list">{rows.map(r=><li key={r.course_id}><Link href={'/communities/'+encodeURIComponent(r.course_id)} className="community-preview-item"><span className="community-preview-symbol" aria-hidden="true">#</span><span className="community-preview-copy"><strong>{r.course.title}</strong><small>{r.course.code}</small></span><span aria-hidden="true">›</span></Link></li>)}</ul>:null}</ReadState>;
+ return <ReadState result={result} empty="You have not joined any communities yet.">{rows.length?<ul className="community-preview-list">{rows.map(r=><li key={r.course_id}><Link href={'/communities/'+encodeURIComponent(r.course_id)} className="community-preview-item"><span className="community-preview-symbol" aria-hidden="true"><CommunityRowIcon/></span><span className="community-preview-copy"><strong>{r.course.title}</strong><small>{r.course.code}</small></span><span aria-hidden="true">›</span></Link></li>)}</ul>:null}</ReadState>;
 }
 export function HomeNightAnnouncement(){
  const account=useHostedAccount();
