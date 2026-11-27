@@ -937,3 +937,22 @@ html[data-appearance=light] .creator-body{--text:#151515;--ink:#151515;--muted:#
 .creator-body .viewer-directory-results .community-preview-copy strong{font-size:15px;font-weight:600}
 .creator-body .viewer-directory-results .community-preview-copy small{font-size:12px}
 @media(max-width:760px){.creator-body .viewer-directory-results{padding:0 18px}.creator-body .viewer-search-page .viewer-search-categories{padding-inline:18px}}
+
+/* Brilliant recording at 01:00: private conversation, monochrome chat bubbles and pill composer. */
+.creator-body .viewer-conversation{max-width:680px;margin:0 auto;min-width:0;display:flex;flex-direction:column;min-height:min(580px,calc(100dvh - 180px))}
+.creator-body .viewer-conversation .viewer-back{font-size:14px;min-height:36px}
+.viewer-conversation-peer{border-top:1px solid var(--line);padding:16px 0 10px}
+.viewer-conversation-peer strong{font-size:16px;font-weight:600}
+.viewer-conversation-peer p{font-size:12px;margin:6px 0}
+.viewer-conversation-settings{font-size:12px;color:var(--muted);margin:0 0 12px}
+.viewer-conversation-settings summary{cursor:pointer;padding-block:6px}
+.creator-body .viewer-conversation .message-thread{flex:1;min-height:180px;max-height:58dvh;gap:16px;padding:16px 0;overflow:auto}
+html[data-appearance] .creator-body .viewer-conversation .message-bubble{max-width:84%;background:var(--surface-2);color:var(--text);border:0;padding:12px;border-radius:15px;align-self:flex-start;overflow-wrap:anywhere}
+html[data-appearance] .creator-body .viewer-conversation .message-bubble.own{background:var(--action);color:var(--on-action);align-self:flex-end}
+.viewer-conversation .message-bubble p{font-size:14px;line-height:1.45;margin:0 0 5px;white-space:pre-wrap}
+.viewer-conversation .message-bubble time{font-size:10px;color:inherit;opacity:.7}
+.viewer-message-composer{display:flex;align-items:flex-end;gap:10px;margin-top:16px;min-width:0}
+.creator-body .viewer-message-composer textarea{min-width:0;flex:1;resize:vertical;border:0;border-radius:24px;background:var(--surface-2);color:var(--text);padding:12px 16px;font-size:14px;min-height:48px;max-height:160px}
+.creator-body .viewer-send{flex:0 0 44px;width:44px;height:44px;border:0;border-radius:50%;display:grid;place-items:center;background:var(--action);color:var(--on-action);padding:0}
+.creator-body .viewer-send:disabled{opacity:.45}
+@media(max-width:760px){.creator-body .main.hosted-workspace:has(.viewer-conversation){padding-inline:18px}.creator-body .viewer-conversation{min-height:calc(100dvh - 220px)}}
