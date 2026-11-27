@@ -1,3 +1,6 @@
-import {OfficialActions} from '../MediaActions.jsx';
+import ShortsFeed from '../ShortsFeed.jsx';
+import {getHostedDiscovery} from '../../lib/hosted-discovery.mjs';
+import {checkoutSettings} from '../../lib/checkout-ui-settings.mjs';
 export const metadata={title:'Shorts | Student Creators'};
-export default function Shorts(){return <main id="main" className="main shorts-page immersive-shorts"><h1 className="visually-hidden">Shorts</h1><section className="shorts-stage" aria-label="Short video"><div className="shorts-portrait"><video controls muted loop playsInline preload="metadata" poster="/platform-intro.svg" aria-label="Silent Worthkind introduction"><source src="/api/platform-intro?format=webm" type="video/webm"/><source src="/api/platform-intro" type="video/mp4"/></video><div className="shorts-caption"><strong>Worthkind</strong><p>Welcome to Student Creators</p><small>Official introduction</small></div></div><OfficialActions vertical/></section></main>;}
+export const dynamic='force-dynamic';
+export default async function Shorts(){let items=[],hasNext=false,catalogAvailable=false;try{const result=await getHostedDiscovery({format:'short'});items=result.items;hasNext=result.hasNext;catalogAvailable=true;}catch{}const checkout=checkoutSettings();return <ShortsFeed initial={items} hasNext={hasNext} catalogAvailable={catalogAvailable} checkoutMode={checkout.mode} terms={checkout.terms}/>;}
