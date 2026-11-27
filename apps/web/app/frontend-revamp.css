@@ -928,3 +928,12 @@ html[data-appearance=light] .creator-body{--text:#151515;--ink:#151515;--muted:#
  .creator-body .viewer-search-page .viewer-back{margin-inline:18px}
  .viewer-search-form{margin-inline:18px}
 }
+
+/* Viewer search category rows share the existing Brilliant monochrome tokens. */
+.creator-body .viewer-search-page .viewer-search-categories{display:flex;overflow-x:auto;scrollbar-width:none;gap:8px;margin-bottom:16px}
+.creator-body .viewer-directory-results{max-width:740px;min-width:0}
+.creator-body .viewer-directory-results .community-preview-item{min-height:74px;gap:12px;padding:12px 0}
+.creator-body .viewer-directory-results .community-preview-symbol{flex-basis:46px;height:46px;border-radius:50%;font-size:16px;font-weight:600}
+.creator-body .viewer-directory-results .community-preview-copy strong{font-size:15px;font-weight:600}
+.creator-body .viewer-directory-results .community-preview-copy small{font-size:12px}
+@media(max-width:760px){.creator-body .viewer-directory-results{padding:0 18px}.creator-body .viewer-search-page .viewer-search-categories{padding-inline:18px}}
