@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createReviewSubmissionHandler,createSupabaseSubmissionDependencies} from '../src/submission-api.mjs';
+import {createCurrentSupabaseAuth} from '../../hosted-core/src/supabase-current-auth.mjs';
 import {buildReviewSubmissionRoute} from '../src/route-factory.mjs';
 const user='11111111-1111-4111-8111-111111111111', school='22222222-2222-4222-8222-222222222222', lesson='55555555-5555-4555-8555-555555555555';
 const makeRequest=(headers={})=>new Request(`https://school.example/api/lessons/${lesson}/submit`,{method:'POST',headers:{authorization:'Bearer user-token',...headers}});
@@ -59,7 +60,7 @@ test('staging RPC uses server-only key and sends required CAS parameters',async(
   if(String(u).includes('submit_content_for_review'))return Response.json(true);
   throw Error('Unexpected provider request');
  };
- const d=createSupabaseSubmissionDependencies({url:'https://test.supabase.co',publicKey:'public',serverKey:'service',fetcher});
+ const d=createSupabaseSubmissionDependencies({url:'https://test.supabase.co',publicKey:'public',serverKey:'service',fetcher,authFactory:createCurrentSupabaseAuth});
  assert.equal((await d.auth.getUser('e30.'+Buffer.from(JSON.stringify({sub:user,session_id:lesson,role:'authenticated',exp:Math.floor(Date.now()/1000)+600})).toString('base64url')+'.signature')).id,user);assert.equal((await d.store.getProfile(user)).institutionId,school);
  assert.equal((await d.store.getContent(lesson)).status,'draft');assert.equal((await d.store.getAssets(lesson)).length,1);
  assert.equal(await d.store.submitIfReady({lessonId:lesson,creatorId:user,expectedStatus:'draft'}),true);

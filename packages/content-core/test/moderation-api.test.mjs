@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createModerationHandler,createSupabaseModerationDependencies} from '../src/moderation-api.mjs';
+import {createCurrentSupabaseAuth} from '../../hosted-core/src/supabase-current-auth.mjs';
 import {buildModerationRoute} from '../src/route-factory.mjs';
 const staffId='77777777-7777-4777-8777-777777777777';
 const creatorId='11111111-1111-4111-8111-111111111111';
@@ -72,7 +73,7 @@ test('privileged REST moderation adapter validates external user and CAS precond
   if(options.method==='PATCH')return Response.json([{id:lessonId,status:'published'}]);
   throw new Error('Unexpected provider URL');
  };
- const {auth,store}=createSupabaseModerationDependencies({url:'https://test.supabase.co',publicKey:'public-key',serverKey:'server-key',fetcher});
+ const {auth,store}=createSupabaseModerationDependencies({url:'https://test.supabase.co',publicKey:'public-key',serverKey:'server-key',fetcher,authFactory:createCurrentSupabaseAuth});
  assert.deepEqual(await auth.getUser('e30.'+Buffer.from(JSON.stringify({sub:staffId,session_id:lessonId,role:'authenticated',exp:Math.floor(Date.now()/1000)+600})).toString('base64url')+'.signature'),{id:staffId});
  assert.equal((await store.getStaff(staffId)).active,true);
  assert.equal((await store.getContent(lessonId)).status,'in_review');
@@ -88,5 +89,5 @@ test('moderation route fails closed when no Supabase environment is configured',
  const v=await body(await r(req(),{lessonId}));assert.equal(v.status,503);assert.equal(v.error,'SERVICE_NOT_CONFIGURED');assert.equal(calls,0);
 });
 test('moderation route refuses non-HTTPS provider configuration',async()=>{
- assert.throws(()=>createSupabaseModerationDependencies({url:'http://evil.example',publicKey:'a',serverKey:'b'}),/HTTPS/);
+ assert.throws(()=>createSupabaseModerationDependencies({url:'http://evil.example',publicKey:'a',serverKey:'b',authFactory:createCurrentSupabaseAuth}),/HTTPS/);
 });

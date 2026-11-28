@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {createDraftHandler} from '../src/draft-api.mjs';
 import {createSupabaseDraftDependencies} from '../src/supabase-draft-store.mjs';
+import {createCurrentSupabaseAuth} from '../../hosted-core/src/supabase-current-auth.mjs';
 
 const ID={student:'11111111-1111-4111-8111-111111111111',school:'22222222-2222-4222-8222-222222222222',course:'33333333-3333-4333-8333-333333333333',topic:'44444444-4444-4444-8444-444444444444',lesson:'55555555-5555-4555-8555-555555555555',outside:'66666666-6666-4666-8666-666666666666'};
 const KEY='draft_attempt_123456';
@@ -99,7 +100,7 @@ test('Supabase adapter verifies user with public key, DB with server key, and de
     if(String(url).includes('course_topics'))return Response.json([{id:ID.topic,course_id:ID.course}]);
     throw new Error('Unknown route');
   };
-  const {auth,store}=createSupabaseDraftDependencies({url:'https://example.supabase.co',publicKey:'pub',serverKey:'service',fetcher});
+  const {auth,store}=createSupabaseDraftDependencies({url:'https://example.supabase.co',publicKey:'pub',serverKey:'service',fetcher,authFactory:createCurrentSupabaseAuth});
   const token='e30.'+Buffer.from(JSON.stringify({sub:ID.student,session_id:ID.lesson,role:'authenticated',exp:Math.floor(Date.now()/1000)+600})).toString('base64url')+'.signature';
   assert.deepEqual(await auth.getUser(token),{id:ID.student});
   assert.equal((await store.getProfile(ID.student)).institutionId,ID.school);
@@ -112,17 +113,17 @@ test('Supabase adapter does not create duplicates when PostgREST reports conflic
   const requests=[];
   const existing={id:ID.lesson,creator_id:ID.student,course_id:ID.course,topic_id:ID.topic,title:'Lesson',status:'draft',creation_hash:'a'.repeat(64)};
   const fetcher=async(url,options)=>{requests.push({url:String(url),options});if(options.method==='POST')return Response.json([]);return Response.json([existing]);};
-  const {store}=createSupabaseDraftDependencies({url:'https://example.supabase.co',publicKey:'pub',serverKey:'service',fetcher});
+  const {store}=createSupabaseDraftDependencies({url:'https://example.supabase.co',publicKey:'pub',serverKey:'service',fetcher,authFactory:createCurrentSupabaseAuth});
   const x=await store.insertDraftOnce({draft:{creatorId:ID.student,institutionId:ID.school,courseId:ID.course,topicId:ID.topic,title:'Lesson',description:'ok',previewText:'ok'},creationKey:KEY,creationHash:'a'.repeat(64)});
   assert.equal(x.created,false);assert.equal(x.item.id,ID.lesson);assert.match(requests[0].url,/on_conflict=creator_id%2Ccreation_key/);
   assert.match(requests[0].options.headers.prefer,/ignore-duplicates/);
 });
 test('Supabase adapter catches conflicting reuse of idempotency key',async()=>{
   const fetcher=async(url,options)=>options.method==='POST'?Response.json([]):Response.json([{creation_hash:'b'.repeat(64)}]);
-  const {store}=createSupabaseDraftDependencies({url:'https://example.supabase.co',publicKey:'pub',serverKey:'service',fetcher});
+  const {store}=createSupabaseDraftDependencies({url:'https://example.supabase.co',publicKey:'pub',serverKey:'service',fetcher,authFactory:createCurrentSupabaseAuth});
   const result=await store.insertDraftOnce({draft:{creatorId:ID.student,institutionId:ID.school,courseId:ID.course,topicId:null,title:'Lesson',description:'ok',previewText:'ok'},creationKey:KEY,creationHash:'a'.repeat(64)});
   assert.equal(result.conflict,true);
 });
 test('Supabase adapter rejects insecure remote URLs',()=>{
-  assert.throws(()=>createSupabaseDraftDependencies({url:'http://example.com',publicKey:'pub',serverKey:'private'}),/HTTPS/);
+  assert.throws(()=>createSupabaseDraftDependencies({url:'http://example.com',publicKey:'pub',serverKey:'private',authFactory:createCurrentSupabaseAuth}),/HTTPS/);
 });

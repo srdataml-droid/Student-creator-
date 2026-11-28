@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {buildDraftRoute,buildCatalogRoute} from '../src/route-factory.mjs';
+import {createCurrentSupabaseAuth} from '../../hosted-core/src/supabase-current-auth.mjs';
 const session='99999999-9999-4999-8999-999999999999';
 const makeToken=id=>'e30.'+Buffer.from(JSON.stringify({sub:id,session_id:session,role:'authenticated',exp:Math.floor(Date.now()/1000)+600})).toString('base64url')+'.signature';
 const env={APP_DATA_MODE:'hosted',STUDENT_CREATORS_STAGING_APPROVED:'true',STUDENT_CREATORS_PROJECT_REF:'jnkqmlbkkvccnxrgkpno',STUDENT_CREATORS_PUBLIC_REGISTRATION:'false',STUDENT_CREATORS_REAL_PAYMENT_ENABLED:'false',SUPABASE_URL:'https://jnkqmlbkkvccnxrgkpno.supabase.co',SUPABASE_PUBLISHABLE_KEY:'sb_publishable_fixture_public',SUPABASE_SERVICE_ROLE_KEY:'sb_secret_fixture_server'};
@@ -22,7 +23,7 @@ test('draft route maps authenticated identity and server persisted draft',async(
   if(u.pathname.endsWith('/content_items')&&options.method==='POST')return Response.json([{id:'44444444-4444-4444-8444-444444444444',creator_id:student,course_id:course,topic_id:null,title:'Integration basics',status:'draft',creation_hash:JSON.parse(options.body).creation_hash}],{status:201});
   throw new Error('Unknown provider path '+u.pathname);
  };
- const handler=buildDraftRoute({getEnv:()=>env,fetcher});
+ const handler=buildDraftRoute({getEnv:()=>env,fetcher,authFactory:createCurrentSupabaseAuth});
  const request=new Request('https://site.example/api/lessons/drafts',{method:'POST',headers:{Authorization:'Bearer '+makeToken(student),'Idempotency-Key':'client-draft-attempt-1','Content-Type':'application/json'},body:JSON.stringify({courseId:course,title:'Integration basics',description:'Explain substitution',previewText:'Method explanation',rightsAttested:true})});
  const response=await handler(request);const data=await response.json();
  assert.equal(response.status,201);assert.equal(data.draft.status,'draft');
@@ -45,7 +46,7 @@ test('content entrypoints never contact wrong projects, live modes or mislabeled
  for(const e of [{...env,APP_DATA_MODE:'local'},{...env,STUDENT_CREATORS_STAGING_APPROVED:'false'},
  {...env,STUDENT_CREATORS_REAL_PAYMENT_ENABLED:'true'},{...env,STUDENT_CREATORS_PROJECT_REF:'aaaaaaaaaaaaaaaaaaaa'},
  {...env,SUPABASE_URL:'https://another.supabase.co'},{...env,SUPABASE_PUBLISHABLE_KEY:env.SUPABASE_SERVICE_ROLE_KEY}]){
-  assert.equal((await buildDraftRoute({getEnv:()=>e,fetcher})(new Request('https://example.invalid/api/drafts',{method:'POST'}))).status,503);
+  assert.equal((await buildDraftRoute({getEnv:()=>e,fetcher,authFactory:createCurrentSupabaseAuth})(new Request('https://example.invalid/api/drafts',{method:'POST'}))).status,503);
   assert.equal((await buildCatalogRoute({getEnv:()=>e,fetcher})(new Request('https://example.invalid/api/lessons'))).status,503);
  }assert.equal(calls,0);
 });

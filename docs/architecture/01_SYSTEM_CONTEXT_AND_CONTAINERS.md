@@ -83,6 +83,12 @@ flowchart LR
 
 These boxes represent **logical modules**. At 80–100 students do NOT create 10 microservices, separate teams, dedicated Kubernetes or a custom video network. Extract independent services only when load/failure/organizational evidence justifies it.
 
+### In-process feature infrastructure
+
+Implement these boundaries as a **modular monolith**, not independently deployed services and not dynamically loaded third-party code. Each feature/domain package owns its rules and public contracts; infrastructure packages provide adapters for Supabase, Mux, Paystack, LiveKit and messaging. Compose adapters at the application/API edge and inject narrow ports into feature handlers. A domain package must not import provider implementations or another feature's private `src` files. Cross-feature changes use explicit contracts and must preserve callers or version the contract deliberately. Enforce the import graph with automated source-boundary tests. New provider integrations must be replaceable adapters, never provider calls embedded in UI or domain rules. `platform-core` owns generic transport primitives; the existing LiveKit room and token implementation now lives in `livekit-provider`; `local-core` retains compatibility re-exports while hosted routes import the provider boundary directly.
+
+Current implementation evidence: `packages/content-core/src/supabase-draft-store.mjs`, `submission-api.mjs` and `moderation-api.mjs` now receive auth through injection from the web API composition edge instead of importing `hosted-core`. `packages/livekit-provider` isolates LiveKit token and room-service code from local and hosted runtime packages. These changes establish the pattern for other cross-package dependencies; they do not claim all package boundaries are already clean.
+
 ## 4. Module boundaries and data ownership
 
 | Module | Responsible for | Must NOT do |
