@@ -1,5 +1,5 @@
 import {createHmac,createHash} from 'node:crypto';
-import {createLiveKitRoomService} from '../../local-core/src/livekit-room-service.mjs';
+import {createLiveKitRoomService} from '../../livekit-provider/src/livekit-room-service.mjs';
 import test from 'node:test';import assert from 'node:assert/strict';import {createHostedClassTokenHandler,createHostedLearningWebhook,processHostedLearningCleanup} from '../src/hosted-livekit-class.mjs';
 const actor='11111111-1111-4111-8111-111111111111',id='22222222-2222-4222-8222-222222222222',lease='33333333-3333-4333-8333-333333333333',origin='https://student.example.invalid',room='wk-class-'+id,identity='student-'+actor,clock=()=>1000000;
 const request=()=>new Request(origin+'/api/classes/'+id+'/hosted-room-token',{method:'POST',headers:{origin,authorization:'Bearer fixture'}});

@@ -1,4 +1,3 @@
-import {createCurrentSupabaseAuth} from '../../hosted-core/src/supabase-current-auth.mjs';
 import {supabaseServerHeaders} from './supabase-runtime-config.mjs';
 import {prepareReviewSubmission,ContentRuleError} from './content.mjs';
 const UUID=/^[a-f0-9]{8}-[a-f0-9]{4}-[1-8][a-f0-9]{3}-[89ab][a-f0-9]{3}-[a-f0-9]{12}$/i;
@@ -41,8 +40,9 @@ export function createReviewSubmissionHandler({auth,store,audit=()=>{}}){
 }
 
 /** Server-only Supabase REST adapter. Requires staged submit_content_for_review RPC. */
-export function createSupabaseSubmissionDependencies({url,publicKey,serverKey,fetcher=fetch}){
+export function createSupabaseSubmissionDependencies({url,publicKey,serverKey,fetcher=fetch,authFactory}){
  if(!url||!publicKey||!serverKey||typeof fetcher!=='function')throw Error('Missing Supabase configuration');
+ if(typeof authFactory!=='function')throw new TypeError('Missing auth adapter');
  const base=new URL(url);
  if(base.protocol!=='https:'&&!(base.protocol==='http:'&&['localhost','127.0.0.1'].includes(base.hostname)))throw Error('Supabase must use HTTPS');
  const db=async(table,params={})=>{
@@ -52,7 +52,7 @@ export function createSupabaseSubmissionDependencies({url,publicKey,serverKey,fe
   if(!r.ok)throw Error('Database unavailable');return r.json();
  };
  return {
-  auth:createCurrentSupabaseAuth({url,publicKey,serverKey,fetcher,requireStudent:true}),
+  auth:authFactory({url,publicKey,serverKey,fetcher,requireStudent:true}),
   store:{
    async getProfile(id){const r=(await db('student_profiles',{user_id:`eq.${id}`,select:'institution_id,verified_at,suspended',limit:'1'}))[0];return r?{institutionId:r.institution_id,verifiedAt:r.verified_at,suspended:r.suspended}:null;},
    async getContent(id){const r=(await db('content_items',{id:`eq.${id}`,select:'id,creator_id,institution_id,status',limit:'1'}))[0];return r?{id:r.id,creatorId:r.creator_id,institutionId:r.institution_id,status:r.status}:null;},

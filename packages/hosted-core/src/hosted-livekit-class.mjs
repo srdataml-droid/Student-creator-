@@ -1,6 +1,6 @@
 import {createCurrentSupabaseAuth} from './supabase-current-auth.mjs';
-import {createClassTokenIssuer} from '../../local-core/src/livekit-class-tokens.mjs';
-import {createLiveKitRoomService} from '../../local-core/src/livekit-room-service.mjs';
+import {createClassTokenIssuer} from '../../livekit-provider/src/livekit-class-tokens.mjs';
+import {createLiveKitRoomService} from '../../livekit-provider/src/livekit-room-service.mjs';
 import {readDedicatedSupabaseRuntimeConfig,supabaseServerHeaders} from '../../content-core/src/supabase-runtime-config.mjs';
 import {readBoundedGatewayResponse} from '../../payment-core/src/bounded-response.mjs';
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;

@@ -1,10 +1,10 @@
-import {createCurrentSupabaseAuth} from '../../hosted-core/src/supabase-current-auth.mjs';
 import {supabaseServerHeaders} from './supabase-runtime-config.mjs';
 /** Server-only Supabase REST adapter. Do not import into browser components. */
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 function requireUUID(value) { if(!UUID.test(value)) throw new Error('Invalid identifier');return value; }
-export function createSupabaseDraftDependencies({url,publicKey,serverKey,fetcher=fetch}) {
+export function createSupabaseDraftDependencies({url,publicKey,serverKey,fetcher=fetch,authFactory}) {
   if(!url || !publicKey || !serverKey || typeof fetcher!=='function') throw new Error('Missing Supabase configuration');
+  if(typeof authFactory!=='function')throw new TypeError('Missing auth adapter');
   const base=new URL(url);
   if(base.protocol!=='https:' && !(base.protocol==='http:' && ['localhost','127.0.0.1'].includes(base.hostname))) throw new Error('Supabase must use HTTPS');
   const api=async(path,{method='GET',body,prefer,params}={})=>{
@@ -19,7 +19,7 @@ export function createSupabaseDraftDependencies({url,publicKey,serverKey,fetcher
     return rows?.[0]??null;
   };
   return {
-    auth:createCurrentSupabaseAuth({url,publicKey,serverKey,fetcher,requireStudent:true}),
+    auth:authFactory({url,publicKey,serverKey,fetcher,requireStudent:true}),
     store:{
       async getProfile(id){const r=await one('student_profiles',{user_id:`eq.${requireUUID(id)}`});return r?{institutionId:r.institution_id,verifiedAt:r.verified_at,suspended:r.suspended}:null;},
       async getCourse(id){const r=await one('courses',{id:`eq.${requireUUID(id)}`});return r?{id:r.id,institutionId:r.institution_id,active:r.active}:null;},

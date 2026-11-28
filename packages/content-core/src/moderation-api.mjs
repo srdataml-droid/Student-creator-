@@ -1,4 +1,3 @@
-import {createCurrentSupabaseAuth} from '../../hosted-core/src/supabase-current-auth.mjs';
 import {supabaseServerHeaders} from './supabase-runtime-config.mjs';
 import { prepareModerationDecision, ContentRuleError } from './content.mjs';
 
@@ -83,8 +82,9 @@ export function createModerationHandler({auth,store,audit=()=>{}}) {
 }
 
 /** Server-only REST client. Supabase service key never crosses to browser. */
-export function createSupabaseModerationDependencies({url,publicKey,serverKey,fetcher=fetch}) {
+export function createSupabaseModerationDependencies({url,publicKey,serverKey,fetcher=fetch,authFactory}) {
   if(!url||!publicKey||!serverKey||typeof fetcher!=='function')throw new Error('Missing Supabase configuration');
+  if(typeof authFactory!=='function')throw new TypeError('Missing auth adapter');
   const base=new URL(url);
   if(base.protocol!=='https:'&&!(base.protocol==='http:'&&['localhost','127.0.0.1'].includes(base.hostname)))throw new Error('Supabase must use HTTPS');
   async function request(path,{method='GET',key=serverKey,params={},body,prefer}={}) {
@@ -96,7 +96,7 @@ export function createSupabaseModerationDependencies({url,publicKey,serverKey,fe
   }
   async function one(table,params){ const rows=await request(`/rest/v1/${table}`,{params:{select:'*',limit:'1',...params}});return rows?.[0]??null; }
   return {
-    auth:createCurrentSupabaseAuth({url,publicKey,serverKey,fetcher}),
+    auth:authFactory({url,publicKey,serverKey,fetcher}),
     store:{
       async getStaff(userId){const r=await one('platform_staff',{user_id:`eq.${userId}`});return r?{active:r.active,role:r.role}:null;},
       async getContent(id){const r=await one('content_items',{id:`eq.${id}`});return r?{id:r.id,creatorId:r.creator_id,status:r.status,reviewerId:r.reviewer_id,reviewReason:r.review_reason}:null;},
